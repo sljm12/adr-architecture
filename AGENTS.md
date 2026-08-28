@@ -5,6 +5,51 @@
 This repository contains the ADR Diagram project: a tool for creating software architecture
 diagrams and recording Architecture Decision Records (ADRs) linked to diagram components.
 
+## Technology Stack
+
+The first release is a browser-based, single-user application. Offline use and real-time
+collaboration are not required, but persistence MUST use a backend so the product can evolve
+to support multiple users without a storage migration.
+
+- Frontend: React with TypeScript, built with Vite.
+- Diagram editor: React Flow (`@xyflow/react`) for interactive nodes, edges, positioning, and
+  custom diagram elements.
+- Frontend state: Zustand, with an explicit undo/redo history for diagram and ADR edits.
+- Validation: Zod for shared runtime validation of API payloads and artifact data.
+- Backend: TypeScript with Fastify.
+- API: REST initially, with an OpenAPI contract/documentation boundary.
+- Database: PostgreSQL, accessed through Drizzle ORM.
+- Testing: Vitest for domain, validation, persistence, and Mermaid export logic; Playwright for
+  end-to-end user workflows.
+- Deployment: Static hosting for the frontend, a containerized API, and managed PostgreSQL.
+
+The stack SHOULD remain deliberately small for the first release. Authentication, permissions,
+workspaces, real-time collaboration, and advanced revision history are future capabilities and
+MUST NOT be introduced unless a feature explicitly requires them.
+
+## Architecture Boundaries
+
+The domain model MUST be independent of React Flow. React Flow state is a visual adapter, not the
+source of truth. Keep these concerns separate:
+
+- Domain artifacts: diagrams, components, relationships, ADRs, and component links.
+- Visual adapter: conversion between domain artifacts and React Flow nodes and edges.
+- Export adapter: conversion from the validated domain model to Mermaid syntax.
+- Persistence/API: serialization, validation, and storage of domain artifacts.
+
+All diagrams, components, relationships, ADRs, and component links MUST use stable UUIDs.
+Relationships MUST reference component IDs, and ADR links MUST reference component IDs rather
+than names or screen positions. Renaming or repositioning a component MUST NOT invalidate its
+references.
+
+The initial database model SHOULD be organized around `diagrams`, `components`, `relationships`,
+`adrs`, and `adr_component_links`, with creation and update timestamps. A future
+`diagram_revisions` table may provide richer history without changing artifact identities.
+
+Mermaid export MUST consume validated domain data rather than raw editor state. Unsupported or
+invalid Mermaid content MUST produce an actionable validation error and MUST NOT silently omit
+artifacts.
+
 ## General Workflow
 
 - Inspect existing files and project conventions before making changes.
