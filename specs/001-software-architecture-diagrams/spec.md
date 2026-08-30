@@ -8,6 +8,16 @@
 
 **Input**: User description: "The user should be able to create Software Architecture diagrams, prefably the diagrams can be exported as a mermaid file"
 
+## Clarifications
+
+### Session 2026-08-30
+
+- Q: Should diagram changes be saved only when the user explicitly chooses “Save,” or should the system save changes automatically? → A: Automatic saving with clear save status.
+- Q: After a user confirms deleting a diagram, should the diagram be permanently removed immediately or recoverable for a period of time? → A: Move the diagram to trash so it can be restored later.
+- Q: Should each relationship let the user choose whether it is directed or undirected? → A: Let each relationship be directed or undirected.
+- Q: When a user confirms removal of a component that has relationships, should those dependent relationships be removed automatically? → A: After confirmation, remove the component and all dependent relationships.
+- Q: When component or relationship text contains Mermaid-reserved characters, should the exporter escape the text automatically or reject the export? → A: Escape supported characters automatically; reject only content that cannot be represented safely.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Create and edit an architecture diagram (Priority: P1)
@@ -77,36 +87,39 @@ while confirming that the user receives an appropriate warning before destructiv
   remain as a broken invisible reference.
 - Very large diagrams MUST provide clear feedback while loading, saving, or exporting, and MUST
   report failure without silently discarding edits.
-- Mermaid-reserved words or characters MUST be escaped or rejected with an actionable message.
-- Exporting before the first save MUST still produce the current diagram or clearly explain why it
-  cannot be exported.
+- Mermaid-reserved words or characters that can be represented safely MUST be escaped automatically;
+  content that cannot be represented safely MUST be rejected with an actionable message.
+- Exporting before the first automatic save completes MUST still produce the current diagram or
+  clearly explain why it cannot be exported.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: The system MUST allow a user to create, name, save, reopen, and delete architecture
-  diagrams.
+- **FR-001**: The system MUST allow a user to create, name, automatically save, reopen, and delete
+  architecture diagrams; deleted diagrams MUST be moved to a recoverable trash state.
 - **FR-002**: The system MUST allow a user to add, rename, move, and remove software components.
 - **FR-003**: The system MUST assign each component a stable identity that remains unchanged when
   the component is moved or renamed.
-- **FR-004**: The system MUST allow a user to create, label, edit, and remove directed or
-  undirected relationships between components.
+- **FR-004**: The system MUST allow a user to create, label, edit, and remove relationships between
+  components, with direction selected independently for each relationship as directed or undirected.
 - **FR-005**: The system MUST prevent relationships from referencing missing components.
-- **FR-006**: The system MUST preserve component positions, names, relationship endpoints, labels,
-  and diagram metadata when a diagram is saved and reopened.
+- **FR-006**: The system MUST automatically save diagram changes and preserve component positions,
+  names, relationship endpoints, labels, and diagram metadata when a diagram is reopened.
 - **FR-007**: The system MUST provide undo and redo for diagram edits within the active editing
   session.
-- **FR-008**: The system MUST warn the user before an action that removes a component and its
-  dependent relationships.
+- **FR-008**: The system MUST warn the user that dependent relationships will be removed before
+  removing a component, and after confirmation MUST remove the component and all dependent
+  relationships together.
 - **FR-009**: The system MUST allow the user to export the active diagram as a downloadable
   Mermaid file.
 - **FR-010**: The exported Mermaid file MUST represent every supported component and relationship
   in the active diagram, including names, direction, and labels where applicable.
-- **FR-011**: The system MUST validate Mermaid compatibility before export and identify the affected
-  component or relationship when export cannot be completed.
-- **FR-012**: The system MUST show clear success or failure feedback for save, reopen, delete, and
-  export actions.
+- **FR-011**: The system MUST validate Mermaid compatibility before export, escape supported reserved
+  words or characters, and identify the affected component or relationship when export cannot be
+  completed because content cannot be represented safely.
+- **FR-012**: The system MUST show clear saving, saved, or failed status feedback for automatic
+  saves, and clear success or failure feedback for reopen, delete, and export actions.
 - **FR-013**: The core diagram editing and export workflows MUST support keyboard navigation,
   readable labels, and accessible contrast.
 
