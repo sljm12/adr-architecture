@@ -1,0 +1,2 @@
+import type { FastifyReply } from 'fastify'; import { ZodError } from 'zod'; import { validationFields } from '../../../shared/src/index';
+export function sendError(reply:FastifyReply,error:unknown){ if(error instanceof ZodError)return reply.code(422).send({message:'Validation failed',fields:validationFields(error)}); return reply.code(400).send({message:error instanceof Error?error.message:'Request failed',fields:{}}); }

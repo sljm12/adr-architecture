@@ -1,0 +1,8 @@
+import { z } from 'zod';
+export const uuidSchema = z.string().uuid();
+export const positionSchema = z.object({x:z.number().finite(), y:z.number().finite()});
+export const componentSchema = z.object({id:uuidSchema, diagramId:uuidSchema, name:z.string().trim().min(1), description:z.string().nullable(), type:z.string().nullable(), position:positionSchema, createdAt:z.string(), updatedAt:z.string()});
+export const relationshipSchema = z.object({id:uuidSchema, diagramId:uuidSchema, sourceComponentId:uuidSchema, targetComponentId:uuidSchema, direction:z.enum(['directed','undirected']), label:z.string().nullable(), createdAt:z.string(), updatedAt:z.string()});
+export const diagramDocumentSchema = z.object({id:uuidSchema, name:z.string().trim().min(1), status:z.enum(['active','trashed']), createdAt:z.string(), updatedAt:z.string(), trashedAt:z.string().nullable(), components:z.array(componentSchema), relationships:z.array(relationshipSchema)}).superRefine((d,ctx)=>{const ids=new Set(d.components.map(c=>c.id)); d.relationships.forEach((r,i)=>{if(!ids.has(r.sourceComponentId)||!ids.has(r.targetComponentId))ctx.addIssue({code:'custom',path:['relationships',i],message:`Relationship ${r.id} references a missing component`}); if(r.sourceComponentId===r.targetComponentId)ctx.addIssue({code:'custom',path:['relationships',i],message:'Self-referential relationships are not supported'});});});
+export const diagramCreateSchema = z.object({name:z.string().trim().min(1)});
+export function validationFields(error: z.ZodError) { return Object.fromEntries(error.issues.map(i => [i.path.join('.') || 'document', i.message])); }

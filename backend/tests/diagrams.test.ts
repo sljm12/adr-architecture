@@ -1,0 +1,2 @@
+import { describe,expect,it } from 'vitest'; import { DiagramRepository } from '../src/persistence/diagram-repository'; import type { DiagramDocument } from '../../../shared/src/index';
+const d:DiagramDocument={id:'d',name:'x',status:'active',createdAt:'n',updatedAt:'n',trashedAt:null,components:[],relationships:[]}; describe('repository',()=>it('preserves document IDs on replacement',()=>{const r=new DiagramRepository();r.create(d);const saved=r.replace({...d,name:'renamed'});expect(saved.id).toBe('d');expect(r.get('d')?.name).toBe('renamed');}));

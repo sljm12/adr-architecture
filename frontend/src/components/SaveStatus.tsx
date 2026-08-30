@@ -1,0 +1,1 @@
+import {useDiagramStore} from '../state/diagram-store'; export function SaveStatus(){const {status,error}=useDiagramStore();return <p role="status" aria-live="polite">{status==='saving'?'Saving…':status==='saved'?'Saved':status==='failed'?`Save failed: ${error}`:''}</p>;}

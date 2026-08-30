@@ -1,0 +1,1 @@
+{"name":"@adr-diagram/shared","private":true,"type":"module","scripts":{"build":"tsc -b","test":"vitest run"},"dependencies":{"zod":"^3.25.0"}}

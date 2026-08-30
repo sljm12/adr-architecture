@@ -1,0 +1,3 @@
+import type { DiagramDocument } from '../../../../shared/src/index'; import type { Edge, Node } from '@xyflow/react';
+export function toReactFlow(document:DiagramDocument):{nodes:Node[];edges:Edge[]}{return {nodes:document.components.map(c=>({id:c.id,position:c.position,data:{label:c.name},type:'default'})),edges:document.relationships.map(r=>({id:r.id,source:r.sourceComponentId,target:r.targetComponentId,label:r.label??undefined,markerEnd:r.direction==='directed'?{type:'arrowclosed'}:undefined}))};}
+export function fromReactFlow(document:DiagramDocument,nodes:Node[]):DiagramDocument{return {...document,components:document.components.map(c=>{const n=nodes.find(x=>x.id===c.id);return n?{...c,position:n.position}:c;})};}

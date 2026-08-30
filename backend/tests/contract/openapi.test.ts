@@ -1,0 +1,1 @@
+import { describe,expect,it } from 'vitest'; import fs from 'node:fs'; describe('OpenAPI contract',()=>it('declares diagram endpoints',()=>{const s=fs.readFileSync('specs/001-software-architecture-diagrams/contracts/openapi.yaml','utf8');expect(s).toContain('/diagrams/{diagramId}:');expect(s).toContain('DiagramDocument');}));

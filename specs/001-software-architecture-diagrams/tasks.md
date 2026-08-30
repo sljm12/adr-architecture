@@ -17,12 +17,12 @@ requires automated coverage at domain, persistence, API, rendering, and export b
 
 **Purpose**: Initialize the TypeScript web application and repository tooling.
 
-- [ ] T001 Create the workspace package structure for `shared`, `backend`, `frontend`, and `e2e` in `package.json` and the listed project directories
-- [ ] T002 Configure TypeScript project references and strict compiler settings in `tsconfig.json`, `shared/tsconfig.json`, `backend/tsconfig.json`, and `frontend/tsconfig.json`
-- [ ] T003 [P] Configure Vite and React entry points in `frontend/vite.config.ts`, `frontend/index.html`, and `frontend/src/main.tsx`
-- [ ] T004 [P] Configure Vitest projects and shared test commands in `vitest.config.ts` and package scripts in `package.json`
-- [ ] T005 [P] Configure Playwright browser testing in `playwright.config.ts` and create `e2e/tests/.gitkeep`
-- [ ] T006 [P] Create repository ignore rules for Node, TypeScript, Vite, test output, environment files, and local database artifacts in `.gitignore`
+- [X] T001 Create the workspace package structure for `shared`, `backend`, `frontend`, and `e2e` in `package.json` and the listed project directories
+- [X] T002 Configure TypeScript project references and strict compiler settings in `tsconfig.json`, `shared/tsconfig.json`, `backend/tsconfig.json`, and `frontend/tsconfig.json`
+- [X] T003 [P] Configure Vite and React entry points in `frontend/vite.config.ts`, `frontend/index.html`, and `frontend/src/main.tsx`
+- [X] T004 [P] Configure Vitest projects and shared test commands in `vitest.config.ts` and package scripts in `package.json`
+- [X] T005 [P] Configure Playwright browser testing in `playwright.config.ts` and create `e2e/tests/.gitkeep`
+- [X] T006 [P] Create repository ignore rules for Node, TypeScript, Vite, test output, environment files, and local database artifacts in `.gitignore`
 
 ---
 
@@ -33,18 +33,18 @@ requires automated coverage at domain, persistence, API, rendering, and export b
 **Checkpoint**: Foundation is ready when a validated empty diagram can cross the shared types and API
 boundaries and the database migration can be applied.
 
-- [ ] T007 [P] Define UUID, timestamp, diagram status, component, relationship, and diagram document types in `shared/src/domain/types.ts`
-- [ ] T008 [P] Implement domain invariants for stable IDs, same-diagram relationship endpoints, finite positions, and non-blank names in `shared/src/domain/invariants.ts`
-- [ ] T009 [P] Implement Zod schemas and entity-specific validation errors for diagram documents and API payloads in `shared/src/validation/schemas.ts`
-- [ ] T010 [P] Add shared domain and validation tests for UUID stability, duplicate names, invalid endpoints, self-links, invalid positions, and actionable errors in `shared/tests/domain.test.ts` and `shared/tests/validation.test.ts`
-- [ ] T011 Configure shared package exports and build/test scripts in `shared/package.json` and `shared/src/index.ts`
-- [ ] T012 Create Drizzle database configuration and environment parsing in `backend/src/persistence/database.ts` and `backend/src/config.ts`
-- [ ] T013 Define PostgreSQL tables, foreign keys, timestamps, soft-delete fields, and indexes in `backend/src/persistence/schema.ts`
-- [ ] T014 Create and verify the initial database migration for diagrams, components, and relationships in `backend/drizzle/0001_initial.sql`
-- [ ] T015 [P] Create Fastify application construction, health route, request parsing, and centralized validation/error responses in `backend/src/api/app.ts` and `backend/src/api/errors.ts`
-- [ ] T016 [P] Create API test fixtures and an isolated test database strategy in `backend/tests/fixtures.ts` and `backend/tests/setup.ts`
-- [ ] T017 [P] Add an OpenAPI contract validation test against `specs/001-software-architecture-diagrams/contracts/openapi.yaml` in `backend/tests/contract/openapi.test.ts`
-- [ ] T018 Add backend package scripts, migration commands, and local development configuration in `backend/package.json` and `backend/.env.example`
+- [X] T007 [P] Define UUID, timestamp, diagram status, component, relationship, and diagram document types in `shared/src/domain/types.ts`
+- [X] T008 [P] Implement domain invariants for stable IDs, same-diagram relationship endpoints, finite positions, and non-blank names in `shared/src/domain/invariants.ts`
+- [X] T009 [P] Implement Zod schemas and entity-specific validation errors for diagram documents and API payloads in `shared/src/validation/schemas.ts`
+- [X] T010 [P] Add shared domain and validation tests for UUID stability, duplicate names, invalid endpoints, self-links, invalid positions, and actionable errors in `shared/tests/domain.test.ts` and `shared/tests/validation.test.ts`
+- [X] T011 Configure shared package exports and build/test scripts in `shared/package.json` and `shared/src/index.ts`
+- [X] T012 Create Drizzle database configuration and environment parsing in `backend/src/persistence/database.ts` and `backend/src/config.ts`
+- [X] T013 Define PostgreSQL tables, foreign keys, timestamps, soft-delete fields, and indexes in `backend/src/persistence/schema.ts`
+- [X] T014 Create and verify the initial database migration for diagrams, components, and relationships in `backend/drizzle/0001_initial.sql`
+- [X] T015 [P] Create Fastify application construction, health route, request parsing, and centralized validation/error responses in `backend/src/api/app.ts` and `backend/src/api/errors.ts`
+- [X] T016 [P] Create API test fixtures and an isolated test database strategy in `backend/tests/fixtures.ts` and `backend/tests/setup.ts`
+- [X] T017 [P] Add an OpenAPI contract validation test against `specs/001-software-architecture-diagrams/contracts/openapi.yaml` in `backend/tests/contract/openapi.test.ts`
+- [X] T018 Add backend package scripts, migration commands, and local development configuration in `backend/package.json` and `backend/.env.example`
 
 ---
 
@@ -57,22 +57,22 @@ the saved status, reopen it, and verify names, labels, endpoints, directions, po
 
 ### Tests for User Story 1
 
-- [ ] T019 [P] [US1] Add repository/service tests for diagram create, complete-document autosave, reopen, and stable UUID preservation in `backend/tests/diagrams.test.ts`
-- [ ] T020 [P] [US1] Add API contract tests for `GET /diagrams`, `POST /diagrams`, `GET /diagrams/{diagramId}`, and `PUT /diagrams/{diagramId}` in `backend/tests/contract/diagrams.test.ts`
-- [ ] T021 [P] [US1] Add React Flow adapter round-trip tests proving domain IDs and positions survive conversion in `frontend/tests/react-flow-adapter.test.ts`
-- [ ] T022 [P] [US1] Add Playwright coverage for create, add, rename, reposition, autosave, reopen, and relationship editing in `e2e/tests/create-edit-reopen.spec.ts`
+- [X] T019 [P] [US1] Add repository/service tests for diagram create, complete-document autosave, reopen, and stable UUID preservation in `backend/tests/diagrams.test.ts`
+- [X] T020 [P] [US1] Add API contract tests for `GET /diagrams`, `POST /diagrams`, `GET /diagrams/{diagramId}`, and `PUT /diagrams/{diagramId}` in `backend/tests/contract/diagrams.test.ts`
+- [X] T021 [P] [US1] Add React Flow adapter round-trip tests proving domain IDs and positions survive conversion in `frontend/tests/react-flow-adapter.test.ts`
+- [X] T022 [P] [US1] Add Playwright coverage for create, add, rename, reposition, autosave, reopen, and relationship editing in `e2e/tests/create-edit-reopen.spec.ts`
 
 ### Implementation for User Story 1
 
-- [ ] T023 [US1] Implement diagram/component/relationship repository queries and transactional complete-document replacement in `backend/src/persistence/diagram-repository.ts`
-- [ ] T024 [US1] Implement diagram create, load, validate, and autosave service operations in `backend/src/services/diagram-service.ts`
-- [ ] T025 [US1] Implement diagram list/create/load/autosave REST handlers matching `specs/001-software-architecture-diagrams/contracts/openapi.yaml` in `backend/src/api/diagram-routes.ts`
-- [ ] T026 [US1] Implement domain-to-React-Flow node and edge conversion with UUID-derived IDs in `frontend/src/adapters/react-flow/diagram-adapter.ts`
-- [ ] T027 [US1] Implement Zustand active-document state, domain edit actions, and debounced autosave status in `frontend/src/state/diagram-store.ts`
-- [ ] T028 [US1] Implement diagram list/open/create UI and accessible component/relationship editing controls in `frontend/src/components/DiagramWorkspace.tsx` and `frontend/src/components/DiagramToolbar.tsx`
-- [ ] T029 [US1] Implement the React Flow canvas, component labels, relationship labels, directed/undirected display, and keyboard-accessible controls in `frontend/src/components/DiagramCanvas.tsx`
-- [ ] T030 [US1] Implement REST client result/error mapping and save/reopen feedback in `frontend/src/api/diagram-client.ts` and `frontend/src/components/SaveStatus.tsx`
-- [ ] T031 [US1] Wire Fastify startup and frontend development proxy for the diagram workflow in `backend/src/server.ts` and `frontend/vite.config.ts`
+- [X] T023 [US1] Implement diagram/component/relationship repository queries and transactional complete-document replacement in `backend/src/persistence/diagram-repository.ts`
+- [X] T024 [US1] Implement diagram create, load, validate, and autosave service operations in `backend/src/services/diagram-service.ts`
+- [X] T025 [US1] Implement diagram list/create/load/autosave REST handlers matching `specs/001-software-architecture-diagrams/contracts/openapi.yaml` in `backend/src/api/diagram-routes.ts`
+- [X] T026 [US1] Implement domain-to-React-Flow node and edge conversion with UUID-derived IDs in `frontend/src/adapters/react-flow/diagram-adapter.ts`
+- [X] T027 [US1] Implement Zustand active-document state, domain edit actions, and debounced autosave status in `frontend/src/state/diagram-store.ts`
+- [X] T028 [US1] Implement diagram list/open/create UI and accessible component/relationship editing controls in `frontend/src/components/DiagramWorkspace.tsx` and `frontend/src/components/DiagramToolbar.tsx`
+- [X] T029 [US1] Implement the React Flow canvas, component labels, relationship labels, directed/undirected display, and keyboard-accessible controls in `frontend/src/components/DiagramCanvas.tsx`
+- [X] T030 [US1] Implement REST client result/error mapping and save/reopen feedback in `frontend/src/api/diagram-client.ts` and `frontend/src/components/SaveStatus.tsx`
+- [X] T031 [US1] Wire Fastify startup and frontend development proxy for the diagram workflow in `backend/src/server.ts` and `frontend/vite.config.ts`
 
 **Checkpoint**: User Story 1 is independently functional and testable before export, trash, and undo/redo enhancements.
 

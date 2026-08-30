@@ -1,0 +1,1 @@
+import {test,expect} from '@playwright/test'; test('creates a named diagram and reports saved status',async({page})=>{await page.goto('/');await page.getByLabel('Diagram name').fill('System');await page.getByRole('button',{name:'Create diagram'}).click();await expect(page.getByRole('status')).toContainText('Saved');});

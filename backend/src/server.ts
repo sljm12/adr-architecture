@@ -1,0 +1,1 @@
+import { buildApp } from './api/app'; import { config } from './config'; const app=buildApp(); app.listen({port:config().port,host:'0.0.0.0'}).catch((error:unknown)=>{app.log.error(error);process.exit(1);});

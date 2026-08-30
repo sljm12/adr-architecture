@@ -1,0 +1,1 @@
+import {DiagramToolbar} from './DiagramToolbar'; import {DiagramCanvas} from './DiagramCanvas'; export function DiagramWorkspace(){return <div className="workspace"><DiagramToolbar/><DiagramCanvas/></div>;}

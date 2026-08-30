@@ -1,0 +1,1 @@
+{"name":"adr-diagram-backend","private":true,"type":"module","scripts":{"build":"tsc -b","dev":"tsx watch src/server.ts","test":"vitest run"}}

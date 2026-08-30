@@ -1,0 +1,2 @@
+import type { DiagramDocument } from '../../../shared/src/index';
+export class DiagramRepository { private documents=new Map<string,DiagramDocument>(); list(){return [...this.documents.values()].filter(d=>d.status==='active');} get(id:string){return this.documents.get(id);} create(document:DiagramDocument){this.documents.set(document.id,structuredClone(document)); return document;} replace(document:DiagramDocument){this.documents.set(document.id,structuredClone(document)); return document;} }
