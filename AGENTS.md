@@ -59,6 +59,12 @@ artifacts.
 - Keep user-facing requirements technology-agnostic unless implementation details are explicitly
   requested.
 
+## UI Design
+
+- Use `DESIGN.md` as the source of truth for all UI work.
+- Review the relevant guidance in `DESIGN.md` before making interface changes and keep new UI
+  consistent with its visual system, typography, colors, spacing, and interaction patterns.
+
 ## Documentation Lookup
 
 Use the Context7 CLI to fetch current documentation whenever a task asks about a library,
