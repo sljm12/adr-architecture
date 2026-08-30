@@ -1,0 +1,74 @@
+openapi: 3.0.3
+info:
+  title: ADR Diagram API - ADRs
+  version: 1.0.0
+paths:
+  /diagrams/{diagramId}/adrs:
+    get:
+      summary: List ADRs for a diagram
+      parameters: [{name: diagramId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: ADR summaries, content: {application/json: {schema: {$ref: '#/components/schemas/AdrSummaryList'}}}}}
+    post:
+      summary: Create an ADR
+      parameters: [{name: diagramId, in: path, required: true, schema: {type: string, format: uuid}}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AdrWrite'}}}}
+      responses: {'201': {description: Created ADR, content: {application/json: {schema: {$ref: '#/components/schemas/Adr'}}}}, '422': {$ref: '#/components/responses/ValidationError'}}
+  /adrs/{adrId}:
+    get:
+      summary: Get an ADR with linked components
+      parameters: [{name: adrId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: ADR, content: {application/json: {schema: {$ref: '#/components/schemas/Adr'}}}}, '404': {description: Not found}}
+    patch:
+      summary: Update ADR content or lifecycle metadata
+      parameters: [{name: adrId, in: path, required: true, schema: {type: string, format: uuid}}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AdrWrite'}}}}
+      responses: {'200': {description: Updated ADR, content: {application/json: {schema: {$ref: '#/components/schemas/Adr'}}}}, '409': {description: Invalid replacement or dependency state}, '422': {$ref: '#/components/responses/ValidationError'}}
+    delete:
+      summary: Delete an ADR after dependency validation
+      parameters: [{name: adrId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {'204': {description: Deleted}, '409': {description: ADR is a replacement target}}
+  /adrs/{adrId}/components:
+    put:
+      summary: Replace the ADR component links
+      parameters: [{name: adrId, in: path, required: true, schema: {type: string, format: uuid}}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [componentIds], properties: {componentIds: {type: array, items: {type: string, format: uuid}, uniqueItems: true}}}}}}
+      responses: {'200': {description: ADR with updated links, content: {application/json: {schema: {$ref: '#/components/schemas/Adr'}}}}, '422': {$ref: '#/components/responses/ValidationError'}}
+components:
+  responses:
+    ValidationError:
+      description: Actionable validation failure
+      content: {application/json: {schema: {type: object, required: [message, fields], properties: {message: {type: string}, fields: {type: object, additionalProperties: {type: string}}}}}}
+  schemas:
+    AdrWrite:
+      type: object
+      required: [title, context, decision, consequences, status]
+      properties:
+        title: {type: string, minLength: 1}
+        context: {type: string, minLength: 1}
+        decision: {type: string, minLength: 1}
+        consequences: {type: string, minLength: 1}
+        alternativesOrConstraints: {type: string, nullable: true}
+        status: {type: string, enum: [draft, accepted, superseded, rejected]}
+        replacementAdrId: {type: string, format: uuid, nullable: true}
+    Adr:
+      allOf:
+        - {$ref: '#/components/schemas/AdrWrite'}
+        - type: object
+          required: [id, diagramId, createdAt, updatedAt, componentIds]
+          properties:
+            id: {type: string, format: uuid}
+            diagramId: {type: string, format: uuid}
+            componentIds: {type: array, items: {type: string, format: uuid}, uniqueItems: true}
+            createdAt: {type: string, format: date-time}
+            updatedAt: {type: string, format: date-time}
+    AdrSummaryList:
+      type: array
+      items:
+        type: object
+        required: [id, title, status, updatedAt, componentCount]
+        properties:
+          id: {type: string, format: uuid}
+          title: {type: string}
+          status: {type: string, enum: [draft, accepted, superseded, rejected]}
+          updatedAt: {type: string, format: date-time}
+          componentCount: {type: integer, minimum: 0}
