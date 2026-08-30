@@ -1,0 +1,108 @@
+openapi: 3.0.3
+info:
+  title: ADR Diagram API - Architecture Diagrams
+  version: 1.0.0
+paths:
+  /diagrams:
+    get:
+      summary: List active diagrams
+      responses:
+        '200': {description: Active diagrams, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramSummaryList'}}}}
+    post:
+      summary: Create a diagram
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramCreate'}}}}
+      responses:
+        '201': {description: Created diagram, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramDocument'}}}}
+        '422': {$ref: '#/components/responses/ValidationError'}
+  /diagrams/trash:
+    get:
+      summary: List trashed diagrams
+      responses: {'200': {description: Trashed diagrams, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramSummaryList'}}}}}
+  /diagrams/{diagramId}:
+    get:
+      summary: Get a diagram document
+      parameters: [{name: diagramId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Diagram document, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramDocument'}}}}, '404': {description: Not found}}
+    put:
+      summary: Validate and autosave the complete diagram document
+      parameters: [{name: diagramId, in: path, required: true, schema: {type: string, format: uuid}}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramWrite'}}}}
+      responses: {'200': {description: Saved document, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramDocument'}}}}, '422': {$ref: '#/components/responses/ValidationError'}}
+    delete:
+      summary: Move a diagram to trash
+      parameters: [{name: diagramId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {'204': {description: Moved to trash}, '404': {description: Not found}}
+  /diagrams/{diagramId}/restore:
+    post:
+      summary: Restore a trashed diagram
+      parameters: [{name: diagramId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Restored document, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramDocument'}}}}, '409': {description: Diagram is not trashed}}
+  /diagrams/{diagramId}/export/mermaid:
+    get:
+      summary: Export the validated diagram as Mermaid
+      parameters: [{name: diagramId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: Mermaid source, content: {text/vnd.mermaid: {schema: {type: string}}}}
+        '422': {$ref: '#/components/responses/ValidationError'}
+components:
+  responses:
+    ValidationError:
+      description: Actionable validation failure
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [message, fields]
+            properties:
+              message: {type: string}
+              fields: {type: object, additionalProperties: {type: string}}
+  schemas:
+    DiagramCreate:
+      type: object
+      required: [name]
+      properties: {name: {type: string, minLength: 1}}
+    DiagramWrite:
+      type: object
+      required: [name, components, relationships]
+      properties:
+        name: {type: string, minLength: 1}
+        components: {type: array, items: {$ref: '#/components/schemas/Component'}, uniqueItems: true}
+        relationships: {type: array, items: {$ref: '#/components/schemas/Relationship'}, uniqueItems: true}
+    DiagramDocument:
+      allOf:
+        - {$ref: '#/components/schemas/DiagramWrite'}
+        - type: object
+          required: [id, status, createdAt, updatedAt]
+          properties:
+            id: {type: string, format: uuid}
+            status: {type: string, enum: [active, trashed]}
+            createdAt: {type: string, format: date-time}
+            updatedAt: {type: string, format: date-time}
+    Component:
+      type: object
+      required: [id, name, position]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string, minLength: 1}
+        description: {type: string, nullable: true}
+        type: {type: string, nullable: true}
+        position: {type: object, required: [x, y], properties: {x: {type: number}, y: {type: number}}}
+    Relationship:
+      type: object
+      required: [id, sourceComponentId, targetComponentId, direction]
+      properties:
+        id: {type: string, format: uuid}
+        sourceComponentId: {type: string, format: uuid}
+        targetComponentId: {type: string, format: uuid}
+        direction: {type: string, enum: [directed, undirected]}
+        label: {type: string, nullable: true}
+    DiagramSummaryList:
+      type: array
+      items:
+        type: object
+        required: [id, name, status, updatedAt]
+        properties:
+          id: {type: string, format: uuid}
+          name: {type: string}
+          status: {type: string, enum: [active, trashed]}
+          updatedAt: {type: string, format: date-time}
