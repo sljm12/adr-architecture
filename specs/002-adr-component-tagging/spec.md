@@ -8,6 +8,16 @@
 
 **Input**: User description: "The app should also be able to key in Architecture Decision Records (ADR). The ADR should be able to be tagged to specific components in the Software Architecture Diagram but it is not mandatory to do so."
 
+## Clarifications
+
+### Session 2026-08-30
+
+- Q: Which status transitions should be allowed for an ADR, and must a superseded ADR reference its replacement? → A: Status changes are unrestricted, but a superseded ADR must always reference its replacement.
+- Q: What should happen if a replacement ADR is deleted while another ADR references it? → A: Prevent deletion until all replacement references are repaired or explicitly removed.
+- Q: What should happen when saving an ADR fails because the backend is unavailable? → A: Preserve edits, show an unsaved/error state, and allow retry.
+- Q: What should happen when a diagram component with ADR links is deleted? → A: Block component deletion until affected ADR links are repaired or explicitly removed.
+- Q: Which ADR fields must be completed before an ADR can be saved as valid? → A: Title, context, decision, and consequences are required; alternatives or constraints are optional.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Record an architecture decision (Priority: P1)
@@ -75,9 +85,9 @@ superseded, and verify that the original remains discoverable with its status an
 
 1. **Given** multiple ADRs with different statuses, **When** the user reviews the ADR list,
    **Then** each ADR displays its title, status, and last updated time.
-2. **Given** an accepted ADR, **When** the user marks it superseded and identifies the replacing
-   decision when applicable, **Then** the original remains available and visibly marked as
-   superseded.
+2. **Given** an ADR, **When** the user changes its status to superseded and identifies the replacing
+   ADR, **Then** the original remains available, is visibly marked as superseded, and retains the
+   reference to its replacement.
 3. **Given** an ADR with saved content, **When** the user requests deletion, **Then** the user
    must confirm the destructive action and receives clear feedback about the result.
 
@@ -96,6 +106,12 @@ superseded, and verify that the original remains discoverable with its status an
   persist without truncation.
 - Changing an ADR status or deleting an ADR MUST not silently remove its component references or
   history.
+- An ADR referenced as the replacement for another ADR MUST NOT be deleted until those replacement
+  references are repaired or explicitly removed.
+- If saving an ADR fails because the backend is unavailable, the system MUST preserve the user's
+  edits, clearly identify the ADR as unsaved, and provide a retry action.
+- A diagram component with ADR links MUST NOT be deleted until all affected ADR links are repaired
+  or explicitly removed.
 
 ## Requirements *(mandatory)*
 
@@ -103,14 +119,16 @@ superseded, and verify that the original remains discoverable with its status an
 
 - **FR-001**: The system MUST allow a user to create, name, edit, save, reopen, and delete an
   Architecture Decision Record.
-- **FR-002**: An ADR MUST support context, decision, consequences, alternatives or constraints,
-  status, and creation and update timestamps.
+- **FR-002**: An ADR MUST support title, context, decision, consequences, alternatives or
+  constraints, status, and creation and update timestamps. Title, context, decision, and
+  consequences are required for a valid saved ADR; alternatives or constraints are optional.
 - **FR-003**: The system MUST assign each ADR a stable identity that remains unchanged when its
   content, status, or component references change.
 - **FR-004**: The system MUST validate required ADR information before treating an ADR as saved
   and MUST identify missing or invalid information with an actionable message.
 - **FR-005**: The system MUST support the lifecycle statuses draft, accepted, superseded, and
-  rejected.
+  rejected. Status changes MAY move between any supported statuses, but an ADR marked superseded
+  MUST reference its replacement ADR.
 - **FR-006**: The system MUST allow a user to associate an ADR with zero, one, or multiple
   specific components in an existing software architecture diagram.
 - **FR-007**: Component associations MUST reference stable component identities rather than names
@@ -132,12 +150,20 @@ superseded, and verify that the original remains discoverable with its status an
   delete actions.
 - **FR-015**: ADR creation, editing, linking, and review MUST support keyboard navigation,
   readable labels, clear status feedback, and accessible contrast.
+- **FR-016**: The system MUST prevent deletion of an ADR that is referenced as the replacement for
+  another ADR until each replacement reference is repaired or explicitly removed, and MUST explain
+  the blocking references to the user.
+- **FR-017**: If saving an ADR fails because the backend is unavailable, the system MUST preserve
+  the user's edits, clearly identify the ADR as unsaved, and provide a retry action.
+- **FR-018**: The system MUST prevent deletion of a diagram component with ADR links until each
+  affected link is repaired or explicitly removed, and MUST identify the blocking ADRs to the user.
 
 ### Key Entities *(include if feature involves data)*
 
 - **Architecture Decision Record (ADR)**: A first-class architecture artifact containing a stable
   identity, title, context, decision, consequences, alternatives or constraints, lifecycle status,
-  timestamps, and zero or more component references.
+  timestamps, zero or more component references, and a replacement ADR reference when its status is
+  superseded.
 - **Component Reference**: A link from an ADR to a specific diagram component identified by the
   component's stable identity, with enough information to show and navigate to the component.
 - **ADR Status**: The lifecycle state of an ADR: draft, accepted, superseded, or rejected.
@@ -162,6 +188,13 @@ superseded, and verify that the original remains discoverable with its status an
   reopen, and review workflow on their first attempt.
 - **SC-007**: Users can determine an ADR's status, component-link state, and save outcome within
   3 seconds of opening or completing the relevant action.
+- **SC-008**: In 100% of tested backend-save failures, the user's edits remain available for retry,
+  the ADR is visibly marked unsaved, and no completed-save state is falsely reported.
+- **SC-009**: In 100% of tested component-deletion attempts involving ADR links, deletion is blocked
+  until the affected links are repaired or explicitly removed, and the blocking ADRs are identified.
+- **SC-010**: In 100% of tested ADR save attempts, records missing a title, context, decision, or
+  consequences are rejected with an actionable message, while records omitting alternatives or
+  constraints can be saved when the other required fields are complete.
 
 ## Assumptions
 
