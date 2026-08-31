@@ -1,1 +1,1 @@
-import {defineConfig} from '@playwright/test'; export default defineConfig({testDir:'./e2e/tests',use:{baseURL:'http://localhost:5173'},webServer:{command:'npm run dev -w frontend',url:'http://localhost:5173',reuseExistingServer:true}});
+import {defineConfig} from '@playwright/test'; export default defineConfig({testDir:'./e2e/tests',use:{baseURL:'http://localhost:5173'},webServer:{command:'npm.cmd run dev --prefix frontend',url:'http://localhost:5173',reuseExistingServer:true}});

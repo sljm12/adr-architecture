@@ -42,7 +42,11 @@ paths:
       summary: Export the validated diagram as Mermaid
       parameters: [{name: diagramId, in: path, required: true, schema: {type: string, format: uuid}}]
       responses:
-        '200': {description: Mermaid source, content: {text/vnd.mermaid: {schema: {type: string}}}}
+        '200':
+          description: Mermaid source download
+          headers:
+            Content-Disposition: {schema: {type: string}, description: Attachment filename ending in .mmd}
+          content: {text/vnd.mermaid: {schema: {type: string}}}
         '422': {$ref: '#/components/responses/ValidationError'}
 components:
   responses:

@@ -87,16 +87,16 @@ the file, render it in a Mermaid-compatible viewer, and verify invalid content p
 
 ### Tests for User Story 2
 
-- [ ] T032 [P] [US2] Add Mermaid adapter tests for node/edge coverage, direction, labels, duplicate names, punctuation, non-Latin text, escaping, and rejected unsafe content in `frontend/tests/mermaid-export.test.ts`
-- [ ] T033 [P] [US2] Add export service/API tests for valid source, empty/invalid documents, entity-specific errors, and `text/vnd.mermaid` responses in `backend/tests/export.test.ts`
-- [ ] T034 [P] [US2] Add Playwright coverage for export success, pending-autosave export, and actionable export failure feedback in `e2e/tests/mermaid-export.spec.ts`
+- [X] T032 [P] [US2] Add Mermaid adapter tests for node/edge coverage, direction, labels, duplicate names, punctuation, non-Latin text, escaping, and rejected unsafe content in `frontend/tests/mermaid-export.test.ts`
+- [X] T033 [P] [US2] Add export service/API tests for valid source, empty/invalid documents, entity-specific errors, and `text/vnd.mermaid` responses in `backend/tests/export.test.ts`
+- [X] T034 [P] [US2] Add Playwright coverage for export success, pending-autosave export, and actionable export failure feedback in `e2e/tests/mermaid-export.spec.ts`
 
 ### Implementation for User Story 2
 
-- [ ] T035 [US2] Implement validated domain-to-Mermaid flowchart generation, escaping, direction mapping, and entity-specific export errors in `shared/src/export/mermaid-export.ts`
-- [ ] T036 [US2] Implement Mermaid export orchestration and response headers in `backend/src/services/export-service.ts` and `backend/src/api/export-routes.ts`
-- [ ] T037 [US2] Implement Mermaid export client download handling, pending-save coordination, and success/error announcements in `frontend/src/api/export-client.ts` and `frontend/src/components/ExportButton.tsx`
-- [ ] T038 [US2] Add Mermaid export route and response definitions to `specs/001-software-architecture-diagrams/contracts/openapi.yaml`
+- [X] T035 [US2] Implement validated domain-to-Mermaid flowchart generation, escaping, direction mapping, and entity-specific export errors in `shared/src/export/mermaid-export.ts`
+- [X] T036 [US2] Implement Mermaid export orchestration and response headers in `backend/src/services/export-service.ts` and `backend/src/api/export-routes.ts`
+- [X] T037 [US2] Implement Mermaid export client download handling, pending-save coordination, and success/error announcements in `frontend/src/api/export-client.ts` and `frontend/src/components/ExportButton.tsx`
+- [X] T038 [US2] Add Mermaid export route and response definitions to `specs/001-software-architecture-diagrams/contracts/openapi.yaml`
 
 **Checkpoint**: User Stories 1 and 2 both work independently; valid diagrams export without silently omitting artifacts.
 
