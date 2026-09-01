@@ -37,6 +37,16 @@ paths:
       summary: Restore a trashed diagram
       parameters: [{name: diagramId, in: path, required: true, schema: {type: string, format: uuid}}]
       responses: {'200': {description: Restored document, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramDocument'}}}}, '409': {description: Diagram is not trashed}}
+  /diagrams/{diagramId}/components/{componentId}/dependencies:
+    get:
+      summary: Count relationships that would be removed with a component
+      parameters: [{name: diagramId, in: path, required: true, schema: {type: string, format: uuid}}, {name: componentId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Dependent relationship count, content: {application/json: {schema: {type: object, required: [relationshipCount], properties: {relationshipCount: {type: integer, minimum: 0}}}}}}, '404': {description: Diagram or component not found}}
+  /diagrams/{diagramId}/components/{componentId}:
+    delete:
+      summary: Remove a component and all dependent relationships after client confirmation
+      parameters: [{name: diagramId, in: path, required: true, schema: {type: string, format: uuid}}, {name: componentId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Updated document and number of removed relationships, content: {application/json: {schema: {type: object, required: [document, relationshipCount], properties: {document: {$ref: '#/components/schemas/DiagramDocument'}, relationshipCount: {type: integer, minimum: 0}}}}}}, '404': {description: Diagram or component not found}}
   /diagrams/{diagramId}/export/mermaid:
     get:
       summary: Export the validated diagram as Mermaid

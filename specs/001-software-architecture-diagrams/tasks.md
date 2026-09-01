@@ -111,18 +111,18 @@ component, cancel once, then confirm and verify all dependent relationships are 
 
 ### Tests for User Story 3
 
-- [ ] T039 [P] [US3] Add Zustand history tests for edit, undo, redo, history reset on diagram switch, and preservation of unrelated content in `frontend/tests/diagram-history.test.ts`
-- [ ] T040 [P] [US3] Add persistence/service tests for component dependency discovery, transactional component-plus-relationship deletion, diagram trash, and restore in `backend/tests/recovery.test.ts`
-- [ ] T041 [P] [US3] Add Playwright coverage for undo/redo, connected-component confirmation, diagram trash, and restore feedback in `e2e/tests/recovery.spec.ts`
+- [X] T039 [P] [US3] Add Zustand history tests for edit, undo, redo, history reset on diagram switch, and preservation of unrelated content in `frontend/tests/diagram-history.test.ts`
+- [X] T040 [P] [US3] Add persistence/service tests for component dependency discovery, transactional component-plus-relationship deletion, diagram trash, and restore in `backend/tests/recovery.test.ts`
+- [X] T041 [P] [US3] Add Playwright coverage for undo/redo, connected-component confirmation, diagram trash, and restore feedback in `e2e/tests/recovery.spec.ts`
 
 ### Implementation for User Story 3
 
-- [ ] T042 [US3] Implement bounded domain-command undo/redo history and active-diagram history scoping in `frontend/src/state/history.ts` and `frontend/src/state/diagram-store.ts`
-- [ ] T043 [US3] Implement component dependency counting and transactional removal of a component with all dependent relationships in `backend/src/services/diagram-service.ts`
-- [ ] T044 [US3] Implement diagram soft-delete, trash listing, and restore repository/service operations in `backend/src/persistence/diagram-repository.ts` and `backend/src/services/diagram-service.ts`
-- [ ] T045 [US3] Add component removal, diagram trash, trash listing, and restore routes matching the API contract in `backend/src/api/recovery-routes.ts`
-- [ ] T046 [US3] Add confirmation dialogs, dependency warnings, undo/redo controls, trash view, restore action, and accessible status announcements in `frontend/src/components/RecoveryControls.tsx` and `frontend/src/components/ConfirmDialog.tsx`
-- [ ] T047 [US3] Add recovery endpoints and dependency error schemas to `specs/001-software-architecture-diagrams/contracts/openapi.yaml`
+- [X] T042 [US3] Implement bounded domain-command undo/redo history and active-diagram history scoping in `frontend/src/state/history.ts` and `frontend/src/state/diagram-store.ts`
+- [X] T043 [US3] Implement component dependency counting and transactional removal of a component with all dependent relationships in `backend/src/services/diagram-service.ts`
+- [X] T044 [US3] Implement diagram soft-delete, trash listing, and restore repository/service operations in `backend/src/persistence/diagram-repository.ts` and `backend/src/services/diagram-service.ts`
+- [X] T045 [US3] Add component removal, diagram trash, trash listing, and restore routes matching the API contract in `backend/src/api/recovery-routes.ts`
+- [X] T046 [US3] Add confirmation dialogs, dependency warnings, undo/redo controls, trash view, restore action, and accessible status announcements in `frontend/src/components/RecoveryControls.tsx` and `frontend/src/components/ConfirmDialog.tsx`
+- [X] T047 [US3] Add recovery endpoints and dependency error schemas to `specs/001-software-architecture-diagrams/contracts/openapi.yaml`
 
 **Checkpoint**: All three user stories are independently functional and preserve stable references without broken relationships.
 
