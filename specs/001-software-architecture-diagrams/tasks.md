@@ -132,12 +132,12 @@ component, cancel once, then confirm and verify all dependent relationships are 
 
 **Purpose**: Verify quality gates, accessibility, performance feedback, and documented acceptance behavior.
 
-- [ ] T048 [P] Add keyboard navigation, accessible labels, focus management, live-region feedback, and contrast checks for core workflows in `frontend/src/components/` and `frontend/tests/accessibility.test.tsx`
-- [ ] T049 [P] Add large-diagram loading, autosave, and export timing coverage for the representative five-component/five-relationship scenario in `e2e/tests/performance.spec.ts`
-- [ ] T050 [P] Add API/domain compatibility fixtures proving future ADR component links can resolve unchanged component UUIDs in `shared/tests/compatibility.test.ts` and `backend/tests/compatibility.test.ts`
-- [ ] T051 Update README setup, database, test, and Mermaid preview instructions using `specs/001-software-architecture-diagrams/quickstart.md` in `README.md`
-- [ ] T052 Run the complete unit, contract, integration, and browser suites and resolve failures in `package.json`, `shared/`, `backend/`, `frontend/`, and `e2e/`
-- [ ] T053 Run every acceptance scenario from `specs/001-software-architecture-diagrams/quickstart.md` and record validation results in `specs/001-software-architecture-diagrams/quickstart.md`
+- [X] T048 [P] Add keyboard navigation, accessible labels, focus management, live-region feedback, and contrast checks for core workflows in `frontend/src/components/` and `frontend/tests/accessibility.test.tsx`
+- [X] T049 [P] Add large-diagram loading, autosave, and export timing coverage for the representative five-component/five-relationship scenario in `e2e/tests/performance.spec.ts`
+- [X] T050 [P] Add API/domain compatibility fixtures proving future ADR component links can resolve unchanged component UUIDs in `shared/tests/compatibility.test.ts` and `backend/tests/compatibility.test.ts`
+- [X] T051 Update README setup, database, test, and Mermaid preview instructions using `specs/001-software-architecture-diagrams/quickstart.md` in `README.md`
+- [X] T052 Run the complete unit, contract, integration, and browser suites and resolve failures in `package.json`, `shared/`, `backend/`, `frontend/`, and `e2e/`
+- [X] T053 Run every acceptance scenario from `specs/001-software-architecture-diagrams/quickstart.md` and record validation results in `specs/001-software-architecture-diagrams/quickstart.md`
 
 ## Dependencies & Execution Order
 

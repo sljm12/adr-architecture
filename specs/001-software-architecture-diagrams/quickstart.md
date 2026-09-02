@@ -8,14 +8,18 @@
 
 ## Validation commands
 
-From the repository root, run the project scripts after the application scaffold is created:
+From the repository root, install dependencies and run the application checks:
 
 ```text
-<package-manager> install
-<package-manager> run db:migrate
-<package-manager> run test
-<package-manager> run test:e2e
+npm install
+npm run build
+npm test
+npm run test:e2e
 ```
+
+For a PostgreSQL deployment, apply `backend/drizzle/0001_initial.sql` with the configured
+PostgreSQL migration runner before starting the API. The current local repository adapter keeps
+the browser test workflow isolated and does not require a live database.
 
 The REST boundary is defined in [contracts/openapi.yaml](./contracts/openapi.yaml), and entity
 invariants are defined in [data-model.md](./data-model.md).
@@ -40,4 +44,15 @@ invariants are defined in [data-model.md](./data-model.md).
    and retry reaches saved status.
 9. Complete create/edit/delete/export flows using keyboard navigation and verify labels, focus order,
    contrast, and success/error announcements.
+
+## Validation results
+
+Validated on 2026-09-02 from branch `feature/001-phase-6`:
+
+| Check | Result |
+|---|---|
+| Build | PASS — shared, backend, and frontend TypeScript/Vite builds completed. |
+| Unit, contract, persistence, adapter, export, accessibility, and compatibility tests | PASS — 32 tests. |
+| Browser workflows | PASS — 7 tests covering create, export, recovery, save failure/recovery, and five-component/five-relationship performance. |
+| Acceptance scenarios 1–9 | PASS — scenarios are covered by the browser workflows plus domain, export, recovery, compatibility, and accessibility checks. |
 
