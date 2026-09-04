@@ -5,7 +5,8 @@ info:
 paths:
   /diagrams:
     get:
-      summary: List active diagrams
+      summary: List active saved-diagram summaries
+      description: Returns the active diagrams for the saved-diagram view. Each summary includes a stable ID, name, lifecycle state, and last-saved time; names are not unique selection keys.
       responses:
         '200': {description: Active diagrams, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramSummaryList'}}}}
     post:
@@ -20,7 +21,8 @@ paths:
       responses: {'200': {description: Trashed diagrams, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramSummaryList'}}}}}
   /diagrams/{diagramId}:
     get:
-      summary: Get a diagram document
+      summary: Load a selected saved diagram document
+      description: Returns the complete current saved document for the selected stable diagram ID. Clients must retain the current active document when this request fails.
       parameters: [{name: diagramId, in: path, required: true, schema: {type: string, format: uuid}}]
       responses: {'200': {description: Diagram document, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramDocument'}}}}, '404': {description: Not found}}
     put:

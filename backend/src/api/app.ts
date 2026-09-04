@@ -1,2 +1,18 @@
-import Fastify from 'fastify'; import { DiagramRepository } from '../persistence/diagram-repository'; import { diagramCreateSchema, diagramDocumentSchema } from '../../../shared/src/index'; import { sendError } from './errors'; import { registerExportRoutes } from './export-routes'; import { ExportService } from '../services/export-service'; import { DiagramService } from '../services/diagram-service'; import { registerRecoveryRoutes } from './recovery-routes';
-export function buildApp(repository=new DiagramRepository()){ const app=Fastify({logger:false}); app.get('/health',async()=>({ok:true})); app.get('/diagrams',async()=>repository.list()); app.post('/diagrams',async(req,reply)=>{try{const input=diagramCreateSchema.parse(req.body); const now=new Date().toISOString(); const d={id:crypto.randomUUID(),name:input.name,status:'active' as const,createdAt:now,updatedAt:now,trashedAt:null,components:[],relationships:[]}; return reply.code(201).send(repository.create(d));}catch(e){return sendError(reply,e);}}); app.get<{Params:{diagramId:string}}>('/diagrams/:diagramId',async(req,reply)=>{const d=repository.get(req.params.diagramId); return d?reply.send(d):reply.code(404).send({message:'Diagram not found'});}); app.put<{Params:{diagramId:string}}>('/diagrams/:diagramId',async(req,reply)=>{try{const d=diagramDocumentSchema.parse(req.body); if(d.id!==req.params.diagramId) return reply.code(422).send({message:'Path and document IDs must match',fields:{id:'Must match diagramId'}}); return reply.send(repository.replace(d));}catch(e){return sendError(reply,e);}}); registerRecoveryRoutes(app,repository,new DiagramService(repository)); registerExportRoutes(app,new ExportService(repository)); return app; }
+import Fastify from 'fastify';
+import { DiagramRepository, type DiagramRepositoryLike } from '../persistence/diagram-repository';
+import { registerExportRoutes } from './export-routes';
+import { ExportService } from '../services/export-service';
+import { DiagramService } from '../services/diagram-service';
+import { registerRecoveryRoutes } from './recovery-routes';
+import { registerDiagramRoutes } from './diagram-routes';
+
+export function buildApp(repository: DiagramRepositoryLike = new DiagramRepository()) {
+  const app = Fastify({ logger: false });
+  const service = new DiagramService(repository);
+
+  app.get('/health', async () => ({ ok: true }));
+  registerDiagramRoutes(app, repository, service);
+  registerRecoveryRoutes(app, repository, service);
+  registerExportRoutes(app, new ExportService(repository));
+  return app;
+}

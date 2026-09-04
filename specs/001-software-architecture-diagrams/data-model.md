@@ -36,6 +36,13 @@ The API exposes a diagram document containing diagram metadata, components, rela
 positions. A complete document replacement is validated before persistence and written transactionally.
 React Flow node/edge IDs are derived from these UUIDs and are never persisted as the source of truth.
 
+## Saved Diagram Summary
+
+The saved-diagram view uses a summary derived from each active `Diagram`, rather than a separate
+persisted entity. It contains `id`, `name`, `status`, and `updatedAt`. The UI uses `id` as the
+selection value, displays the name and last-saved time, and never treats the name as a unique key.
+Full components, relationships, and layout are obtained only when the selected `id` is loaded.
+
 ## Invariants and lifecycle rules
 
 1. Every artifact ID is a UUID and remains stable through ordinary edits.
@@ -46,6 +53,10 @@ React Flow node/edge IDs are derived from these UUIDs and are never persisted as
 6. Trashed diagrams are excluded from active editing and normal lists but remain recoverable.
 7. Autosave failure leaves the local draft intact and sets an observable failed/unsaved state.
 8. Mermaid export accepts only a fully validated document and produces no file when validation fails.
+9. A failed or cancelled request to load another diagram leaves the active document and local
+   history unchanged.
+10. A successful load replaces the active document with the selected saved document and resets the
+    local undo/redo history to that document.
 
 ## Future compatibility
 
