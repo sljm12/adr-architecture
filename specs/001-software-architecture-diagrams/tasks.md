@@ -57,22 +57,22 @@ the saved status, reopen it, and verify names, labels, endpoints, directions, po
 
 ### Tests for User Story 1
 
-- [X] T019 [P] [US1] Add repository/service tests for diagram create, complete-document autosave, reopen, and stable UUID preservation in `backend/tests/diagrams.test.ts`
-- [X] T020 [P] [US1] Add API contract tests for `GET /diagrams`, `POST /diagrams`, `GET /diagrams/{diagramId}`, and `PUT /diagrams/{diagramId}` in `backend/tests/contract/diagrams.test.ts`
+- [ ] T019 [P] [US1] Add PostgreSQL persistence integration tests that save a complete diagram document, create a fresh repository instance, load it from the database, and verify metadata, stable UUIDs, components, relationships, labels, directions, and positions in `backend/tests/persistence/diagram-repository.test.ts`
+- [ ] T020 [P] [US1] Add API retrieval tests that persist a diagram through `POST`/`PUT`, initialize the API against the database, load it through `GET /diagrams/{diagramId}`, and verify the complete returned document in `backend/tests/contract/diagrams.test.ts`
 - [X] T021 [P] [US1] Add React Flow adapter round-trip tests proving domain IDs and positions survive conversion in `frontend/tests/react-flow-adapter.test.ts`
 - [X] T022 [P] [US1] Add Playwright coverage for create, add, rename, reposition, autosave, reopen, and relationship editing in `e2e/tests/create-edit-reopen.spec.ts`
 
 ### Implementation for User Story 1
 
-- [X] T023 [US1] Implement diagram/component/relationship repository queries and transactional complete-document replacement in `backend/src/persistence/diagram-repository.ts`
-- [X] T024 [US1] Implement diagram create, load, validate, and autosave service operations in `backend/src/services/diagram-service.ts`
-- [X] T025 [US1] Implement diagram list/create/load/autosave REST handlers matching `specs/001-software-architecture-diagrams/contracts/openapi.yaml` in `backend/src/api/diagram-routes.ts`
+- [ ] T023 [US1] Implement PostgreSQL-backed diagram/component/relationship repository queries and transactional complete-document replacement plus database loading in `backend/src/persistence/diagram-repository.ts`
+- [ ] T024 [US1] Implement diagram create, load-from-database, validate, and autosave service operations using the persistent repository in `backend/src/services/diagram-service.ts`
+- [ ] T025 [US1] Implement diagram list/create/load/autosave REST handlers backed by persisted records and matching `specs/001-software-architecture-diagrams/contracts/openapi.yaml` in `backend/src/api/diagram-routes.ts`
 - [X] T026 [US1] Implement domain-to-React-Flow node and edge conversion with UUID-derived IDs in `frontend/src/adapters/react-flow/diagram-adapter.ts`
 - [X] T027 [US1] Implement Zustand active-document state, domain edit actions, and debounced autosave status in `frontend/src/state/diagram-store.ts`
 - [X] T028 [US1] Implement diagram list/open/create UI and accessible component/relationship editing controls in `frontend/src/components/DiagramWorkspace.tsx` and `frontend/src/components/DiagramToolbar.tsx`
 - [X] T029 [US1] Implement the React Flow canvas, component labels, relationship labels, directed/undirected display, and keyboard-accessible controls in `frontend/src/components/DiagramCanvas.tsx`
 - [X] T030 [US1] Implement REST client result/error mapping and save/reopen feedback in `frontend/src/api/diagram-client.ts` and `frontend/src/components/SaveStatus.tsx`
-- [X] T031 [US1] Wire Fastify startup and frontend development proxy for the diagram workflow in `backend/src/server.ts` and `frontend/vite.config.ts`
+- [ ] T031 [US1] Wire Fastify startup to create the PostgreSQL connection and inject the persistent diagram repository, while retaining an isolated test repository and frontend development proxy in `backend/src/server.ts`, `backend/src/api/app.ts`, and `frontend/vite.config.ts`
 
 **Checkpoint**: User Story 1 is independently functional and testable before export, trash, and undo/redo enhancements.
 
@@ -152,7 +152,7 @@ component, cancel once, then confirm and verify all dependent relationships are 
 
 ### User Story Dependencies
 
-- US1: starts after Phase 2; no other story dependency; MVP.
+- US1: starts after Phase 2; no other story dependency; MVP. Database persistence tasks T019, T020, T023, T024, T025, and T031 must complete before the save-and-reopen acceptance test can pass.
 - US2: starts after Phase 2; its UI smoke test assumes the active diagram workflow from US1.
 - US3: starts after Phase 2, with implementation integration depending on US1's store and service files.
 
@@ -161,6 +161,7 @@ component, cancel once, then confirm and verify all dependent relationships are 
 - T003–T006 can run in parallel after T001/T002 establish the package structure.
 - T007–T010, T012, T015–T017 can run in parallel where their files do not overlap.
 - T019–T022, T032–T034, and T039–T041 are parallel test-writing groups and must fail before implementation.
+- T019 and T020 can run in parallel after T016/T014 establish the isolated database and migration strategy; T021 and T022 can proceed independently. All US1 tests must fail before the persistence/editor implementation is considered complete.
 - Adapter, repository, service, contract, and UI tasks marked `[P]` can run in parallel when their listed
   dependencies are complete; tasks modifying the same store/repository/service file remain sequential.
 - US1 and the initial US2 export adapter can be assigned in parallel after Foundational; US3 follows the
@@ -182,7 +183,7 @@ component, cancel once, then confirm and verify all dependent relationships are 
 
 ### Traceability
 
-- US1 covers FR-001 through FR-006 and SC-001, SC-003, SC-004, and SC-006.
+- US1 covers FR-001 through FR-006 and SC-001, SC-003, SC-004, and SC-006. T019/T020 explicitly verify that save-and-reopen reads the persisted document from PostgreSQL rather than only retaining an in-memory draft.
 - US2 covers FR-009 through FR-011 and SC-002, SC-005, and SC-006.
 - US3 covers FR-007, FR-008 and the recovery portions of SC-003 and SC-006.
 - Polish covers FR-012, FR-013, edge cases, accessibility, and constitution quality gates.
