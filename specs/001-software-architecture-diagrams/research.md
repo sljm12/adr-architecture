@@ -79,3 +79,27 @@ when switching diagrams.
 **Alternatives considered:** A server revision table was deferred because advanced revision history is
 out of scope for the first release.
 
+## Decision: Browse saved diagrams through active summaries and load by stable ID
+
+**Rationale:** The existing active-diagram collection can provide a lightweight saved-diagram view
+without duplicating full documents. Each summary includes the immutable diagram ID, name, lifecycle
+state, and most-recent save time, allowing duplicate names to remain distinguishable. Selecting a
+summary retrieves the complete document by ID, so the editor loads the exact saved artifact and its
+component identities, relationships, labels, and layout.
+
+**Alternatives considered:** Loading by diagram name was rejected because names may be duplicated
+or renamed. Returning every full document in the saved-diagram view was rejected because it makes
+the list heavier than needed and risks using stale content as the active document.
+
+## Decision: Guard diagram switching with save, discard, or cancel
+
+**Rationale:** The editor records whether its active document has changes not confirmed by a
+successful save. Before loading a different saved diagram, it offers save (complete the save, then
+load only on success), discard (load without retaining the local changes), or cancel (leave the
+active diagram untouched). A loading failure leaves the current document and its local history in
+place; a successful load resets history to the newly loaded document.
+
+**Alternatives considered:** Switching immediately and relying on autosave was rejected because a
+pending or failed save can lose edits. Keeping undo history across diagrams was rejected because it
+would make a local command history affect a different artifact.
+

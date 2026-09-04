@@ -1,7 +1,7 @@
 # Specification Quality Checklist: Software Architecture Diagrams
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-08-28
+**Created**: 2026-09-04
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -31,5 +31,7 @@
 
 ## Notes
 
-All checklist items pass. Mermaid is retained as the explicitly requested export format; no
-implementation language, framework, or API is prescribed.
+All checklist items pass. The saved-diagram flow explicitly covers viewing saved work, loading a
+selected diagram, empty and failure states, and protection for unsaved edits. Mermaid is retained
+as the explicitly requested export format; no implementation language, framework, or API is
+prescribed.

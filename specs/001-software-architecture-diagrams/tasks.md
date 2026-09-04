@@ -102,42 +102,72 @@ the file, render it in a Mermaid-compatible viewer, and verify invalid content p
 
 ---
 
-## Phase 5: User Story 3 - Recover from Editing Errors (Priority: P2)
+## Phase 5: User Story 3 - View and Load Saved Diagrams (Priority: P1)
+
+**Goal**: Let users distinguish their saved diagrams, select one by stable ID, and safely load it
+into the editor without losing unsaved work.
+
+**Independent Test**: Save two diagrams with distinct or duplicate names and different content,
+view the saved-diagram list, load each one, and verify the selected saved document and layout are
+shown. Attempt a switch with unsaved edits and verify save, discard, cancel, and load failure each
+preserve the required state.
+
+### Tests for User Story 3
+
+- [ ] T039 [P] [US3] Extend active-diagram list and selected-document contract tests for summary fields, duplicate names, stable-ID selection, and failed `GET /diagrams/{diagramId}` behavior in `backend/tests/contract/diagrams.test.ts`
+- [ ] T040 [P] [US3] Add store tests for dirty-state tracking, successful-load history reset, and failed/cancelled-load preservation in `frontend/tests/diagram-loading.test.ts`
+- [ ] T041 [P] [US3] Add Playwright coverage for the saved-diagram empty state, summary list, duplicate-name distinction, loading, and guarded switching in `e2e/tests/saved-diagram-loading.spec.ts`
+
+### Implementation for User Story 3
+
+- [ ] T042 [US3] Add typed saved-diagram summaries and selected-document load error handling to `frontend/src/api/diagram-client.ts`
+- [ ] T043 [US3] Implement explicit dirty-state tracking plus save, discard, cancel, and successful-load transitions that reset history only after replacement in `frontend/src/state/diagram-store.ts`
+- [ ] T044 [US3] Implement an accessible saved-diagram list with name, last-saved information, empty state, loading state, and selected-diagram action in `frontend/src/components/SavedDiagramList.tsx`
+- [ ] T045 [P] [US3] Implement an accessible save/discard/cancel confirmation dialog for switching diagrams in `frontend/src/components/DiagramSwitchDialog.tsx`
+- [ ] T046 [US3] Integrate saved-diagram browsing and guarded load actions into the workspace and toolbar, including success/failure announcements and responsive styles, in `frontend/src/components/DiagramWorkspace.tsx`, `frontend/src/components/DiagramToolbar.tsx`, and `frontend/src/styles.css`
+
+**Checkpoint**: User Story 3 is independently functional: users can find saved diagrams and load
+the chosen artifact without replacing a current diagram after cancellation or failure.
+
+---
+
+## Phase 6: User Story 4 - Recover from Editing Errors (Priority: P2)
 
 **Goal**: Undo/redo edits and safely recover diagrams from destructive actions.
 
 **Independent Test**: Edit a saved diagram, undo and redo the edit, attempt to remove a connected
 component, cancel once, then confirm and verify all dependent relationships are removed together.
 
-### Tests for User Story 3
+### Tests for User Story 4
 
-- [X] T039 [P] [US3] Add Zustand history tests for edit, undo, redo, history reset on diagram switch, and preservation of unrelated content in `frontend/tests/diagram-history.test.ts`
-- [X] T040 [P] [US3] Add persistence/service tests for component dependency discovery, transactional component-plus-relationship deletion, diagram trash, and restore in `backend/tests/recovery.test.ts`
-- [X] T041 [P] [US3] Add Playwright coverage for undo/redo, connected-component confirmation, diagram trash, and restore feedback in `e2e/tests/recovery.spec.ts`
+- [X] T047 [P] [US4] Add Zustand history tests for edit, undo, redo, history reset on diagram switch, and preservation of unrelated content in `frontend/tests/diagram-history.test.ts`
+- [X] T048 [P] [US4] Add persistence/service tests for component dependency discovery, transactional component-plus-relationship deletion, diagram trash, and restore in `backend/tests/recovery.test.ts`
+- [X] T049 [P] [US4] Add Playwright coverage for undo/redo, connected-component confirmation, diagram trash, and restore feedback in `e2e/tests/recovery.spec.ts`
 
-### Implementation for User Story 3
+### Implementation for User Story 4
 
-- [X] T042 [US3] Implement bounded domain-command undo/redo history and active-diagram history scoping in `frontend/src/state/history.ts` and `frontend/src/state/diagram-store.ts`
-- [X] T043 [US3] Implement component dependency counting and transactional removal of a component with all dependent relationships in `backend/src/services/diagram-service.ts`
-- [X] T044 [US3] Implement diagram soft-delete, trash listing, and restore repository/service operations in `backend/src/persistence/diagram-repository.ts` and `backend/src/services/diagram-service.ts`
-- [X] T045 [US3] Add component removal, diagram trash, trash listing, and restore routes matching the API contract in `backend/src/api/recovery-routes.ts`
-- [X] T046 [US3] Add confirmation dialogs, dependency warnings, undo/redo controls, trash view, restore action, and accessible status announcements in `frontend/src/components/RecoveryControls.tsx` and `frontend/src/components/ConfirmDialog.tsx`
-- [X] T047 [US3] Add recovery endpoints and dependency error schemas to `specs/001-software-architecture-diagrams/contracts/openapi.yaml`
+- [X] T050 [US4] Implement bounded domain-command undo/redo history and active-diagram history scoping in `frontend/src/state/history.ts` and `frontend/src/state/diagram-store.ts`
+- [X] T051 [US4] Implement component dependency counting and transactional removal of a component with all dependent relationships in `backend/src/services/diagram-service.ts`
+- [X] T052 [US4] Implement diagram soft-delete, trash listing, and restore repository/service operations in `backend/src/persistence/diagram-repository.ts` and `backend/src/services/diagram-service.ts`
+- [X] T053 [US4] Add component removal, diagram trash, trash listing, and restore routes matching the API contract in `backend/src/api/recovery-routes.ts`
+- [X] T054 [US4] Add confirmation dialogs, dependency warnings, undo/redo controls, trash view, restore action, and accessible status announcements in `frontend/src/components/RecoveryControls.tsx` and `frontend/src/components/ConfirmDialog.tsx`
+- [X] T055 [US4] Add recovery endpoints and dependency error schemas to `specs/001-software-architecture-diagrams/contracts/openapi.yaml`
 
-**Checkpoint**: All three user stories are independently functional and preserve stable references without broken relationships.
+**Checkpoint**: All four user stories are independently functional and preserve stable references without broken relationships.
 
 ---
 
-## Phase 6: Polish & Cross-Cutting Concerns
+## Phase 7: Polish & Cross-Cutting Concerns
 
 **Purpose**: Verify quality gates, accessibility, performance feedback, and documented acceptance behavior.
 
-- [X] T048 [P] Add keyboard navigation, accessible labels, focus management, live-region feedback, and contrast checks for core workflows in `frontend/src/components/` and `frontend/tests/accessibility.test.tsx`
-- [X] T049 [P] Add large-diagram loading, autosave, and export timing coverage for the representative five-component/five-relationship scenario in `e2e/tests/performance.spec.ts`
-- [X] T050 [P] Add API/domain compatibility fixtures proving future ADR component links can resolve unchanged component UUIDs in `shared/tests/compatibility.test.ts` and `backend/tests/compatibility.test.ts`
-- [X] T051 Update README setup, database, test, and Mermaid preview instructions using `specs/001-software-architecture-diagrams/quickstart.md` in `README.md`
-- [X] T052 Run the complete unit, contract, integration, and browser suites and resolve failures in `package.json`, `shared/`, `backend/`, `frontend/`, and `e2e/`
-- [X] T053 Run every acceptance scenario from `specs/001-software-architecture-diagrams/quickstart.md` and record validation results in `specs/001-software-architecture-diagrams/quickstart.md`
+- [X] T056 [P] Add keyboard navigation, accessible labels, focus management, live-region feedback, and contrast checks for core workflows in `frontend/src/components/` and `frontend/tests/accessibility.test.tsx`
+- [X] T057 [P] Add large-diagram loading, autosave, and export timing coverage for the representative five-component/five-relationship scenario in `e2e/tests/performance.spec.ts`
+- [X] T058 [P] Add API/domain compatibility fixtures proving future ADR component links can resolve unchanged component UUIDs in `shared/tests/compatibility.test.ts` and `backend/tests/compatibility.test.ts`
+- [X] T059 Update README setup, database, test, and Mermaid preview instructions using `specs/001-software-architecture-diagrams/quickstart.md` in `README.md`
+- [X] T060 Run the complete unit, contract, integration, and browser suites and resolve failures in `package.json`, `shared/`, `backend/`, `frontend/`, and `e2e/`
+- [X] T061 Run every acceptance scenario from `specs/001-software-architecture-diagrams/quickstart.md` and record validation results in `specs/001-software-architecture-diagrams/quickstart.md`
+- [ ] T062 Run the saved-diagram list, guarded-load, accessibility, and full regression validation, then update results in `specs/001-software-architecture-diagrams/quickstart.md`
 
 ## Dependencies & Execution Order
 
@@ -147,25 +177,28 @@ component, cancel once, then confirm and verify all dependent relationships are 
 - Foundational (Phase 2) depends on Setup and blocks all story phases.
 - US1 and US2 are both P1; US2 depends on the validated domain document from Foundational and can
   use US1's API/editor integration for its end-to-end path.
-- US3 depends on US1's editor/store and persistence services, then adds recovery behavior.
+- US3 depends on US1's editor/store and persistence services, then adds saved-diagram browsing and guarded loading.
+- US4 depends on US1's editor/store and persistence services, then adds recovery behavior.
 - Polish depends on the desired user stories being complete.
 
 ### User Story Dependencies
 
 - US1: starts after Phase 2; no other story dependency; MVP. Database persistence tasks T019, T020, T023, T024, T025, and T031 must complete before the save-and-reopen acceptance test can pass.
 - US2: starts after Phase 2; its UI smoke test assumes the active diagram workflow from US1.
-- US3: starts after Phase 2, with implementation integration depending on US1's store and service files.
+- US3: starts after US1's editor/store and API client are available; T039-T041 define the saved-list and guarded-switch contracts before T042-T046 implement them.
+- US4: starts after US1; its existing recovery behavior remains independently testable and must remain compatible with the new active-diagram switch rules.
 
 ### Parallel Opportunities
 
 - T003–T006 can run in parallel after T001/T002 establish the package structure.
 - T007–T010, T012, T015–T017 can run in parallel where their files do not overlap.
-- T019–T022, T032–T034, and T039–T041 are parallel test-writing groups and must fail before implementation.
+- T019–T022, T032–T034, T039–T041, and T047–T049 are parallel test-writing groups and must fail before implementation.
 - T019 and T020 can run in parallel after T016/T014 establish the isolated database and migration strategy; T021 and T022 can proceed independently. All US1 tests must fail before the persistence/editor implementation is considered complete.
 - Adapter, repository, service, contract, and UI tasks marked `[P]` can run in parallel when their listed
   dependencies are complete; tasks modifying the same store/repository/service file remain sequential.
-- US1 and the initial US2 export adapter can be assigned in parallel after Foundational; US3 follows the
-  US1 integration checkpoint.
+- T039, T040, and T041 can proceed in parallel; T044 and T045 can also proceed in parallel after
+  the client and store transition contracts are defined. US4 follows the US1 integration checkpoint
+  and can be assigned separately from the saved-diagram UI when shared-store changes are coordinated.
 
 ## Implementation Strategy
 
@@ -178,19 +211,21 @@ component, cancel once, then confirm and verify all dependent relationships are 
 ### Incremental Delivery
 
 1. Add US2 Mermaid export and validate renderable output.
-2. Add US3 undo/redo, confirmation, trash, and restore.
-3. Complete Polish and cross-cutting acceptance checks.
+2. Add US3 saved-diagram browsing and guarded loading, then validate its independent workflow.
+3. Add US4 undo/redo, confirmation, trash, and restore.
+4. Complete Polish and cross-cutting acceptance checks.
 
 ### Traceability
 
 - US1 covers FR-001 through FR-006 and SC-001, SC-003, SC-004, and SC-006. T019/T020 explicitly verify that save-and-reopen reads the persisted document from PostgreSQL rather than only retaining an in-memory draft.
 - US2 covers FR-009 through FR-011 and SC-002, SC-005, and SC-006.
-- US3 covers FR-007, FR-008 and the recovery portions of SC-003 and SC-006.
-- Polish covers FR-012, FR-013, edge cases, accessibility, and constitution quality gates.
+- US3 covers FR-014 through FR-017 and SC-007 through SC-008; T039 through T046 verify summary distinction, safe load, unsaved-edit protection, failure preservation, and accessibility.
+- US4 covers FR-007, FR-008 and the recovery portions of SC-003 and SC-006.
+- Polish covers FR-012, FR-013, the saved-diagram acceptance scenarios, edge cases, accessibility, and constitution quality gates.
 
 ## Notes
 
-- Every task uses the required `- [ ] T###` checklist format.
+- Every task uses the required checkbox, `T###` identifier, optional `[P]` marker, story label where applicable, and exact file-path format.
 - `[P]` marks only tasks that can usefully proceed in parallel without sharing incomplete files.
 - Story labels appear on user-story tasks only.
 - The MVP scope is Setup + Foundational + US1.

@@ -35,24 +35,31 @@ invariants are defined in [data-model.md](./data-model.md).
    distinguishability, safe escaping, or an actionable entity-specific validation error.
 4. Remove a connected component, verify the dependent-relationship warning, cancel once, then
    confirm and verify the component and all dependent relationships disappear together.
-5. Make an edit, undo it, redo it, switch diagrams, and verify history is scoped to the active session.
-6. Move a diagram to trash, verify it leaves the active list, restore it, and verify its content and
+5. Save two diagrams with duplicate or distinct names, open the saved-diagram view, and verify each
+   entry is distinguishable by its name and last-saved information. Load each entry and verify the
+   selected document's components, relationships, labels, layout, and IDs appear in the editor.
+6. Make an edit, undo it, redo it, switch diagrams, and verify history is scoped to the active session.
+   With unsaved edits, attempt a switch and verify save, discard, and cancel each preserve the
+   appropriate outcome; a failed or cancelled load must leave the original active document intact.
+7. Move a diagram to trash, verify it leaves the active list, restore it, and verify its content and
    IDs are unchanged.
-7. Trigger export while autosave is pending and verify the current valid draft is exported or a clear
+8. Trigger export while autosave is pending and verify the current valid draft is exported or a clear
    reason is shown; invalid/empty diagrams must not download a misleading file.
-8. Simulate save failure and recovery; verify the draft remains visible, failed status is announced,
+9. Simulate save failure and recovery; verify the draft remains visible, failed status is announced,
    and retry reaches saved status.
-9. Complete create/edit/delete/export flows using keyboard navigation and verify labels, focus order,
+10. Complete create/edit/delete/load/export flows using keyboard navigation and verify labels, focus order,
    contrast, and success/error announcements.
 
 ## Validation results
 
-Validated on 2026-09-02 from branch `feature/001-phase-6`:
+Validated on 2026-09-02 from branch `feature/001-phase-6`; the saved-diagram viewing and guarded
+loading scenarios added on 2026-09-04 require validation after implementation:
 
 | Check | Result |
 |---|---|
 | Build | PASS — shared, backend, and frontend TypeScript/Vite builds completed. |
 | Unit, contract, persistence, adapter, export, accessibility, and compatibility tests | PASS — 32 tests. |
 | Browser workflows | PASS — 7 tests covering create, export, recovery, save failure/recovery, and five-component/five-relationship performance. |
-| Acceptance scenarios 1–9 | PASS — scenarios are covered by the browser workflows plus domain, export, recovery, compatibility, and accessibility checks. |
+| Acceptance scenarios 1–4 and 7–9 | PASS — covered by the recorded browser workflows plus domain, export, recovery, compatibility, and accessibility checks. |
+| Acceptance scenarios 5, 6, and 10 | PENDING — require saved-diagram list, guarded loading, and accessibility workflow coverage. |
 

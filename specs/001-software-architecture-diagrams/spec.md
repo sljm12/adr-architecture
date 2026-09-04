@@ -63,7 +63,33 @@ file contents, and render or preview it in a Mermaid-compatible viewer.
 
 ---
 
-### User Story 3 - Recover from editing errors (Priority: P2)
+### User Story 3 - View and load saved diagrams (Priority: P1)
+
+An architecture practitioner views the diagrams that have been saved and selects one to load it
+back into the editor, so work can continue without recreating the architecture.
+
+**Why this priority**: Saving only protects work when users can find and restore it into an
+editable diagram.
+
+**Independent Test**: Save two diagrams with distinct names and content, view the saved-diagram
+list, load each diagram in turn, and confirm that the correct editable content and layout appear.
+
+**Acceptance Scenarios**:
+
+1. **Given** one or more saved diagrams, **When** the user views saved diagrams, **Then** each
+   saved diagram is identifiable by its name and shows enough saved-state information for the user
+   to distinguish it from the others.
+2. **Given** a saved-diagram view, **When** the user selects a saved diagram to load, **Then** the
+   selected diagram becomes the active editable diagram with its saved components, relationships,
+   labels, and layout intact.
+3. **Given** a diagram cannot be loaded, **When** the user selects it, **Then** the user receives
+   a clear failure message and the currently open diagram remains unchanged.
+4. **Given** no diagrams have been saved, **When** the user views saved diagrams, **Then** the user
+   receives an understandable empty-state message and a clear way to create a diagram.
+
+---
+
+### User Story 4 - Recover from editing errors (Priority: P2)
 
 An architecture practitioner corrects accidental changes without losing the rest of the diagram.
 
@@ -87,6 +113,9 @@ while confirming that the user receives an appropriate warning before destructiv
   remain as a broken invisible reference.
 - Very large diagrams MUST provide clear feedback while loading, saving, or exporting, and MUST
   report failure without silently discarding edits.
+- Saved diagrams with the same name MUST remain distinguishable in the saved-diagram view.
+- If unsaved edits are present when a user loads a different diagram, the user MUST be warned and
+  given a clear choice that prevents accidental loss of those edits.
 - Mermaid-reserved words or characters that can be represented safely MUST be escaped automatically;
   content that cannot be represented safely MUST be rejected with an actionable message.
 - Exporting before the first automatic save completes MUST still produce the current diagram or
@@ -122,6 +151,17 @@ while confirming that the user receives an appropriate warning before destructiv
   saves, and clear success or failure feedback for reopen, delete, and export actions.
 - **FR-013**: The core diagram editing and export workflows MUST support keyboard navigation,
   readable labels, and accessible contrast.
+- **FR-014**: The system MUST provide a saved-diagram view that lists every non-deleted saved
+  diagram and presents its name and saved-state information sufficient to distinguish it from
+  other saved diagrams.
+- **FR-015**: The system MUST allow a user to select a saved diagram from the saved-diagram view
+  and load it as the active editable diagram, preserving its saved metadata, components,
+  relationships, labels, and layout.
+- **FR-016**: Before replacing an active diagram with a different saved diagram, the system MUST
+  protect unsaved edits by warning the user and requiring an explicit choice to save, discard, or
+  cancel the load action.
+- **FR-017**: The system MUST provide clear success or failure feedback for viewing and loading
+  saved diagrams; a failed load MUST NOT replace or alter the currently active diagram.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -133,6 +173,8 @@ while confirming that the user receives an appropriate warning before destructiv
   an optional label.
 - **Mermaid Export**: A generated file representing the supported diagram content in Mermaid
   syntax, with validation status and export metadata.
+- **Saved Diagram Summary**: The identifying information shown for a saved diagram so a user can
+  choose the correct diagram to load.
 
 ## Success Criteria *(mandatory)*
 
@@ -150,6 +192,10 @@ while confirming that the user receives an appropriate warning before destructiv
   correction rather than silently downloading incomplete content.
 - **SC-006**: Users can identify whether save and export actions succeeded or failed within 3
   seconds of the action completing.
+- **SC-007**: At least 95% of representative users can find and load a previously saved diagram
+  from the saved-diagram view on their first attempt, without external instructions.
+- **SC-008**: In 100% of tested failed-load and cancelled-load cases, the diagram that was active
+  before the action remains unchanged.
 
 ## Assumptions
 
@@ -162,3 +208,5 @@ while confirming that the user receives an appropriate warning before destructiv
 - Diagram data is retained according to the project’s existing storage and privacy policies.
 - Architecture decision record creation and tagging will be specified as a related feature, but
   this feature MUST preserve stable component identities so those references can be added later.
+- Saved diagrams are presented as a user-accessible collection; sorting, searching, and sharing
+  saved diagrams are out of scope unless separately specified.
