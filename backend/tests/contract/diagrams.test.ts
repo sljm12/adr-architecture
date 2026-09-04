@@ -19,6 +19,31 @@ describe('diagram API', () => it('creates and reopens a diagram', async () => {
   await app.close();
 }));
 
+describe('saved-document API', () => it('lists active summaries, excludes trashed documents, and loads by stable ID', async () => {
+  const app = buildApp(); await app.ready();
+  const first = await app.inject({ method: 'POST', url: '/diagrams', payload: { name: 'System' } });
+  const second = await app.inject({ method: 'POST', url: '/diagrams', payload: { name: 'System' } });
+  await app.inject({ method: 'DELETE', url: `/diagrams/${second.json().id}` });
+
+  const listed = await app.inject({ method: 'GET', url: '/diagrams' });
+  expect(listed.statusCode).toBe(200);
+  expect(listed.json()).toEqual([expect.objectContaining({ id: first.json().id, name: 'System', status: 'active', updatedAt: expect.any(String) })]);
+  expect(listed.json()[0]).not.toHaveProperty('components');
+
+  const loaded = await app.inject({ method: 'GET', url: `/diagrams/${first.json().id}` });
+  expect(loaded.statusCode).toBe(200);
+  expect(loaded.json()).toMatchObject({ id: first.json().id, name: 'System' });
+  await app.close();
+}));
+
+describe('saved-document API', () => it('returns an empty list when no active documents exist', async () => {
+  const app = buildApp(); await app.ready();
+  const listed = await app.inject({ method: 'GET', url: '/diagrams' });
+  expect(listed.statusCode).toBe(200);
+  expect(listed.json()).toEqual([]);
+  await app.close();
+}));
+
 describe.skipIf(!process.env.DATABASE_URL)('PostgreSQL diagram API', () => it('persists through POST/PUT and loads through GET from a fresh API instance', async () => {
   const first = createDatabase(process.env.DATABASE_URL!);
   const firstApp = buildApp(new PostgresDiagramRepository(first.db)); await firstApp.ready();

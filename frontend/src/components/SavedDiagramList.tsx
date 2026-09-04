@@ -1,0 +1,8 @@
+import { useEffect } from 'react';
+import { useDiagramStore } from '../state/diagram-store';
+const formatLastSaved = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+export function SavedDiagramList({ onSelect, onCreate }: { onSelect: (id: string) => void; onCreate: () => void }) {
+  const documents = useDiagramStore(state => state.savedDocuments); const status = useDiagramStore(state => state.savedDocumentsStatus); const error = useDiagramStore(state => state.savedDocumentsError); const refresh = useDiagramStore(state => state.refreshSavedDocuments);
+  useEffect(() => { void refresh(); }, [refresh]);
+  return <section className="saved-diagrams" aria-labelledby="saved-diagrams-heading"><div><span className="card-kicker">Saved work</span><h2 id="saved-diagrams-heading">Saved diagrams</h2></div>{status === 'loading' && <p role="status">Loading saved diagrams…</p>}{status === 'failed' && <p role="status">Could not load saved diagrams: {error}</p>}{status === 'loaded' && documents.length === 0 && <div><p>No saved diagrams yet.</p><button className="primary-pill" type="button" onClick={onCreate}>Create your first diagram</button></div>}{documents.length > 0 && <ul className="saved-diagrams-list">{documents.map(document => { const lastSaved = formatLastSaved(document.updatedAt); return <li key={document.id}><button className="saved-diagram-button" type="button" onClick={() => onSelect(document.id)} aria-label={`${document.name}, last saved ${lastSaved}`}><strong>{document.name}</strong><span>Last saved {lastSaved}</span></button></li>; })}</ul>}</section>;
+}

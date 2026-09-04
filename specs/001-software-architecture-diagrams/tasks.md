@@ -51,18 +51,18 @@ IDs. Repeat with an empty list, a failed load, and unsaved local edits.
 
 ### Tests for User Story 3
 
-- [ ] T005 [P] [US3] Add API contract coverage for listing active saved-document summaries, excluding trashed documents, returning an empty array, and loading a selected document by UUID in `backend/tests/contract/diagrams.test.ts`.
-- [ ] T006 [P] [US3] Add client and store tests for typed saved-document summaries, successful replacement, failed-load preservation, and history reset only after a successful load in `frontend/tests/saved-diagram-store.test.ts`.
-- [ ] T007 [P] [US3] Add component tests for saved-document names and last-saved times, duplicate-name distinction, empty/loading/error feedback, and the save/discard/cancel switch choices in `frontend/tests/saved-diagram-list.test.tsx`.
-- [ ] T008 [P] [US3] Add browser workflows for empty saved-document state, selecting and loading each of two saved documents, failed loading, and guarded switching with unsaved edits in `e2e/tests/saved-diagrams.spec.ts`.
+- [X] T005 [P] [US3] Add API contract coverage for listing active saved-document summaries, excluding trashed documents, returning an empty array, and loading a selected document by UUID in `backend/tests/contract/diagrams.test.ts`.
+- [X] T006 [P] [US3] Add client and store tests for typed saved-document summaries, successful replacement, failed-load preservation, and history reset only after a successful load in `frontend/tests/saved-diagram-store.test.ts`.
+- [X] T007 [P] [US3] Add component tests for saved-document names and last-saved times, duplicate-name distinction, empty/loading/error feedback, and the save/discard/cancel switch choices in `frontend/tests/saved-diagram-list.test.tsx`.
+- [X] T008 [P] [US3] Add browser workflows for empty saved-document state, selecting and loading each of two saved documents, failed loading, and guarded switching with unsaved edits in `e2e/tests/saved-diagrams.spec.ts`.
 
 ### Implementation for User Story 3
 
-- [ ] T009 [US3] Add a shared `DiagramSummary` contract type and make saved-document list and selected-document fetch results typed in `shared/src/domain/types.ts`, `shared/src/validation/schemas.ts`, and `frontend/src/api/diagram-client.ts`.
-- [ ] T010 [US3] Add saved-document list, selected-document load, load-error, and successful-history-replacement actions to the diagram state store in `frontend/src/state/diagram-store.ts`.
-- [ ] T011 [US3] Create a keyboard-accessible saved-document list that displays name and last-saved time, handles empty/loading/error states, and invokes selection by stable ID in `frontend/src/components/SavedDiagramList.tsx`.
-- [ ] T012 [US3] Create an accessible save/discard/cancel dialog for switching away from an unsaved active document in `frontend/src/components/DiagramSwitchDialog.tsx`.
-- [ ] T013 [US3] Integrate saved-document browsing, guarded selection, success/failure announcements, and the first-document creation action into `frontend/src/components/DiagramWorkspace.tsx`.
+- [X] T009 [US3] Add a shared `DiagramSummary` contract type and make saved-document list and selected-document fetch results typed in `shared/src/domain/types.ts`, `shared/src/validation/schemas.ts`, and `frontend/src/api/diagram-client.ts`.
+- [X] T010 [US3] Add saved-document list, selected-document load, load-error, and successful-history-replacement actions to the diagram state store in `frontend/src/state/diagram-store.ts`.
+- [X] T011 [US3] Create a keyboard-accessible saved-document list that displays name and last-saved time, handles empty/loading/error states, and invokes selection by stable ID in `frontend/src/components/SavedDiagramList.tsx`.
+- [X] T012 [US3] Create an accessible save/discard/cancel dialog for switching away from an unsaved active document in `frontend/src/components/DiagramSwitchDialog.tsx`.
+- [X] T013 [US3] Integrate saved-document browsing, guarded selection, success/failure announcements, and the first-document creation action into `frontend/src/components/DiagramWorkspace.tsx`.
 - [ ] T014 [US3] Add responsive, readable, and keyboard-focus-visible saved-document list and switch-dialog styles in `frontend/src/styles.css`.
 
 **Checkpoint**: The user can find and load persisted documents without losing an unsaved draft;
@@ -74,8 +74,8 @@ empty and failure paths provide clear, accessible feedback.
 
 **Purpose**: Complete end-to-end quality gates for persistence and saved-document workflows.
 
-- [ ] T015 [P] Extend the core accessibility contract for saved-document navigation, status announcements, and the guarded-switch dialog in `frontend/tests/accessibility.test.tsx`.
-- [ ] T016 [P] Add saved-document listing and load-contract assertions to the OpenAPI boundary test in `backend/tests/contract/openapi.test.ts`.
+- [X] T015 [P] Extend the core accessibility contract for saved-document navigation, status announcements, and the guarded-switch dialog in `frontend/tests/accessibility.test.tsx`.
+- [X] T016 [P] Add saved-document listing and load-contract assertions to the OpenAPI boundary test in `backend/tests/contract/openapi.test.ts`.
 - [ ] T017 Run frontend unit tests, configured-database contract tests, browser tests, and every quickstart scenario; record outcomes in `specs/001-software-architecture-diagrams/quickstart.md`.
 
 ---

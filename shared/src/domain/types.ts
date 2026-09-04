@@ -6,3 +6,4 @@ export interface Component { id: UUID; diagramId: UUID; name: string; descriptio
 export interface Relationship { id: UUID; diagramId: UUID; sourceComponentId: UUID; targetComponentId: UUID; direction: RelationshipDirection; label: string | null; createdAt: string; updatedAt: string }
 export interface Diagram { id: UUID; name: string; status: DiagramStatus; createdAt: string; updatedAt: string; trashedAt: string | null }
 export interface DiagramDocument extends Diagram { components: Component[]; relationships: Relationship[] }
+export interface DiagramSummary { id: UUID; name: string; status: DiagramStatus; updatedAt: string }

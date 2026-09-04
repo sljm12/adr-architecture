@@ -5,6 +5,8 @@ const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'u
 const workspace = source('../src/components/DiagramWorkspace.tsx');
 const toolbar = source('../src/components/DiagramToolbar.tsx');
 const dialog = source('../src/components/ConfirmDialog.tsx');
+const switchDialog = source('../src/components/DiagramSwitchDialog.tsx');
+const savedList = source('../src/components/SavedDiagramList.tsx');
 const styles = source('../src/styles.css');
 
 function contrast(foreground: string, background: string): number {
@@ -33,6 +35,14 @@ describe('core workflow accessibility contract', () => {
     expect(dialog).toContain("event.key === 'Escape'");
     expect(dialog).toContain('previouslyFocused?.focus()');
     expect(dialog).toContain('aria-describedby={messageId}');
+  });
+
+  it('keeps saved-document navigation and guarded switching accessible', () => {
+    expect(savedList).toContain('aria-labelledby');
+    expect(savedList).toContain('role="status"');
+    expect(switchDialog).toContain('aria-modal="true"');
+    expect(switchDialog).toContain("event.key === 'Escape'");
+    expect(switchDialog).toContain('previouslyFocused?.focus()');
   });
 
   it('uses WCAG AA contrast for the primary controls and muted text', () => {
