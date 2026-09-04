@@ -32,6 +32,7 @@
 ## Notes
 
 All checklist items pass. The saved-diagram flow explicitly covers viewing saved work, loading a
-selected diagram, empty and failure states, and protection for unsaved edits. Mermaid is retained
-as the explicitly requested export format; no implementation language, framework, or API is
-prescribed.
+selected diagram, empty and failure states, protection for unsaved edits, and durable database
+persistence after an explicit save. Mermaid is retained as the explicitly requested export format;
+no implementation language, framework, or API is prescribed. Database persistence is an explicit
+project and feature constraint rather than a prescribed implementation detail.

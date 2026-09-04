@@ -6,9 +6,9 @@
 [data-model.md](./data-model.md), [quickstart.md](./quickstart.md), and
 [contracts/openapi.yaml](./contracts/openapi.yaml)
 
-**Scope**: This task list supersedes the previous autosave-oriented work items. It contains only
-the changes needed to move the existing editor to explicit user-initiated saving; already delivered
-diagram editing, persistence, export, recovery, and ADR-compatibility work is not recreated here.
+**Scope**: This task list supersedes the previous autosave-oriented work items. It covers explicit
+saving plus the required guarantee that successful production saves are committed to the database;
+already delivered diagram editing, export, recovery, and ADR-compatibility work is not recreated here.
 
 **Tests**: Automated coverage is required by the feature specification and constitution. Write the
 story tests first and confirm they fail before implementing the corresponding behavior.
@@ -25,9 +25,9 @@ commands remain the migration baseline. No project or database setup changes are
 
 ## Phase 2: Foundational
 
-**Purpose**: No shared schema, persistence, migration, or API-route changes are required: the
-existing complete-document `PUT` operation already represents an explicit save when called from a
-user action. User-story work may begin immediately.
+**Purpose**: The existing complete-document `PUT` operation supports explicit saves, but runtime
+database configuration and a mandatory fresh-API persistence test must be completed before the
+database-backed save/reopen contract is considered satisfied.
 
 ---
 
@@ -78,15 +78,39 @@ an edited draft.
 
 ---
 
-## Phase 5: Polish & Cross-Cutting Concerns
+## Phase 5: User Story 1 - Persist Saved Diagrams in the Database (Priority: P1)
+
+**Goal**: A successful explicit save in the running application is committed to the database, and a
+new API instance can retrieve the complete saved document.
+
+**Independent Test**: Start the API with a configured database, create and explicitly save a
+diagram with components and relationships, start a fresh API instance against the same database,
+and verify that loading by diagram ID returns every saved field.
+
+### Tests for User Story 1
+
+- [ ] T010 [P] [US1] Make the PostgreSQL save-and-reopen contract test a required configured-database test, including a fresh API instance and complete document assertions, in `backend/tests/contract/diagrams.test.ts`.
+- [ ] T011 [P] [US1] Add configuration and server-startup tests proving production startup rejects a missing database URL instead of selecting in-memory storage in `backend/tests/config.test.ts`.
+
+### Implementation for User Story 1
+
+- [ ] T012 [US1] Require a database URL for the running API and always construct the PostgreSQL diagram repository in `backend/src/config.ts` and `backend/src/server.ts`.
+- [ ] T013 [US1] Update database-backed startup, migration, and save/reopen validation instructions in `specs/001-software-architecture-diagrams/quickstart.md`.
+
+**Checkpoint**: The running API cannot report a save as successful without database persistence,
+and a fresh API instance retrieves the complete saved document.
+
+---
+
+## Phase 6: Polish & Cross-Cutting Concerns
 
 **Purpose**: Remove remaining user-facing autosave language and verify the explicit-save migration
 at representative scale and across the documented workflow.
 
-- [ ] T010 [P] Replace autosave performance and recovery expectations with explicit-save timing, failed-save retry, and no-background-request assertions in `e2e/tests/performance.spec.ts`.
-- [ ] T011 [P] Update the explicit-save description and user instructions in `README.md` and the validation-result notes in `specs/001-software-architecture-diagrams/quickstart.md`.
-- [ ] T012 [P] Extend the accessibility contract to require the Save control and live save-state feedback in `frontend/tests/accessibility.test.tsx`.
-- [ ] T013 Run the frontend unit tests, backend contract tests, browser tests, and every quickstart scenario; record the results in `specs/001-software-architecture-diagrams/quickstart.md`.
+- [ ] T014 [P] Replace autosave performance and recovery expectations with explicit-save timing, failed-save retry, and no-background-request assertions in `e2e/tests/performance.spec.ts`.
+- [ ] T015 [P] Update the explicit-save description and user instructions in `README.md` and the validation-result notes in `specs/001-software-architecture-diagrams/quickstart.md`.
+- [ ] T016 [P] Extend the accessibility contract to require the Save control and live save-state feedback in `frontend/tests/accessibility.test.tsx`.
+- [ ] T017 Run the frontend unit tests, configured-database contract tests, browser tests, and every quickstart scenario; record the results in `specs/001-software-architecture-diagrams/quickstart.md`.
 
 ---
 
@@ -99,7 +123,9 @@ at representative scale and across the documented workflow.
 - **US1 (Phase 3)**: Starts immediately. T001–T003 define the expected behavior before T004–T006.
 - **US2 (Phase 4)**: Starts after the explicit-save status semantics in T004 are available. T007–T008
   define export behavior before T009.
-- **Polish (Phase 5)**: Starts after US1 and US2 implementation tasks are complete; T013 is last.
+- **Database persistence (Phase 5)**: Starts after the existing explicit-save work and blocks the
+  database-backed save/reopen completion gate.
+- **Polish (Phase 6)**: Starts after the desired story work is complete; T017 is last.
 
 ### User Story Dependencies
 
@@ -107,12 +133,15 @@ at representative scale and across the documented workflow.
   status consumed by export.
 - **US2**: Depends on US1's `unsaved`, `saving`, `saved`, and `failed` state semantics, but does
   not modify diagram persistence or editor state.
+- **US1 database persistence**: Depends on the existing explicit Save request and establishes the
+  production database configuration and fresh-instance retrieval proof required by FR-006 and SC-003.
 
 ### Parallel Opportunities
 
 - T001–T003 can run in parallel because they cover separate test files.
 - T007 and T008 can run in parallel after the US1 status contract is agreed.
-- T010–T012 can run in parallel after the story checkpoints because they change separate files.
+- T010 and T011 can run in parallel before T012; T013 follows T012.
+- T014–T016 can run in parallel after the story checkpoints because they change separate files.
 
 ---
 
@@ -139,7 +168,8 @@ Task: "Replace the autosave browser workflow in e2e/tests/create-edit-reopen.spe
 
 1. Deliver explicit saving and reliable state feedback (US1).
 2. Deliver save-first export messaging without any implicit persistence (US2).
-3. Complete representative performance, accessibility, documentation, and full-regression checks.
+3. Require database-backed production startup and verify save/reopen across a fresh API instance.
+4. Complete representative performance, accessibility, documentation, and full-regression checks.
 
 ## Notes
 
@@ -147,5 +177,7 @@ Task: "Replace the autosave browser workflow in e2e/tests/create-edit-reopen.spe
   user-story label where applicable, and exact file path.
 - The REST `PUT /diagrams/{diagramId}` contract remains intact; its invocation moves from a debounce
   callback to the explicit Save control.
+- Production runtime storage must use PostgreSQL; the in-memory repository remains available only
+  when directly injected for isolated tests.
 - Saved-diagram browsing and guarded loading remain separate planned work. When implemented, their
   Save option must call the same explicit Save action and must not restore autosave.

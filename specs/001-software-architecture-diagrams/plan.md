@@ -10,8 +10,9 @@ Deliver a browser-based, single-user architecture diagram editor that persists s
 diagrams through a Fastify REST API backed by PostgreSQL. The frontend uses React Flow only as a
 visual adapter over a domain model managed with Zustand and explicit undo/redo history. Validated
 domain artifacts are exported through a Mermaid adapter that rejects unsupported content with
-actionable errors. Users explicitly save their changes, can browse active saved diagrams, select one
-to load, and safely switch without losing unsaved edits.
+actionable errors. Each successful explicit save commits the complete validated document to the
+database; a later load retrieves that stored document. Users can browse active saved diagrams, select
+one to load, and safely switch without losing unsaved edits.
 
 ## Technical Context
 
@@ -23,9 +24,9 @@ PostgreSQL, OpenAPI, Vitest, Playwright
 **Storage**: PostgreSQL through Drizzle; diagrams, components, relationships, and layout metadata
 are persisted as structured records with UUIDs and timestamps
 
-**Testing**: Vitest for domain, Zod validation, persistence, loading and Mermaid export; Playwright
-for create/edit/explicit-save/list/load/delete/undo/redo/export user journeys; API contract checks
-against OpenAPI
+**Testing**: Vitest for domain, Zod validation, persistence, database save/load across a fresh API
+instance, and Mermaid export; Playwright for create/edit/explicit-save/list/load/delete/undo/redo/
+export user journeys; API contract checks against OpenAPI
 
 **Target Platform**: Modern desktop browser for the React frontend; containerized Node.js API;
 managed PostgreSQL
@@ -36,11 +37,12 @@ managed PostgreSQL
 save/reopen/export feedback visible within 3 seconds for representative diagrams; support at
 least the five-component/five-relationship success-criteria scenario without special handling
 
-**Constraints**: Single active diagram and single user in the first release; backend persistence
-is required; the active-diagram switch must offer save, discard, or cancel when unsaved edits are
-present; no authentication, permissions, collaboration, offline storage, Mermaid import, saved-
-diagram search/sorting/sharing, or advanced revision history unless separately specified; invalid
-or unsupported content must never be silently discarded
+**Constraints**: Single active diagram and single user in the first release; each successful
+explicit save MUST persist the complete valid diagram to the database before reporting success; the
+active-diagram switch must offer save, discard, or cancel when unsaved edits are present; no
+authentication, permissions, collaboration, offline storage, Mermaid import, saved-diagram search/
+sorting/sharing, or advanced revision history unless separately specified; invalid or unsupported
+content must never be silently discarded
 
 **Scale/Scope**: Initial release covers diagram CRUD, an active saved-diagram list, guarded diagram
 loading, component and relationship editing, layout persistence, session undo/redo, Mermaid export,
@@ -68,11 +70,12 @@ validation/error feedback, and accessible core workflows
 
 ### Post-design re-check: saved-diagram workflow
 
-**PASS**: The saved-diagram summary uses the diagram's stable UUID rather than a name; loading
-retrieves the complete saved document through the existing contract; save, discard, and cancel
-protect in-progress work; failed or cancelled loads preserve the active artifact; and planned
-contract, state, and end-to-end coverage will verify these behaviors. The design adds no new
-permissions, collaboration, or persistence format.
+**PASS**: The saved-diagram summary uses the diagram's stable UUID rather than a name; each
+successful save commits the complete document transactionally to the database, and loading retrieves
+that stored document through the existing contract; save, discard, and cancel protect in-progress
+work; failed or cancelled loads preserve the active artifact; and planned contract, persistence,
+state, and end-to-end coverage will verify these behaviors. The design adds no new permissions,
+collaboration, or persistence format.
 
 ## Project Structure
 

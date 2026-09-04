@@ -27,8 +27,8 @@ invariants are defined in [data-model.md](./data-model.md).
 ## Acceptance scenarios
 
 1. Create a diagram, add five uniquely identified components and five relationships, rename and
-   reposition one component, explicitly save, reopen, and verify all names, endpoints,
-   labels, directions, positions, and IDs are preserved.
+   reposition one component, explicitly save, restart the database-backed API, reopen the diagram,
+   and verify all names, endpoints, labels, directions, positions, and IDs are preserved.
 2. Create both directed and undirected relationships and verify the Mermaid output preserves both
    forms and renders in a compatible previewer.
 3. Enter punctuation, non-Latin text, duplicate names, and Mermaid-reserved characters; verify

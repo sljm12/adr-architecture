@@ -36,7 +36,7 @@ components and two relationships, save it, reopen it, and confirm the same struc
    **Then** each component has a visible name and can be repositioned without changing its identity.
 2. **Given** two components, **When** the user creates a relationship between them,
    **Then** the relationship visibly connects the correct endpoints and can have a label.
-3. **Given** a saved diagram, **When** the user reopens it,
+3. **Given** a saved diagram, **When** the user reopens it from the database,
    **Then** the components, relationships, labels, and layout are preserved.
 
 ---
@@ -120,6 +120,8 @@ while confirming that the user receives an appropriate warning before destructiv
   content that cannot be represented safely MUST be rejected with an actionable message.
 - Exporting before the first explicit save MUST still produce the current diagram or clearly
   explain why it cannot be exported.
+- If a database save fails, the current editable draft MUST remain available and the user MUST be
+  told that the diagram was not saved.
 
 ## Requirements *(mandatory)*
 
@@ -133,9 +135,9 @@ while confirming that the user receives an appropriate warning before destructiv
 - **FR-004**: The system MUST allow a user to create, label, edit, and remove relationships between
   components, with direction selected independently for each relationship as directed or undirected.
 - **FR-005**: The system MUST prevent relationships from referencing missing components.
-- **FR-006**: The system MUST allow the user to explicitly save diagram changes and preserve
-  component positions, names, relationship endpoints, labels, and diagram metadata when a diagram
-  is reopened.
+- **FR-006**: The system MUST allow the user to explicitly save the complete diagram to the
+  database and preserve component positions, names, relationship endpoints, labels, and diagram
+  metadata when the diagram is later reopened from the database.
 - **FR-007**: The system MUST provide undo and redo for diagram edits within the active editing
   session.
 - **FR-008**: The system MUST warn the user that dependent relationships will be removed before
@@ -185,8 +187,8 @@ while confirming that the user receives an appropriate warning before destructiv
   five relationships in under 5 minutes without external instructions.
 - **SC-002**: At least 95% of valid diagrams exported during acceptance testing produce Mermaid
   files that render without syntax errors in a compatible viewer.
-- **SC-003**: At least 95% of tested save-and-reopen cycles preserve all component identities,
-  relationship endpoints, labels, and positions.
+- **SC-003**: At least 95% of tested database save-and-reopen cycles preserve all component
+  identities, relationship endpoints, labels, and positions.
 - **SC-004**: At least 90% of representative users complete the create, save, reopen, and export
   workflow on their first attempt.
 - **SC-005**: When an export fails validation, 100% of tested failures identify an actionable

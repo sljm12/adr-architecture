@@ -22,9 +22,10 @@ backend from malformed clients or corrupted serialized artifacts.
 ## Decision: Explicitly save the complete document through an idempotent replacement endpoint
 
 **Rationale:** A single-document save payload keeps component, relationship, and layout updates
-consistent while allowing the user to decide when changes become persisted. The latest local draft
-remains visible until the user saves; status reports unsaved, saving, saved, or failed. The server
-preserves IDs and updates timestamps transactionally.
+consistent while allowing the user to decide when changes become persisted. A successful save
+transactionally commits the full validated document to the database before reporting saved. The
+latest local draft remains visible until the user saves; status reports unsaved, saving, saved, or
+failed. The server preserves IDs and updates timestamps transactionally.
 
 **Alternatives considered:** Automatic saving was removed from scope because the clarified
 requirement calls for explicit user-initiated saves. Independent row-level requests were rejected

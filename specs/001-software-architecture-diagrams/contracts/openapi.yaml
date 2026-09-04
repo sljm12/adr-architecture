@@ -26,10 +26,10 @@ paths:
       parameters: [{name: diagramId, in: path, required: true, schema: {type: string, format: uuid}}]
       responses: {'200': {description: Diagram document, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramDocument'}}}}, '404': {description: Not found}}
     put:
-      summary: Validate and explicitly save the complete diagram document
+      summary: Validate and persist the complete diagram document after an explicit save
       parameters: [{name: diagramId, in: path, required: true, schema: {type: string, format: uuid}}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramWrite'}}}}
-      responses: {'200': {description: Saved document, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramDocument'}}}}, '422': {$ref: '#/components/responses/ValidationError'}}
+      responses: {'200': {description: Complete document committed to persistent storage, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramDocument'}}}}, '422': {$ref: '#/components/responses/ValidationError'}}
     delete:
       summary: Move a diagram to trash
       parameters: [{name: diagramId, in: path, required: true, schema: {type: string, format: uuid}}]
