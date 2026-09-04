@@ -1,6 +1,6 @@
 # Implementation Plan: Software Architecture Diagrams
 
-**Branch**: `001-software-architecture-diagrams` | **Date**: 2026-09-04 | **Spec**: [spec.md](./spec.md)
+**Branch**: `001-software-architecture-diagrams` | **Date**: 2026-09-05 | **Spec**: [spec.md](./spec.md)
 
 **Input**: Feature specification from `/specs/001-software-architecture-diagrams/spec.md`
 
@@ -11,8 +11,10 @@ diagrams through a Fastify REST API backed by PostgreSQL. The frontend uses Reac
 visual adapter over a domain model managed with Zustand and explicit undo/redo history. Validated
 domain artifacts are exported through a Mermaid adapter that rejects unsupported content with
 actionable errors. Each successful explicit save commits the complete validated document to the
-database; a later load retrieves that stored document. Users can browse active saved diagrams, select
-one to load, and safely switch without losing unsaved edits.
+database; a later load retrieves that stored document. Users can browse all non-deleted saved
+documents, distinguish them by name and last-saved time, select one to load, and safely switch
+without losing unsaved edits. An empty saved-document collection provides a clear route to create
+the first diagram.
 
 ## Technical Context
 
@@ -25,8 +27,8 @@ PostgreSQL, OpenAPI, Vitest, Playwright
 are persisted as structured records with UUIDs and timestamps
 
 **Testing**: Vitest for domain, Zod validation, persistence, database save/load across a fresh API
-instance, and Mermaid export; Playwright for create/edit/explicit-save/list/load/delete/undo/redo/
-export user journeys; API contract checks against OpenAPI
+instance, and Mermaid export; Playwright for create/edit/explicit-save/saved-document-list/load/
+empty-state/delete/undo/redo/export user journeys; API contract checks against OpenAPI
 
 **Target Platform**: Modern desktop browser for the React frontend; containerized Node.js API;
 managed PostgreSQL
@@ -44,8 +46,9 @@ authentication, permissions, collaboration, offline storage, Mermaid import, sav
 sorting/sharing, or advanced revision history unless separately specified; invalid or unsupported
 content must never be silently discarded
 
-**Scale/Scope**: Initial release covers diagram CRUD, an active saved-diagram list, guarded diagram
-loading, component and relationship editing, layout persistence, session undo/redo, Mermaid export,
+**Scale/Scope**: Initial release covers diagram CRUD, a saved-document view for every non-deleted
+diagram (with name and last-saved time), guarded diagram loading, an empty saved-document state,
+component and relationship editing, layout persistence, session undo/redo, Mermaid export,
 validation/error feedback, and accessible core workflows
 
 ## Constitution Check
@@ -70,12 +73,13 @@ validation/error feedback, and accessible core workflows
 
 ### Post-design re-check: saved-diagram workflow
 
-**PASS**: The saved-diagram summary uses the diagram's stable UUID rather than a name; each
-successful save commits the complete document transactionally to the database, and loading retrieves
-that stored document through the existing contract; save, discard, and cancel protect in-progress
-work; failed or cancelled loads preserve the active artifact; and planned contract, persistence,
-state, and end-to-end coverage will verify these behaviors. The design adds no new permissions,
-collaboration, or persistence format.
+**PASS**: The saved-document summary uses the diagram's stable UUID rather than a name and shows
+its name and last-saved time; it lists every non-deleted document and has a usable empty state.
+Each successful save commits the complete document transactionally to persistent storage, and
+loading retrieves that stored document through the existing contract; save, discard, and cancel
+protect in-progress work; failed or cancelled loads preserve the active artifact; and planned
+contract, persistence, state, accessibility, and end-to-end coverage will verify these behaviors.
+The design adds no new permissions, collaboration, or persistence format.
 
 ## Project Structure
 

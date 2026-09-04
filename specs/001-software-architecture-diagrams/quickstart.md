@@ -35,9 +35,11 @@ invariants are defined in [data-model.md](./data-model.md).
    distinguishability, safe escaping, or an actionable entity-specific validation error.
 4. Remove a connected component, verify the dependent-relationship warning, cancel once, then
    confirm and verify the component and all dependent relationships disappear together.
-5. Save two diagrams with duplicate or distinct names, open the saved-diagram view, and verify each
-   entry is distinguishable by its name and last-saved information. Load each entry and verify the
-   selected document's components, relationships, labels, layout, and IDs appear in the editor.
+5. With no non-deleted saved diagrams, open the saved-document view and verify its understandable
+   empty state includes a way to create a diagram. Then save two diagrams with duplicate or distinct
+   names, open the view, and verify each entry is distinguishable by its name and last-saved
+   information. Load each entry and verify the selected document's components, relationships,
+   labels, layout, and IDs appear in the editor.
 6. Make an edit, undo it, redo it, switch diagrams, and verify history is scoped to the active session.
    With unsaved edits, attempt a switch and verify save, discard, and cancel each preserve the
    appropriate outcome; a failed or cancelled load must leave the original active document intact.

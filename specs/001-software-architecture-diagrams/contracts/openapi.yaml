@@ -6,7 +6,7 @@ paths:
   /diagrams:
     get:
       summary: List active saved-diagram summaries
-      description: Returns the active diagrams for the saved-diagram view. Each summary includes a stable ID, name, lifecycle state, and last-saved time; names are not unique selection keys.
+      description: Returns every non-deleted saved diagram for the saved-document view. Each summary includes a stable ID, name, lifecycle state, and last-saved time; names are not unique selection keys. An empty array indicates that no non-deleted saved documents exist.
       responses:
         '200': {description: Active diagrams, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramSummaryList'}}}}
     post:

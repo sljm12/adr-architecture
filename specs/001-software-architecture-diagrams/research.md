@@ -83,11 +83,12 @@ out of scope for the first release.
 
 ## Decision: Browse saved diagrams through active summaries and load by stable ID
 
-**Rationale:** The existing active-diagram collection can provide a lightweight saved-diagram view
-without duplicating full documents. Each summary includes the immutable diagram ID, name, lifecycle
-state, and most-recent save time, allowing duplicate names to remain distinguishable. Selecting a
-summary retrieves the complete document by ID, so the editor loads the exact saved artifact and its
-component identities, relationships, labels, and layout.
+**Rationale:** The active-diagram collection can provide a lightweight saved-document view without
+duplicating full documents. Each summary includes the immutable diagram ID, name, lifecycle state,
+and most-recent save time, allowing duplicate names to remain distinguishable. An empty summary
+collection is a valid result and prompts the user to create their first diagram. Selecting a summary
+retrieves the complete document by ID, so the editor loads the exact saved artifact and its component
+identities, relationships, labels, and layout.
 
 **Alternatives considered:** Loading by diagram name was rejected because names may be duplicated
 or renamed. Returning every full document in the saved-diagram view was rejected because it makes

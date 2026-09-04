@@ -40,9 +40,11 @@ are never persisted as the source of truth.
 ## Saved Diagram Summary
 
 The saved-diagram view uses a summary derived from each active `Diagram`, rather than a separate
-persisted entity. It contains `id`, `name`, `status`, and `updatedAt`. The UI uses `id` as the
-selection value, displays the name and last-saved time, and never treats the name as a unique key.
-Full components, relationships, and layout are obtained only when the selected `id` is loaded.
+persisted entity. It contains `id`, `name`, `status`, and `updatedAt`, where `updatedAt` represents
+the most recent successful persistence of the active document. The UI uses `id` as the selection
+value, displays the name and last-saved time, and never treats the name as a unique key. An empty
+summary collection represents that no non-deleted saved documents exist. Full components,
+relationships, and layout are obtained only when the selected `id` is loaded.
 
 ## Invariants and lifecycle rules
 
