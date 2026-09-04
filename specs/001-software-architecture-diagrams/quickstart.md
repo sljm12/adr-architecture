@@ -27,7 +27,7 @@ invariants are defined in [data-model.md](./data-model.md).
 ## Acceptance scenarios
 
 1. Create a diagram, add five uniquely identified components and five relationships, rename and
-   reposition one component, wait for the saved status, reopen, and verify all names, endpoints,
+   reposition one component, explicitly save, reopen, and verify all names, endpoints,
    labels, directions, positions, and IDs are preserved.
 2. Create both directed and undirected relationships and verify the Mermaid output preserves both
    forms and renders in a compatible previewer.
@@ -43,7 +43,7 @@ invariants are defined in [data-model.md](./data-model.md).
    appropriate outcome; a failed or cancelled load must leave the original active document intact.
 7. Move a diagram to trash, verify it leaves the active list, restore it, and verify its content and
    IDs are unchanged.
-8. Trigger export while autosave is pending and verify the current valid draft is exported or a clear
+8. Trigger export with unsaved changes and verify the current valid draft is exported or a clear
    reason is shown; invalid/empty diagrams must not download a misleading file.
 9. Simulate save failure and recovery; verify the draft remains visible, failed status is announced,
    and retry reaches saved status.

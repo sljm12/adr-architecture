@@ -51,7 +51,8 @@ Full components, relationships, and layout are obtained only when the selected `
 4. Component deletion requires confirmation in the UI and transactionally deletes all dependent relationships.
 5. Diagram deletion moves the diagram to `trashed`; restore returns it to `active` without changing artifact IDs.
 6. Trashed diagrams are excluded from active editing and normal lists but remain recoverable.
-7. Autosave failure leaves the local draft intact and sets an observable failed/unsaved state.
+7. An explicit save failure leaves the local draft intact and sets an observable failed/unsaved
+   state.
 8. Mermaid export accepts only a fully validated document and produces no file when validation fails.
 9. A failed or cancelled request to load another diagram leaves the active document and local
    history unchanged.

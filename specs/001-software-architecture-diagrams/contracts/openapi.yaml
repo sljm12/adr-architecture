@@ -26,7 +26,7 @@ paths:
       parameters: [{name: diagramId, in: path, required: true, schema: {type: string, format: uuid}}]
       responses: {'200': {description: Diagram document, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramDocument'}}}}, '404': {description: Not found}}
     put:
-      summary: Validate and autosave the complete diagram document
+      summary: Validate and explicitly save the complete diagram document
       parameters: [{name: diagramId, in: path, required: true, schema: {type: string, format: uuid}}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramWrite'}}}}
       responses: {'200': {description: Saved document, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramDocument'}}}}, '422': {$ref: '#/components/responses/ValidationError'}}

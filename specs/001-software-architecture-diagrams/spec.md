@@ -12,7 +12,7 @@
 
 ### Session 2026-08-30
 
-- Q: Should diagram changes be saved only when the user explicitly chooses “Save,” or should the system save changes automatically? → A: Automatic saving with clear save status.
+- Q: Should diagram changes be saved only when the user explicitly chooses “Save,” or should the system save changes automatically? → A: Users explicitly save changes; the interface clearly indicates whether changes are saved or unsaved.
 - Q: After a user confirms deleting a diagram, should the diagram be permanently removed immediately or recoverable for a period of time? → A: Move the diagram to trash so it can be restored later.
 - Q: Should each relationship let the user choose whether it is directed or undirected? → A: Let each relationship be directed or undirected.
 - Q: When a user confirms removal of a component that has relationships, should those dependent relationships be removed automatically? → A: After confirmation, remove the component and all dependent relationships.
@@ -118,14 +118,14 @@ while confirming that the user receives an appropriate warning before destructiv
   given a clear choice that prevents accidental loss of those edits.
 - Mermaid-reserved words or characters that can be represented safely MUST be escaped automatically;
   content that cannot be represented safely MUST be rejected with an actionable message.
-- Exporting before the first automatic save completes MUST still produce the current diagram or
-  clearly explain why it cannot be exported.
+- Exporting before the first explicit save MUST still produce the current diagram or clearly
+  explain why it cannot be exported.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: The system MUST allow a user to create, name, automatically save, reopen, and delete
+- **FR-001**: The system MUST allow a user to create, name, explicitly save, reopen, and delete
   architecture diagrams; deleted diagrams MUST be moved to a recoverable trash state.
 - **FR-002**: The system MUST allow a user to add, rename, move, and remove software components.
 - **FR-003**: The system MUST assign each component a stable identity that remains unchanged when
@@ -133,8 +133,9 @@ while confirming that the user receives an appropriate warning before destructiv
 - **FR-004**: The system MUST allow a user to create, label, edit, and remove relationships between
   components, with direction selected independently for each relationship as directed or undirected.
 - **FR-005**: The system MUST prevent relationships from referencing missing components.
-- **FR-006**: The system MUST automatically save diagram changes and preserve component positions,
-  names, relationship endpoints, labels, and diagram metadata when a diagram is reopened.
+- **FR-006**: The system MUST allow the user to explicitly save diagram changes and preserve
+  component positions, names, relationship endpoints, labels, and diagram metadata when a diagram
+  is reopened.
 - **FR-007**: The system MUST provide undo and redo for diagram edits within the active editing
   session.
 - **FR-008**: The system MUST warn the user that dependent relationships will be removed before
@@ -147,7 +148,7 @@ while confirming that the user receives an appropriate warning before destructiv
 - **FR-011**: The system MUST validate Mermaid compatibility before export, escape supported reserved
   words or characters, and identify the affected component or relationship when export cannot be
   completed because content cannot be represented safely.
-- **FR-012**: The system MUST show clear saving, saved, or failed status feedback for automatic
+- **FR-012**: The system MUST show clear unsaved, saved, or failed status feedback for explicit
   saves, and clear success or failure feedback for reopen, delete, and export actions.
 - **FR-013**: The core diagram editing and export workflows MUST support keyboard navigation,
   readable labels, and accessible contrast.

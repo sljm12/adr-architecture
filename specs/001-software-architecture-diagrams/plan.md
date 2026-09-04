@@ -10,8 +10,8 @@ Deliver a browser-based, single-user architecture diagram editor that persists s
 diagrams through a Fastify REST API backed by PostgreSQL. The frontend uses React Flow only as a
 visual adapter over a domain model managed with Zustand and explicit undo/redo history. Validated
 domain artifacts are exported through a Mermaid adapter that rejects unsupported content with
-actionable errors. Users can also browse active saved diagrams, select one to load, and safely
-switch without losing unsaved edits.
+actionable errors. Users explicitly save their changes, can browse active saved diagrams, select one
+to load, and safely switch without losing unsaved edits.
 
 ## Technical Context
 
@@ -24,8 +24,8 @@ PostgreSQL, OpenAPI, Vitest, Playwright
 are persisted as structured records with UUIDs and timestamps
 
 **Testing**: Vitest for domain, Zod validation, persistence, loading and Mermaid export; Playwright
-for create/edit/save/list/load/delete/undo/redo/export user journeys; API contract checks against
-OpenAPI
+for create/edit/explicit-save/list/load/delete/undo/redo/export user journeys; API contract checks
+against OpenAPI
 
 **Target Platform**: Modern desktop browser for the React frontend; containerized Node.js API;
 managed PostgreSQL

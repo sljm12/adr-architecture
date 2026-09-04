@@ -20,7 +20,7 @@ export function DiagramWorkspace() {
       <aside className="workspace-sidebar" aria-label="Diagram overview">
         <div className="sidebar-intro"><span className="eyebrow">Your artifacts</span><h2>Make structure visible.</h2><p>Shape a clear architecture map, then let every decision point back to it.</p></div>
         <div className="sidebar-card"><span className="card-kicker">Current diagram</span><strong>{document?.name ?? 'No diagram yet'}</strong><span className="card-meta">{document ? `${document.components.length} components · ${document.relationships.length} relationships` : 'Create a diagram to begin'}</span></div>
-        <div className="sidebar-card sidebar-card-dark"><span className="card-kicker">Keyboard tip</span><strong>Keep moving</strong><span className="card-meta">Drag components to refine the story. Changes save automatically.</span></div>
+        <div className="sidebar-card sidebar-card-dark"><span className="card-kicker">Keyboard tip</span><strong>Keep moving</strong><span className="card-meta">Drag components to refine the story, then choose Save when you are ready.</span></div>
       </aside>
       <section className="editor-area" id="diagram-workspace" aria-label="Diagram editor">
         <DiagramToolbar />

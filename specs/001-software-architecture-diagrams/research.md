@@ -19,15 +19,16 @@ component or relationship.
 **Alternatives considered:** Frontend-only validation was rejected because it cannot protect the
 backend from malformed clients or corrupted serialized artifacts.
 
-## Decision: Autosave a debounced complete document through an idempotent replacement endpoint
+## Decision: Explicitly save the complete document through an idempotent replacement endpoint
 
 **Rationale:** A single-document save payload keeps component, relationship, and layout updates
-consistent and supports the clarified automatic-save requirement. Debouncing avoids a request for
-every keystroke; the latest local draft remains visible while status reports saving, saved, or failed.
-The server preserves IDs and updates timestamps transactionally.
+consistent while allowing the user to decide when changes become persisted. The latest local draft
+remains visible until the user saves; status reports unsaved, saving, saved, or failed. The server
+preserves IDs and updates timestamps transactionally.
 
-**Alternatives considered:** Explicit Save was rejected by the clarification. Independent row-level
-requests were rejected because partial saves could leave relationships or layout out of sync.
+**Alternatives considered:** Automatic saving was removed from scope because the clarified
+requirement calls for explicit user-initiated saves. Independent row-level requests were rejected
+because partial saves could leave relationships or layout out of sync.
 
 ## Decision: Trash diagrams with a recoverable soft-delete state
 
@@ -73,8 +74,8 @@ link queries require relational constraints.
 ## Decision: Session undo/redo is local history over domain commands
 
 **Rationale:** The active editor can undo and redo changes immediately without introducing advanced
-server revision history. Autosave persists the resulting current document; history is reset or scoped
-when switching diagrams.
+server revision history. Explicit save persists the resulting current document; history is reset or
+scoped when switching diagrams.
 
 **Alternatives considered:** A server revision table was deferred because advanced revision history is
 out of scope for the first release.
@@ -99,7 +100,7 @@ load only on success), discard (load without retaining the local changes), or ca
 active diagram untouched). A loading failure leaves the current document and its local history in
 place; a successful load resets history to the newly loaded document.
 
-**Alternatives considered:** Switching immediately and relying on autosave was rejected because a
-pending or failed save can lose edits. Keeping undo history across diagrams was rejected because it
+**Alternatives considered:** Switching immediately without addressing unsaved edits was rejected
+because it can lose local changes. Keeping undo history across diagrams was rejected because it
 would make a local command history affect a different artifact.
 
