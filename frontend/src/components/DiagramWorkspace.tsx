@@ -1,9 +1,22 @@
 import { DiagramToolbar } from './DiagramToolbar';
 import { DiagramCanvas } from './DiagramCanvas';
 import { useDiagramStore } from '../state/diagram-store';
+import { ConfirmDialog } from './ConfirmDialog';
+import { useState } from 'react';
 
 export function DiagramWorkspace() {
   const document = useDiagramStore(state => state.document);
+  const status = useDiagramStore(state => state.status);
+  const startNew = useDiagramStore(state => state.startNew);
+  const [confirmNew, setConfirmNew] = useState(false);
+  const requestNewDiagram = () => {
+    if (!document || status === 'saving') return;
+    if (status === 'unsaved' || status === 'failed') {
+      setConfirmNew(true);
+      return;
+    }
+    startNew();
+  };
 
   return <div className="app-shell">
     <a className="skip-link" href="#diagram-workspace">Skip to diagram workspace</a>
@@ -14,7 +27,7 @@ export function DiagramWorkspace() {
     </nav>
     <div className="sub-nav">
       <div><span className="eyebrow">Architecture workspace</span><h1>{document?.name ?? 'Diagram studio'}</h1></div>
-      <div className="sub-nav-actions"><span className="quiet-note">Single-user workspace</span><button className="primary-pill" type="button" onClick={() => document?.id && window.location.reload()}>Reload view</button></div>
+      <div className="sub-nav-actions"><span className="quiet-note">Single-user workspace</span><button className="primary-pill" type="button" onClick={requestNewDiagram} disabled={!document || status === 'saving'}>New Diagram</button></div>
     </div>
     <div className="workspace">
       <aside className="workspace-sidebar" aria-label="Diagram overview">
@@ -27,5 +40,6 @@ export function DiagramWorkspace() {
         <DiagramCanvas />
       </section>
     </div>
+    {confirmNew && <ConfirmDialog title="Discard unsaved changes?" message="Your current diagram has changes that have not been saved. Discard them and create a new diagram?" confirmLabel="Discard and create" onConfirm={() => { startNew(); setConfirmNew(false); }} onCancel={() => setConfirmNew(false)} />}
   </div>;
 }

@@ -12,6 +12,7 @@ type State = {
   canUndo: boolean;
   canRedo: boolean;
   open: (document: DiagramDocument) => void;
+  startNew: () => void;
   create: (name: string) => Promise<void>;
   update: (fn: (document: DiagramDocument) => DiagramDocument) => void;
   undo: () => void;
@@ -37,6 +38,7 @@ export const useDiagramStore = create<State>((set, get) => ({
     const document = history.reset(copy(input));
     set({ document, status: 'saved', error: null, ...historyState() });
   },
+  startNew: () => set({ document: null, status: 'idle', error: null, canUndo: false, canRedo: false }),
   create: async name => {
     const created = await diagramClient.create(name);
     const document = history.reset(copy(created));
