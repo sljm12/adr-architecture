@@ -17,9 +17,29 @@ npm test
 npm run test:e2e
 ```
 
-For a PostgreSQL deployment, apply `backend/drizzle/0001_initial.sql` with the configured
-PostgreSQL migration runner before starting the API. The current local repository adapter keeps
-the browser test workflow isolated and does not require a live database.
+For a PostgreSQL deployment, set `DATABASE_URL`, apply `backend/drizzle/0001_initial.sql` with the
+configured PostgreSQL migration runner, and then start the API. The API refuses to start when
+`DATABASE_URL` is missing and always uses PostgreSQL persistence; browser and contract tests that
+exercise production persistence require a reachable configured database.
+
+Example startup commands:
+
+```text
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/adr_diagram npm run dev --prefix backend
+```
+
+On PowerShell:
+
+```powershell
+$env:DATABASE_URL = 'postgres://postgres:postgres@localhost:5432/adr_diagram'
+npm run dev --prefix backend
+```
+
+After applying the migration, run the persistence contract tests with the same configured URL:
+
+```text
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/adr_diagram npm test -- --run backend/tests/contract/diagrams.test.ts backend/tests/persistence/diagram-repository.test.ts
+```
 
 The REST boundary is defined in [contracts/openapi.yaml](./contracts/openapi.yaml), and entity
 invariants are defined in [data-model.md](./data-model.md).

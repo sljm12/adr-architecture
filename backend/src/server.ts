@@ -1,15 +1,28 @@
-import { buildApp } from './api/app';
+import { pathToFileURL } from 'node:url';
 import { config } from './config';
 import { createDatabase } from './persistence/database';
-import { DiagramRepository, PostgresDiagramRepository } from './persistence/diagram-repository';
+import { buildApp } from './api/app';
+import { PostgresDiagramRepository } from './persistence/diagram-repository';
 
-const settings = config();
-const database = settings.databaseUrl ? createDatabase(settings.databaseUrl) : undefined;
-const app = buildApp(database ? new PostgresDiagramRepository(database.db) : new DiagramRepository());
+export function createServer(env: NodeJS.ProcessEnv = process.env) {
+  const settings = config(env);
+  const database = createDatabase(settings.databaseUrl);
+  const app = buildApp(new PostgresDiagramRepository(database.db));
+  return { app, database, settings };
+}
 
-app.listen({ port: settings.port, host: '0.0.0.0' })
-  .catch(async (error: unknown) => {
+export async function startServer(env: NodeJS.ProcessEnv = process.env) {
+  const { app, database, settings } = createServer(env);
+  try {
+    await app.listen({ port: settings.port, host: '0.0.0.0' });
+    return { app, database, settings };
+  } catch (error: unknown) {
     app.log.error(error);
-    await database?.pool.end();
-    process.exit(1);
-  });
+    await database.pool.end();
+    throw error;
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  startServer().catch(() => process.exit(1));
+}

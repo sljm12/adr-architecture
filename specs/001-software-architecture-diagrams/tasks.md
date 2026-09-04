@@ -30,10 +30,10 @@ adding the remaining workflow. No project initialization changes are required.
 **Purpose**: Ensure the running API cannot report a saved document unless it is durable, which is
 a prerequisite for browsing and loading saved work.
 
-- [ ] T001 [P] Add a configured-PostgreSQL save-and-reopen contract test that starts a fresh API instance and asserts every saved document field in `backend/tests/contract/diagrams.test.ts`.
-- [ ] T002 [P] Add configuration and server-startup tests that reject a missing database URL rather than using in-memory storage in `backend/tests/config.test.ts`.
-- [ ] T003 Require the database URL and always construct the PostgreSQL diagram repository for the running API in `backend/src/config.ts` and `backend/src/server.ts`.
-- [ ] T004 Update configured-database startup, migration, and save/reopen validation instructions in `specs/001-software-architecture-diagrams/quickstart.md`.
+- [X] T001 [P] Add a configured-PostgreSQL save-and-reopen contract test that starts a fresh API instance and asserts every saved document field in `backend/tests/contract/diagrams.test.ts`.
+- [X] T002 [P] Add configuration and server-startup tests that reject a missing database URL rather than using in-memory storage in `backend/tests/config.test.ts`.
+- [X] T003 Require the database URL and always construct the PostgreSQL diagram repository for the running API in `backend/src/config.ts` and `backend/src/server.ts`.
+- [X] T004 Update configured-database startup, migration, and save/reopen validation instructions in `specs/001-software-architecture-diagrams/quickstart.md`.
 
 **Checkpoint**: A successful production save is durable and can be loaded by stable diagram ID
 from a fresh API instance.

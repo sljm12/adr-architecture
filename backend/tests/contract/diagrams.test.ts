@@ -60,13 +60,27 @@ describe.skipIf(!process.env.DATABASE_URL)('PostgreSQL diagram API', () => it('p
   document.relationships = [{ id: relationshipId, diagramId: document.id, sourceComponentId: componentA, targetComponentId: componentB, direction: 'undirected', label: 'reads and writes', createdAt: document.createdAt, updatedAt: document.updatedAt }];
   const saved = await firstApp.inject({ method: 'PUT', url: `/diagrams/${document.id}`, payload: document });
   expect(saved.statusCode).toBe(200);
+  const savedDocument = saved.json();
+  expect(savedDocument).toMatchObject({
+    id: document.id,
+    name: 'System',
+    status: 'active',
+    createdAt: document.createdAt,
+    trashedAt: null,
+    components: expect.arrayContaining([
+      expect.objectContaining({ id: componentA, diagramId: document.id, name: 'API', description: null, type: 'service', position: { x: 12, y: 34 } }),
+      expect.objectContaining({ id: componentB, diagramId: document.id, name: 'DB', description: null, type: 'store', position: { x: 56, y: 78 } }),
+    ]),
+    relationships: [expect.objectContaining({ id: relationshipId, diagramId: document.id, sourceComponentId: componentA, targetComponentId: componentB, direction: 'undirected', label: 'reads and writes' })],
+  });
+  expect(savedDocument.updatedAt).toEqual(expect.any(String));
   await firstApp.close();
 
   const second = createDatabase(process.env.DATABASE_URL!);
   const secondApp = buildApp(new PostgresDiagramRepository(second.db)); await secondApp.ready();
   const reopened = await secondApp.inject({ method: 'GET', url: `/diagrams/${document.id}` });
   expect(reopened.statusCode).toBe(200);
-  expect(reopened.json()).toMatchObject({ id: document.id, name: 'System' });
+  expect(reopened.json()).toMatchObject({ id: document.id, name: 'System', status: 'active', createdAt: document.createdAt, trashedAt: null, updatedAt: savedDocument.updatedAt });
   expect(reopened.json().components).toEqual(expect.arrayContaining([
     expect.objectContaining({ id: componentA, name: 'API', position: { x: 12, y: 34 } }),
     expect.objectContaining({ id: componentB, name: 'DB', position: { x: 56, y: 78 } }),
