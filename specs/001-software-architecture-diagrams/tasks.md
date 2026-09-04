@@ -57,22 +57,22 @@ the saved status, reopen it, and verify names, labels, endpoints, directions, po
 
 ### Tests for User Story 1
 
-- [ ] T019 [P] [US1] Add PostgreSQL persistence integration tests that save a complete diagram document, create a fresh repository instance, load it from the database, and verify metadata, stable UUIDs, components, relationships, labels, directions, and positions in `backend/tests/persistence/diagram-repository.test.ts`
-- [ ] T020 [P] [US1] Add API retrieval tests that persist a diagram through `POST`/`PUT`, initialize the API against the database, load it through `GET /diagrams/{diagramId}`, and verify the complete returned document in `backend/tests/contract/diagrams.test.ts`
+- [X] T019 [P] [US1] Add PostgreSQL persistence integration tests that save a complete diagram document, create a fresh repository instance, load it from the database, and verify metadata, stable UUIDs, components, relationships, labels, directions, and positions in `backend/tests/persistence/diagram-repository.test.ts`
+- [X] T020 [P] [US1] Add API retrieval tests that persist a diagram through `POST`/`PUT`, initialize the API against the database, load it through `GET /diagrams/{diagramId}`, and verify the complete returned document in `backend/tests/contract/diagrams.test.ts`
 - [X] T021 [P] [US1] Add React Flow adapter round-trip tests proving domain IDs and positions survive conversion in `frontend/tests/react-flow-adapter.test.ts`
 - [X] T022 [P] [US1] Add Playwright coverage for create, add, rename, reposition, autosave, reopen, and relationship editing in `e2e/tests/create-edit-reopen.spec.ts`
 
 ### Implementation for User Story 1
 
-- [ ] T023 [US1] Implement PostgreSQL-backed diagram/component/relationship repository queries and transactional complete-document replacement plus database loading in `backend/src/persistence/diagram-repository.ts`
-- [ ] T024 [US1] Implement diagram create, load-from-database, validate, and autosave service operations using the persistent repository in `backend/src/services/diagram-service.ts`
-- [ ] T025 [US1] Implement diagram list/create/load/autosave REST handlers backed by persisted records and matching `specs/001-software-architecture-diagrams/contracts/openapi.yaml` in `backend/src/api/diagram-routes.ts`
+- [X] T023 [US1] Implement PostgreSQL-backed diagram/component/relationship repository queries and transactional complete-document replacement plus database loading in `backend/src/persistence/diagram-repository.ts`
+- [X] T024 [US1] Implement diagram create, load-from-database, validate, and autosave service operations using the persistent repository in `backend/src/services/diagram-service.ts`
+- [X] T025 [US1] Implement diagram list/create/load/autosave REST handlers backed by persisted records and matching `specs/001-software-architecture-diagrams/contracts/openapi.yaml` in `backend/src/api/diagram-routes.ts`
 - [X] T026 [US1] Implement domain-to-React-Flow node and edge conversion with UUID-derived IDs in `frontend/src/adapters/react-flow/diagram-adapter.ts`
 - [X] T027 [US1] Implement Zustand active-document state, domain edit actions, and debounced autosave status in `frontend/src/state/diagram-store.ts`
 - [X] T028 [US1] Implement diagram list/open/create UI and accessible component/relationship editing controls in `frontend/src/components/DiagramWorkspace.tsx` and `frontend/src/components/DiagramToolbar.tsx`
 - [X] T029 [US1] Implement the React Flow canvas, component labels, relationship labels, directed/undirected display, and keyboard-accessible controls in `frontend/src/components/DiagramCanvas.tsx`
 - [X] T030 [US1] Implement REST client result/error mapping and save/reopen feedback in `frontend/src/api/diagram-client.ts` and `frontend/src/components/SaveStatus.tsx`
-- [ ] T031 [US1] Wire Fastify startup to create the PostgreSQL connection and inject the persistent diagram repository, while retaining an isolated test repository and frontend development proxy in `backend/src/server.ts`, `backend/src/api/app.ts`, and `frontend/vite.config.ts`
+- [X] T031 [US1] Wire Fastify startup to create the PostgreSQL connection and inject the persistent diagram repository, while retaining an isolated test repository and frontend development proxy in `backend/src/server.ts`, `backend/src/api/app.ts`, and `frontend/vite.config.ts`
 
 **Checkpoint**: User Story 1 is independently functional and testable before export, trash, and undo/redo enhancements.
 
