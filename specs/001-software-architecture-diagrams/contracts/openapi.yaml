@@ -6,7 +6,7 @@ paths:
   /diagrams:
     get:
       summary: List active saved-diagram summaries
-      description: Returns the active diagrams for the saved-diagram view. Each summary includes a stable ID, name, lifecycle state, and last-saved time; names are not unique selection keys.
+      description: Returns every non-deleted saved diagram for the saved-document view. Each summary includes a stable ID, name, lifecycle state, and last-saved time; names are not unique selection keys. An empty array indicates that no non-deleted saved documents exist.
       responses:
         '200': {description: Active diagrams, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramSummaryList'}}}}
     post:
@@ -26,10 +26,10 @@ paths:
       parameters: [{name: diagramId, in: path, required: true, schema: {type: string, format: uuid}}]
       responses: {'200': {description: Diagram document, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramDocument'}}}}, '404': {description: Not found}}
     put:
-      summary: Validate and autosave the complete diagram document
+      summary: Validate and persist the complete diagram document after an explicit save
       parameters: [{name: diagramId, in: path, required: true, schema: {type: string, format: uuid}}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramWrite'}}}}
-      responses: {'200': {description: Saved document, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramDocument'}}}}, '422': {$ref: '#/components/responses/ValidationError'}}
+      responses: {'200': {description: Complete document committed to persistent storage, content: {application/json: {schema: {$ref: '#/components/schemas/DiagramDocument'}}}}, '422': {$ref: '#/components/responses/ValidationError'}}
     delete:
       summary: Move a diagram to trash
       parameters: [{name: diagramId, in: path, required: true, schema: {type: string, format: uuid}}]

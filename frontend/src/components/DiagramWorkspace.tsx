@@ -1,9 +1,22 @@
 import { DiagramToolbar } from './DiagramToolbar';
 import { DiagramCanvas } from './DiagramCanvas';
 import { useDiagramStore } from '../state/diagram-store';
+import { ConfirmDialog } from './ConfirmDialog';
+import { useState } from 'react';
 
 export function DiagramWorkspace() {
   const document = useDiagramStore(state => state.document);
+  const status = useDiagramStore(state => state.status);
+  const startNew = useDiagramStore(state => state.startNew);
+  const [confirmNew, setConfirmNew] = useState(false);
+  const requestNewDiagram = () => {
+    if (!document || status === 'saving') return;
+    if (status === 'unsaved' || status === 'failed') {
+      setConfirmNew(true);
+      return;
+    }
+    startNew();
+  };
 
   return <div className="app-shell">
     <a className="skip-link" href="#diagram-workspace">Skip to diagram workspace</a>
@@ -14,18 +27,19 @@ export function DiagramWorkspace() {
     </nav>
     <div className="sub-nav">
       <div><span className="eyebrow">Architecture workspace</span><h1>{document?.name ?? 'Diagram studio'}</h1></div>
-      <div className="sub-nav-actions"><span className="quiet-note">Single-user workspace</span><button className="primary-pill" type="button" onClick={() => document?.id && window.location.reload()}>Reload view</button></div>
+      <div className="sub-nav-actions"><span className="quiet-note">Single-user workspace</span><button className="primary-pill" type="button" onClick={requestNewDiagram} disabled={!document || status === 'saving'}>New Diagram</button></div>
     </div>
     <div className="workspace">
       <aside className="workspace-sidebar" aria-label="Diagram overview">
         <div className="sidebar-intro"><span className="eyebrow">Your artifacts</span><h2>Make structure visible.</h2><p>Shape a clear architecture map, then let every decision point back to it.</p></div>
         <div className="sidebar-card"><span className="card-kicker">Current diagram</span><strong>{document?.name ?? 'No diagram yet'}</strong><span className="card-meta">{document ? `${document.components.length} components · ${document.relationships.length} relationships` : 'Create a diagram to begin'}</span></div>
-        <div className="sidebar-card sidebar-card-dark"><span className="card-kicker">Keyboard tip</span><strong>Keep moving</strong><span className="card-meta">Drag components to refine the story. Changes save automatically.</span></div>
+        <div className="sidebar-card sidebar-card-dark"><span className="card-kicker">Keyboard tip</span><strong>Keep moving</strong><span className="card-meta">Drag components to refine the story, then choose Save when you are ready.</span></div>
       </aside>
       <section className="editor-area" id="diagram-workspace" aria-label="Diagram editor">
         <DiagramToolbar />
         <DiagramCanvas />
       </section>
     </div>
+    {confirmNew && <ConfirmDialog title="Discard unsaved changes?" message="Your current diagram has changes that have not been saved. Discard them and create a new diagram?" confirmLabel="Discard and create" onConfirm={() => { startNew(); setConfirmNew(false); }} onCancel={() => setConfirmNew(false)} />}
   </div>;
 }

@@ -24,6 +24,8 @@ describe('core workflow accessibility contract', () => {
     expect(toolbar).toContain('aria-label="Relationship source component"');
     expect(toolbar).toContain('aria-label="Relationship target component"');
     expect(toolbar).toContain('aria-label="Relationship direction"');
+    expect(workspace).toContain('>New Diagram</button>');
+    expect(workspace).toContain('Discard unsaved changes?');
   });
 
   it('keeps dialog focus inside the confirmation flow and restores the trigger focus', () => {

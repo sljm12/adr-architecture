@@ -33,15 +33,18 @@ returns an actionable validation error.
 ## Layout and artifact document
 
 The API exposes a diagram document containing diagram metadata, components, relationships, and their
-positions. A complete document replacement is validated before persistence and written transactionally.
-React Flow node/edge IDs are derived from these UUIDs and are never persisted as the source of truth.
+positions. A complete document replacement is validated and written transactionally to the database
+before a save is reported as successful. React Flow node/edge IDs are derived from these UUIDs and
+are never persisted as the source of truth.
 
 ## Saved Diagram Summary
 
 The saved-diagram view uses a summary derived from each active `Diagram`, rather than a separate
-persisted entity. It contains `id`, `name`, `status`, and `updatedAt`. The UI uses `id` as the
-selection value, displays the name and last-saved time, and never treats the name as a unique key.
-Full components, relationships, and layout are obtained only when the selected `id` is loaded.
+persisted entity. It contains `id`, `name`, `status`, and `updatedAt`, where `updatedAt` represents
+the most recent successful persistence of the active document. The UI uses `id` as the selection
+value, displays the name and last-saved time, and never treats the name as a unique key. An empty
+summary collection represents that no non-deleted saved documents exist. Full components,
+relationships, and layout are obtained only when the selected `id` is loaded.
 
 ## Invariants and lifecycle rules
 
@@ -51,7 +54,8 @@ Full components, relationships, and layout are obtained only when the selected `
 4. Component deletion requires confirmation in the UI and transactionally deletes all dependent relationships.
 5. Diagram deletion moves the diagram to `trashed`; restore returns it to `active` without changing artifact IDs.
 6. Trashed diagrams are excluded from active editing and normal lists but remain recoverable.
-7. Autosave failure leaves the local draft intact and sets an observable failed/unsaved state.
+7. An explicit save reports success only after the complete validated document is committed to the
+   database; a save failure leaves the local draft intact and sets an observable failed/unsaved state.
 8. Mermaid export accepts only a fully validated document and produces no file when validation fails.
 9. A failed or cancelled request to load another diagram leaves the active document and local
    history unchanged.

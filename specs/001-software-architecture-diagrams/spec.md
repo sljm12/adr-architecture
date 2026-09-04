@@ -6,17 +6,23 @@
 
 **Status**: Draft
 
-**Input**: User description: "The user should be able to create Software Architecture diagrams, prefably the diagrams can be exported as a mermaid file"
+**Input**: User description: "The user should be able to create software architecture diagrams, preferably export them as Mermaid files, browse the saved documents, and load a selected document into the editor."
 
 ## Clarifications
 
 ### Session 2026-08-30
 
-- Q: Should diagram changes be saved only when the user explicitly chooses “Save,” or should the system save changes automatically? → A: Automatic saving with clear save status.
+- Q: Should diagram changes be saved only when the user explicitly chooses “Save,” or should the system save changes automatically? → A: Users explicitly save changes; the interface clearly indicates whether changes are saved or unsaved.
 - Q: After a user confirms deleting a diagram, should the diagram be permanently removed immediately or recoverable for a period of time? → A: Move the diagram to trash so it can be restored later.
 - Q: Should each relationship let the user choose whether it is directed or undirected? → A: Let each relationship be directed or undirected.
 - Q: When a user confirms removal of a component that has relationships, should those dependent relationships be removed automatically? → A: After confirmation, remove the component and all dependent relationships.
 - Q: When component or relationship text contains Mermaid-reserved characters, should the exporter escape the text automatically or reject the export? → A: Escape supported characters automatically; reject only content that cannot be represented safely.
+
+### Session 2026-09-05
+
+- Q: How should a user resume saved work? → A: The user can browse all non-deleted saved
+  diagram documents, identify a document from its name and saved-state details, and load the
+  selected document into the editor.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -36,7 +42,7 @@ components and two relationships, save it, reopen it, and confirm the same struc
    **Then** each component has a visible name and can be repositioned without changing its identity.
 2. **Given** two components, **When** the user creates a relationship between them,
    **Then** the relationship visibly connects the correct endpoints and can have a label.
-3. **Given** a saved diagram, **When** the user reopens it,
+3. **Given** a saved diagram, **When** the user reopens it from the database,
    **Then** the components, relationships, labels, and layout are preserved.
 
 ---
@@ -77,8 +83,8 @@ list, load each diagram in turn, and confirm that the correct editable content a
 **Acceptance Scenarios**:
 
 1. **Given** one or more saved diagrams, **When** the user views saved diagrams, **Then** each
-   saved diagram is identifiable by its name and shows enough saved-state information for the user
-   to distinguish it from the others.
+   saved document is identifiable by its name and saved-state information, including when it was
+   last saved, sufficient to distinguish it from the others.
 2. **Given** a saved-diagram view, **When** the user selects a saved diagram to load, **Then** the
    selected diagram becomes the active editable diagram with its saved components, relationships,
    labels, and layout intact.
@@ -118,14 +124,16 @@ while confirming that the user receives an appropriate warning before destructiv
   given a clear choice that prevents accidental loss of those edits.
 - Mermaid-reserved words or characters that can be represented safely MUST be escaped automatically;
   content that cannot be represented safely MUST be rejected with an actionable message.
-- Exporting before the first automatic save completes MUST still produce the current diagram or
-  clearly explain why it cannot be exported.
+- Exporting before the first explicit save MUST still produce the current diagram or clearly
+  explain why it cannot be exported.
+- If a database save fails, the current editable draft MUST remain available and the user MUST be
+  told that the diagram was not saved.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: The system MUST allow a user to create, name, automatically save, reopen, and delete
+- **FR-001**: The system MUST allow a user to create, name, explicitly save, reopen, and delete
   architecture diagrams; deleted diagrams MUST be moved to a recoverable trash state.
 - **FR-002**: The system MUST allow a user to add, rename, move, and remove software components.
 - **FR-003**: The system MUST assign each component a stable identity that remains unchanged when
@@ -133,8 +141,9 @@ while confirming that the user receives an appropriate warning before destructiv
 - **FR-004**: The system MUST allow a user to create, label, edit, and remove relationships between
   components, with direction selected independently for each relationship as directed or undirected.
 - **FR-005**: The system MUST prevent relationships from referencing missing components.
-- **FR-006**: The system MUST automatically save diagram changes and preserve component positions,
-  names, relationship endpoints, labels, and diagram metadata when a diagram is reopened.
+- **FR-006**: The system MUST allow the user to explicitly save the complete diagram to the
+  database and preserve component positions, names, relationship endpoints, labels, and diagram
+  metadata when the diagram is later reopened from the database.
 - **FR-007**: The system MUST provide undo and redo for diagram edits within the active editing
   session.
 - **FR-008**: The system MUST warn the user that dependent relationships will be removed before
@@ -147,13 +156,13 @@ while confirming that the user receives an appropriate warning before destructiv
 - **FR-011**: The system MUST validate Mermaid compatibility before export, escape supported reserved
   words or characters, and identify the affected component or relationship when export cannot be
   completed because content cannot be represented safely.
-- **FR-012**: The system MUST show clear saving, saved, or failed status feedback for automatic
+- **FR-012**: The system MUST show clear unsaved, saved, or failed status feedback for explicit
   saves, and clear success or failure feedback for reopen, delete, and export actions.
 - **FR-013**: The core diagram editing and export workflows MUST support keyboard navigation,
   readable labels, and accessible contrast.
 - **FR-014**: The system MUST provide a saved-diagram view that lists every non-deleted saved
-  diagram and presents its name and saved-state information sufficient to distinguish it from
-  other saved diagrams.
+  document and presents its name, last-saved time, and saved-state information sufficient to
+  distinguish it from other saved documents, including documents with the same name.
 - **FR-015**: The system MUST allow a user to select a saved diagram from the saved-diagram view
   and load it as the active editable diagram, preserving its saved metadata, components,
   relationships, labels, and layout.
@@ -162,6 +171,8 @@ while confirming that the user receives an appropriate warning before destructiv
   cancel the load action.
 - **FR-017**: The system MUST provide clear success or failure feedback for viewing and loading
   saved diagrams; a failed load MUST NOT replace or alter the currently active diagram.
+- **FR-018**: The saved-diagram view MUST provide an understandable empty state and a clear way
+  for a user to begin creating a diagram when no non-deleted saved documents exist.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -173,8 +184,9 @@ while confirming that the user receives an appropriate warning before destructiv
   an optional label.
 - **Mermaid Export**: A generated file representing the supported diagram content in Mermaid
   syntax, with validation status and export metadata.
-- **Saved Diagram Summary**: The identifying information shown for a saved diagram so a user can
-  choose the correct diagram to load.
+- **Saved Diagram Summary**: The identifying information shown for a saved document, including
+  its name and last-saved time, so a user can distinguish it and choose the correct document to
+  load.
 
 ## Success Criteria *(mandatory)*
 
@@ -184,8 +196,8 @@ while confirming that the user receives an appropriate warning before destructiv
   five relationships in under 5 minutes without external instructions.
 - **SC-002**: At least 95% of valid diagrams exported during acceptance testing produce Mermaid
   files that render without syntax errors in a compatible viewer.
-- **SC-003**: At least 95% of tested save-and-reopen cycles preserve all component identities,
-  relationship endpoints, labels, and positions.
+- **SC-003**: At least 95% of tested database save-and-reopen cycles preserve all component
+  identities, relationship endpoints, labels, and positions.
 - **SC-004**: At least 90% of representative users complete the create, save, reopen, and export
   workflow on their first attempt.
 - **SC-005**: When an export fails validation, 100% of tested failures identify an actionable
@@ -210,3 +222,5 @@ while confirming that the user receives an appropriate warning before destructiv
   this feature MUST preserve stable component identities so those references can be added later.
 - Saved diagrams are presented as a user-accessible collection; sorting, searching, and sharing
   saved diagrams are out of scope unless separately specified.
+- The saved-document view presents the current non-deleted saved documents; it does not expose
+  trashed documents or a revision-history browser.
