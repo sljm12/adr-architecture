@@ -1,8 +1,23 @@
 # ADR Diagram
 
 ADR Diagram is a browser-based editor for structured software architecture diagrams. Components
-and relationships have stable UUIDs, changes autosave through the REST API, and validated diagrams
-can be downloaded as Mermaid files.
+and relationships have stable UUIDs, changes can be explicitly saved through the REST API, and
+validated diagrams can be downloaded as Mermaid files.
+
+## Developed features
+
+- Create and name architecture diagrams in a browser-based editor.
+- Add, move, and remove software architecture components with stable UUIDs.
+- Connect components with labeled directed or undirected relationships.
+- Browse saved diagrams and load a selected diagram back into the editor.
+- Preserve diagram names, component positions, relationship endpoints, labels, and metadata in PostgreSQL.
+- Show clear saved, unsaved, saving, and failed-save states.
+- Undo and redo diagram edits during the active editing session.
+- Check component dependencies before deletion and prevent removal when relationships still exist.
+- Move diagrams to recoverable trash and restore them later.
+- Export validated diagrams as downloadable Mermaid files.
+- Escape supported Mermaid-reserved characters and report actionable export validation errors.
+- Provide keyboard-accessible controls, readable labels, and accessible status feedback.
 
 ## Setup
 
