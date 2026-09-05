@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const workspace = source('../src/components/DiagramWorkspace.tsx');
 const toolbar = source('../src/components/DiagramToolbar.tsx');
+const inspector = source('../src/components/WorkspaceInspector.tsx');
 const dialog = source('../src/components/ConfirmDialog.tsx');
 const switchDialog = source('../src/components/DiagramSwitchDialog.tsx');
 const savedList = source('../src/components/SavedDiagramList.tsx');
@@ -22,11 +23,11 @@ describe('core workflow accessibility contract', () => {
   it('provides a skip link, labeled editor landmarks, and keyboard-submit forms', () => {
     expect(workspace).toContain('Skip to diagram workspace');
     expect(workspace).toContain('id="diagram-workspace" aria-label="Diagram editor"');
-    expect(toolbar).toContain('<form onSubmit={submitCreate}>');
-    expect(toolbar).toContain('aria-label="Relationship source component"');
-    expect(toolbar).toContain('aria-label="Relationship target component"');
-    expect(toolbar).toContain('aria-label="Relationship direction"');
-    expect(workspace).toContain('>New Diagram</button>');
+    expect(inspector).toContain('<form className="inspector-form" onSubmit={add}>');
+    expect(inspector).toContain('htmlFor="relationship-source"');
+    expect(inspector).toContain('htmlFor="relationship-target"');
+    expect(inspector).toContain('htmlFor="relationship-direction"');
+    expect(workspace).toContain('>New diagram</button>');
     expect(workspace).toContain('Discard unsaved changes?');
   });
 

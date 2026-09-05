@@ -1,54 +1,30 @@
-import { useState } from 'react';
-import { useDiagramStore } from '../state/diagram-store';
 import { ExportButton } from './ExportButton';
-import { RecoveryControls } from './RecoveryControls';
 import { SaveStatus } from './SaveStatus';
+import { useDiagramStore } from '../state/diagram-store';
 
-export function DiagramToolbar() {
-  const [name, setName] = useState('');
-  const [componentName, setComponentName] = useState('');
-  const [source, setSource] = useState('');
-  const [target, setTarget] = useState('');
-  const [label, setLabel] = useState('');
-  const [direction, setDirection] = useState<'directed' | 'undirected'>('directed');
+export type InspectorMode = 'component' | 'relationship' | null;
+
+export function DiagramToolbar({ onOpenInspector, onToggleLibrary, libraryOpen }: { onOpenInspector: (mode: Exclude<InspectorMode, null>) => void; onToggleLibrary: () => void; libraryOpen: boolean }) {
   const document = useDiagramStore(state => state.document);
   const status = useDiagramStore(state => state.status);
-  const create = useDiagramStore(state => state.create);
   const save = useDiagramStore(state => state.save);
-  const addComponent = useDiagramStore(state => state.addComponent);
-  const addRelationship = useDiagramStore(state => state.addRelationship);
+  const undo = useDiagramStore(state => state.undo);
+  const redo = useDiagramStore(state => state.redo);
+  const canUndo = useDiagramStore(state => state.canUndo);
+  const canRedo = useDiagramStore(state => state.canRedo);
 
-  const submitCreate = (event: React.FormEvent) => { event.preventDefault(); void create(name); };
-  const submitComponent = (event: React.FormEvent) => { event.preventDefault(); addComponent(componentName); setComponentName(''); };
-  const submitRelationship = (event: React.FormEvent) => { event.preventDefault(); addRelationship(source, target, label, direction); setLabel(''); };
-
-  return <div className="editor-toolbar">
-    <div className="toolbar-heading">
-      <div><span className="eyebrow">Canvas controls</span><h2>{document ? 'Build your map' : 'Start with a name'}</h2></div>
-      <div className="toolbar-actions">
-        <SaveStatus />
-        {document && <button className="primary-pill" type="button" onClick={() => void save()} disabled={status === 'saving'}>Save</button>}
-        {document && <ExportButton />}
-      </div>
+  return <header className="command-bar">
+    <div className="command-bar-title">
+      <button className="icon-button library-toggle" type="button" onClick={onToggleLibrary} aria-label={libraryOpen ? 'Hide diagrams panel' : 'Show diagrams panel'} aria-pressed={libraryOpen}>☰</button>
+      <div><span className="eyebrow">Architecture diagram</span><strong>{document?.name ?? 'Diagram studio'}</strong></div>
+      <SaveStatus />
     </div>
-    {!document ? <section className="create-row" aria-labelledby="create-diagram-heading">
-      <h3 id="create-diagram-heading" className="sr-only">Create a diagram</h3>
-      <form onSubmit={submitCreate}>
-        <label htmlFor="diagram-name">Diagram name</label>
-        <div className="control-row"><input id="diagram-name" value={name} onChange={event => setName(event.target.value)} placeholder="e.g. Payments platform" autoComplete="off" /><button className="primary-pill" type="submit" disabled={!name.trim()}>Create diagram</button></div>
-      </form>
-    </section> : <>
-      <div className="control-grid">
-        <section className="control-card" aria-labelledby="add-component-heading">
-          <span className="card-kicker">01 · Component</span><h3 id="add-component-heading" className="sr-only">Add a component</h3>
-          <form onSubmit={submitComponent}><label htmlFor="component-name">Name your next building block</label><div className="control-row"><input id="component-name" value={componentName} onChange={event => setComponentName(event.target.value)} placeholder="e.g. API gateway" autoComplete="off" /><button className="primary-pill" type="submit" disabled={!componentName.trim()}>Add</button></div></form>
-        </section>
-        <section className="control-card" aria-labelledby="add-relationship-heading">
-          <span className="card-kicker">02 · Relationship</span><h3 id="add-relationship-heading" className="sr-only">Connect two components</h3>
-          <form onSubmit={submitRelationship}><div className="control-row relationship-row"><label className="sr-only" htmlFor="relationship-source">Relationship source component</label><select id="relationship-source" aria-label="Relationship source component" value={source} onChange={event => setSource(event.target.value)}><option value="">From…</option>{document.components.map(component => <option key={component.id} value={component.id}>{component.name}</option>)}</select><label className="sr-only" htmlFor="relationship-target">Relationship target component</label><select id="relationship-target" aria-label="Relationship target component" value={target} onChange={event => setTarget(event.target.value)}><option value="">To…</option>{document.components.map(component => <option key={component.id} value={component.id}>{component.name}</option>)}</select><label className="sr-only" htmlFor="relationship-label">Relationship label</label><input id="relationship-label" aria-label="Relationship label" value={label} onChange={event => setLabel(event.target.value)} placeholder="Label" autoComplete="off" /><label className="sr-only" htmlFor="relationship-direction">Relationship direction</label><select id="relationship-direction" aria-label="Relationship direction" value={direction} onChange={event => setDirection(event.target.value as 'directed' | 'undirected')}><option value="directed">Directed</option><option value="undirected">Undirected</option></select><button className="primary-pill" type="submit" disabled={!source || !target || source === target}>Connect</button></div></form>
-        </section>
-      </div>
-      <RecoveryControls />
-    </>}
-  </div>;
+    <div className="command-bar-actions">
+      {document && <><button className="secondary-action" type="button" onClick={() => onOpenInspector('component')}>Add component</button><button className="secondary-action" type="button" onClick={() => onOpenInspector('relationship')}>Connect</button></>}
+      <button className="icon-button" type="button" onClick={undo} disabled={!canUndo} aria-label="Undo">↶</button>
+      <button className="icon-button" type="button" onClick={redo} disabled={!canRedo} aria-label="Redo">↷</button>
+      {document && <button className="primary-pill" type="button" onClick={() => void save()} disabled={status === 'saving'}>Save</button>}
+      {document && <ExportButton />}
+    </div>
+  </header>;
 }
