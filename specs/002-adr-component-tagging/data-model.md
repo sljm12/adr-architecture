@@ -2,41 +2,59 @@
 
 ## ArchitectureDecisionRecord (`adrs`)
 
-- `id: UUID` — primary key, generated once and immutable.
-- `diagramId: UUID` — owning active diagram; required for component-scope validation.
-- `title: string` — required, human-readable, non-blank.
-- `context: string` — required, non-blank.
-- `decision: string` — required, non-blank.
-- `consequences: string` — required, non-blank.
-- `alternativesOrConstraints: string | null` — optional.
-- `status: draft | accepted | superseded | rejected` — required; status changes are unrestricted.
-- `replacementAdrId: UUID | null` — required when status is `superseded`; must identify another ADR
-  in the same diagram and must not equal `id`.
-- `createdAt: timestamp` and `updatedAt: timestamp` — server-managed.
+| Field | Type | Rules |
+|---|---|---|
+| `id` | UUID | Primary key; generated once and immutable. |
+| `diagramId` | UUID | Required foreign key to `diagrams.id`; the owning diagram. |
+| `title` | string | Required, trimmed, non-blank; human-readable. |
+| `context` | string | Required, trimmed, non-blank; long text preserved. |
+| `decision` | string | Required, trimmed, non-blank; long text preserved. |
+| `consequences` | string | Required, trimmed, non-blank; long text preserved. |
+| `alternativesOrConstraints` | string or null | Optional; blank input normalizes to null. |
+| `status` | `draft \| accepted \| superseded \| rejected` | Required; all transitions are allowed. |
+| `replacementAdrId` | UUID or null | Required only for `superseded`; different ADR in the same diagram. |
+| `createdAt` | timestamp | Server-managed; immutable after creation. |
+| `updatedAt` | timestamp | Server-managed on successful mutation. |
 
-Validation rejects missing required text, unsupported statuses, invalid UUIDs, self-replacement,
-cross-diagram replacement, and superseded records without a replacement. A replacement target cannot be
-deleted while referenced. Rejected and superseded records remain queryable.
+The shared schema rejects invalid UUIDs, unsupported statuses, missing required text, self-
+replacement, and a superseded ADR without a replacement. The service additionally rejects a
+replacement from another diagram or a missing replacement. Superseded and rejected records remain
+queryable.
 
 ## ComponentReference (`adr_component_links`)
 
-- `adrId: UUID` — foreign key to `adrs.id`.
-- `componentId: UUID` — foreign key to the existing diagram component identity.
-- `createdAt: timestamp` — audit metadata.
+| Field | Type | Rules |
+|---|---|---|
+| `adrId` | UUID | Foreign key to `adrs.id`; part of the composite primary key. |
+| `componentId` | UUID | Foreign key to `components.id`; part of the composite primary key. |
+| `createdAt` | timestamp | Server-managed link creation time. |
 
-Primary key is `(adrId, componentId)` to prevent duplicate links. The service verifies that the component
-exists and belongs to the ADR's diagram before insert. Missing or cross-diagram links are rejected;
-unlinked ADRs are valid and represented by an empty collection.
+The composite primary key `(adrId, componentId)` prevents duplicate links. Link replacement is
+atomic: validate every requested component belongs to the ADR's diagram, then replace the complete
+set. An empty set is valid and is represented as an explicitly unlinked ADR.
 
 ## Existing related entities
 
-`Diagram` owns `Component` records. Component rename and position updates do not change `component.id`.
-Relationships continue to reference component IDs. Component deletion is rejected when links exist and
-returns the blocking ADR IDs/titles so the user can remove affected links explicitly before retrying.
+`Diagram` owns `Component` records. Component `id` remains stable through rename and reposition, so
+ADR links never store names, React Flow node IDs, or positions. Relationships continue to reference
+component IDs independently of ADR links.
 
-## State and invariants
+## Reference and deletion invariants
 
-1. Draft edits may exist locally without a saved server record; only validated records are persisted.
-2. Create/update/link/unlink operations preserve `adrs.id` and all unrelated links.
-3. Save failures leave the local draft intact with `unsaved`/`error` state and a retry command.
-4. Deletes require UI confirmation and server-side dependency checks.
+1. A draft may exist locally without a saved server record; only a validated ADR is persisted.
+2. Every persisted ADR belongs to an existing diagram.
+3. Every component link belongs to an existing component in the ADR's diagram.
+4. A superseded ADR references a different persisted ADR in the same diagram.
+5. An ADR cannot be deleted while another ADR references it as `replacementAdrId`; the response
+   identifies each blocking ADR so references can be repaired or removed explicitly.
+6. A component cannot be deleted while any ADR links to it; the response identifies blocking ADRs.
+7. Create/update/link/unlink operations preserve stable IDs and unrelated links.
+8. Save failures leave the local draft intact with `unsaved`/`failed` state and a retry action.
+9. UI deletion requires confirmation; server-side dependency checks remain authoritative.
+
+## State transitions
+
+`status` has no restricted transition graph: `draft`, `accepted`, `superseded`, and `rejected` may
+transition to any supported status. The invariant is conditional: entering `superseded` requires a
+valid replacement; leaving `superseded` may clear the replacement reference in the same validated
+update. Replacement cycles are not prohibited by the feature unless later requirements add that rule.
