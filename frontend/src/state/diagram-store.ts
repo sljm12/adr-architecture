@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { DiagramDocument, DiagramSummary } from '../../../../shared/src/index';
+import type { DiagramDocument, DiagramSummary } from '../../../shared/src/index';
 import { diagramClient } from '../api/diagram-client';
 import { BoundedHistory } from './history';
 

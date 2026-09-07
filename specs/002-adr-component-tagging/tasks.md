@@ -14,9 +14,9 @@ testing and the project constitution requires artifact-boundary coverage.
 **Purpose**: Prepare fixtures, documentation, and test seams for the existing shared/backend/
 frontend/e2e structure.
 
-- [ ] T001 [P] Add representative ADR and component fixtures with stable UUIDs in `shared/tests/adr-fixtures.ts`, including complete, incomplete, superseded, linked, unlinked, and cross-diagram cases
-- [ ] T002 [P] Document applying `backend/drizzle/0002_adrs.sql` and configuring `DATABASE_URL` in `README.md` and `backend/.env.example`
-- [ ] T003 [P] Add ADR-specific API and browser test constants/helpers in `backend/tests/fixtures.ts` and `e2e/tests/adr-fixtures.ts`
+- [X] T001 [P] Add representative ADR and component fixtures with stable UUIDs in `shared/tests/adr-fixtures.ts`, including complete, incomplete, superseded, linked, unlinked, and cross-diagram cases
+- [X] T002 [P] Document applying `backend/drizzle/0002_adrs.sql` and configuring `DATABASE_URL` in `README.md` and `backend/.env.example`
+- [X] T003 [P] Add ADR-specific API and browser test constants/helpers in `backend/tests/fixtures.ts` and `e2e/tests/adr-fixtures.ts`
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
@@ -25,16 +25,16 @@ user story.
 
 **CRITICAL**: Complete this phase before starting user-story implementation.
 
-- [ ] T004 Add `AdrStatus`, `ArchitectureDecisionRecord`, `ComponentReference`, ADR summary, and API payload types in `shared/src/domain/types.ts` without coupling them to React Flow
-- [ ] T005 Add ADR create/update/detail/summary/link Zod schemas and field-level validation helpers in `shared/src/validation/schemas.ts`, including required text, UUID, unique-link, and status/replacement validation
-- [ ] T006 Add shared ADR invariants in `shared/src/domain/invariants.ts` for stable IDs, required fields, superseded replacement rules, same-diagram ownership, and valid zero-to-many links
-- [ ] T007 Export the new ADR types, schemas, and invariants from `shared/src/index.ts`
-- [ ] T008 [P] Add failing-then-passing unit coverage for ADR schema and invariant behavior in `shared/tests/adr-domain.test.ts` and `shared/tests/adr-validation.test.ts`
-- [ ] T009 Create additive PostgreSQL migration `backend/drizzle/0002_adrs.sql` for the ADR status enum, `adrs` table, `adr_component_links` table, indexes, and non-cascading foreign keys
-- [ ] T010 Extend `backend/src/persistence/schema.ts` with Drizzle definitions for `adrs`, `adr_component_links`, and the ADR status enum, preserving existing diagram/component schema
-- [ ] T011 Define typed ADR repository interfaces and shared dependency-conflict result shapes in `backend/src/persistence/adr-repository.ts` for in-memory tests and PostgreSQL implementation
-- [ ] T012 Extend `backend/src/api/errors.ts` with consistent 404, 409 dependency-blocker, and 422 validation response mapping that preserves actionable fields and blocking ADR IDs/titles
-- [ ] T013 Add migration/schema compatibility assertions for the new tables without changing existing diagram artifact identities in `backend/tests/compatibility.test.ts`
+- [X] T004 Add `AdrStatus`, `ArchitectureDecisionRecord`, `ComponentReference`, ADR summary, and API payload types in `shared/src/domain/types.ts` without coupling them to React Flow
+- [X] T005 Add ADR create/update/detail/summary/link Zod schemas and field-level validation helpers in `shared/src/validation/schemas.ts`, including required text, UUID, unique-link, and status/replacement validation
+- [X] T006 Add shared ADR invariants in `shared/src/domain/invariants.ts` for stable IDs, required fields, superseded replacement rules, same-diagram ownership, and valid zero-to-many links
+- [X] T007 Export the new ADR types, schemas, and invariants from `shared/src/index.ts`
+- [X] T008 [P] Add failing-then-passing unit coverage for ADR schema and invariant behavior in `shared/tests/adr-domain.test.ts` and `shared/tests/adr-validation.test.ts`
+- [X] T009 Create additive PostgreSQL migration `backend/drizzle/0002_adrs.sql` for the ADR status enum, `adrs` table, `adr_component_links` table, indexes, and non-cascading foreign keys
+- [X] T010 Extend `backend/src/persistence/schema.ts` with Drizzle definitions for `adrs`, `adr_component_links`, and the ADR status enum, preserving existing diagram/component schema
+- [X] T011 Define typed ADR repository interfaces and shared dependency-conflict result shapes in `backend/src/persistence/adr-repository.ts` for in-memory tests and PostgreSQL implementation
+- [X] T012 Extend `backend/src/api/errors.ts` with consistent 404, 409 dependency-blocker, and 422 validation response mapping that preserves actionable fields and blocking ADR IDs/titles
+- [X] T013 Add migration/schema compatibility assertions for the new tables without changing existing diagram artifact identities in `backend/tests/compatibility.test.ts`
 
 ## Phase 3: User Story 1 - Record an Architecture Decision (Priority: P1) 🎯 MVP
 
@@ -47,25 +47,25 @@ the backend unavailable to verify actionable validation and draft preservation.
 
 ### Tests for User Story 1
 
-- [ ] T014 [P] [US1] Add shared persistence-shape tests for complete, incomplete, long, punctuated, and non-Latin ADR content in `shared/tests/adr-domain.test.ts`
-- [ ] T015 [P] [US1] Add ADR CRUD contract tests for list/create/get/patch validation and response shapes in `backend/tests/contract/adrs.test.ts` using `specs/002-adr-component-tagging/contracts/openapi.yaml`
-- [ ] T016 [P] [US1] Add in-memory and PostgreSQL repository tests for stable ADR UUIDs, server timestamps, save/reopen, duplicate titles, and long text in `backend/tests/persistence/adr-repository.test.ts`
-- [ ] T017 [P] [US1] Add Zustand draft/history/save/retry tests for required-field validation, unsaved state, failed save retention, retry, and stale response protection in `frontend/tests/adr-store.test.ts`
-- [ ] T018 [P] [US1] Add component tests for required labels, field errors, status feedback, keyboard submission, and saved/reopened content in `frontend/tests/adr-editor.test.tsx`
-- [ ] T019 [US1] Add the create, validate, save, reopen, and backend-failure-retry journey in `e2e/tests/adr-component-tagging.spec.ts`
+- [X] T014 [P] [US1] Add shared persistence-shape tests for complete, incomplete, long, punctuated, and non-Latin ADR content in `shared/tests/adr-domain.test.ts`
+- [X] T015 [P] [US1] Add ADR CRUD contract tests for list/create/get/patch validation and response shapes in `backend/tests/contract/adrs.test.ts` using `specs/002-adr-component-tagging/contracts/openapi.yaml`
+- [X] T016 [P] [US1] Add in-memory and PostgreSQL repository tests for stable ADR UUIDs, server timestamps, save/reopen, duplicate titles, and long text in `backend/tests/persistence/adr-repository.test.ts`
+- [X] T017 [P] [US1] Add Zustand draft/history/save/retry tests for required-field validation, unsaved state, failed save retention, retry, and stale response protection in `frontend/tests/adr-store.test.ts`
+- [X] T018 [P] [US1] Add component tests for required labels, field errors, status feedback, keyboard submission, and saved/reopened content in `frontend/tests/adr-editor.test.tsx`
+- [X] T019 [US1] Add the create, validate, save, reopen, and backend-failure-retry journey in `e2e/tests/adr-component-tagging.spec.ts`
 
 ### Implementation for User Story 1
 
-- [ ] T020 [US1] Implement ADR create/get/list/update/delete-independent read/write persistence mapping in `backend/src/persistence/adr-repository.ts`, preserving server-managed timestamps and stable IDs
-- [ ] T021 [US1] Implement required-field validation, ADR creation/update, same-diagram ownership lookup, and server timestamp behavior in `backend/src/services/adr-service.ts`
-- [ ] T022 [US1] Implement list/create/get/patch ADR routes with 404/422 handling in `backend/src/api/adr-routes.ts` according to the OpenAPI contract
-- [ ] T023 [US1] Register ADR routes and service dependencies in `backend/src/api/app.ts` without changing existing diagram or Mermaid endpoints
-- [ ] T024 [US1] Implement ADR REST calls and structured `DiagramApiError`-compatible error parsing in `frontend/src/api/adr-client.ts`
-- [ ] T025 [US1] Implement ADR selection, create/edit draft state, explicit undo/redo history, save status, failed-save retention, retry, and stale-response protection in `frontend/src/state/adr-store.ts`
-- [ ] T026 [US1] Build the required-field ADR form with optional alternatives/constraints and accessible inline validation in `frontend/src/components/AdrEditor.tsx`
-- [ ] T027 [US1] Build the ADR list showing title, status, updated time, stable selection identity, and an empty state in `frontend/src/components/AdrList.tsx`
-- [ ] T028 [US1] Integrate Decisions navigation, list, editor, save status, and unsaved-change protection into `frontend/src/components/DiagramWorkspace.tsx`, `frontend/src/components/DiagramToolbar.tsx`, and `frontend/src/components/WorkspaceInspector.tsx`
-- [ ] T029 [US1] Add ADR-specific visual states and responsive layout using existing DESIGN.md typography, Action Blue controls, focus outlines, contrast, and 44px targets in `frontend/src/styles.css`
+- [X] T020 [US1] Implement ADR create/get/list/update/delete-independent read/write persistence mapping in `backend/src/persistence/adr-repository.ts`, preserving server-managed timestamps and stable IDs
+- [X] T021 [US1] Implement required-field validation, ADR creation/update, same-diagram ownership lookup, and server timestamp behavior in `backend/src/services/adr-service.ts`
+- [X] T022 [US1] Implement list/create/get/patch ADR routes with 404/422 handling in `backend/src/api/adr-routes.ts` according to the OpenAPI contract
+- [X] T023 [US1] Register ADR routes and service dependencies in `backend/src/api/app.ts` without changing existing diagram or Mermaid endpoints
+- [X] T024 [US1] Implement ADR REST calls and structured `DiagramApiError`-compatible error parsing in `frontend/src/api/adr-client.ts`
+- [X] T025 [US1] Implement ADR selection, create/edit draft state, explicit undo/redo history, save status, failed-save retention, retry, and stale-response protection in `frontend/src/state/adr-store.ts`
+- [X] T026 [US1] Build the required-field ADR form with optional alternatives/constraints and accessible inline validation in `frontend/src/components/AdrEditor.tsx`
+- [X] T027 [US1] Build the ADR list showing title, status, updated time, stable selection identity, and an empty state in `frontend/src/components/AdrList.tsx`
+- [X] T028 [US1] Integrate Decisions navigation, list, editor, save status, and unsaved-change protection into `frontend/src/components/DiagramWorkspace.tsx`, `frontend/src/components/DiagramToolbar.tsx`, and `frontend/src/components/WorkspaceInspector.tsx`
+- [X] T029 [US1] Add ADR-specific visual states and responsive layout using existing DESIGN.md typography, Action Blue controls, focus outlines, contrast, and 44px targets in `frontend/src/styles.css`
 
 **Checkpoint**: US1 is independently usable when a user can create, validate, save, reopen, edit,
 and retry an ADR without losing local content.

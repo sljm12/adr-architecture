@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { DiagramRepository } from '../src/persistence/diagram-repository';
 import type { DiagramDocument } from '../../shared/src/domain/types';
 
@@ -16,5 +17,13 @@ describe('backend ADR link compatibility', () => {
     const resolved = repository.get(document.id)?.components.find(component => component.id === link.componentId);
     expect(resolved?.name).toBe('Public API');
     expect(resolved?.id).toBe(link.componentId);
+  });
+
+  it('keeps the additive ADR migration and schema boundaries explicit', () => {
+    const migration = readFileSync(new URL('../drizzle/0002_adrs.sql', import.meta.url), 'utf8');
+    expect(migration).toContain('CREATE TABLE adrs');
+    expect(migration).toContain('CREATE TABLE adr_component_links');
+    expect(migration).toContain('PRIMARY KEY (adr_id, component_id)');
+    expect(migration).not.toContain('ON DELETE CASCADE');
   });
 });

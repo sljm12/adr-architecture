@@ -3,11 +3,12 @@ import { config } from './config';
 import { createDatabase } from './persistence/database';
 import { buildApp } from './api/app';
 import { PostgresDiagramRepository } from './persistence/diagram-repository';
+import { PostgresAdrRepository } from './persistence/adr-repository';
 
 export function createServer(env: NodeJS.ProcessEnv = process.env) {
   const settings = config(env);
   const database = createDatabase(settings.databaseUrl);
-  const app = buildApp(new PostgresDiagramRepository(database.db));
+  const app = buildApp(new PostgresDiagramRepository(database.db), new PostgresAdrRepository(database.db));
   return { app, database, settings };
 }
 

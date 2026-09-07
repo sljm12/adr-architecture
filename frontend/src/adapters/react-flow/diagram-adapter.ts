@@ -1,4 +1,4 @@
-import type { DiagramDocument, Position } from '../../../../shared/src/index'; import type { Edge, Node } from '@xyflow/react';
+import type { DiagramDocument, Position } from '../../../shared/src/index'; import type { Edge, Node } from '@xyflow/react';
 export type HandleSide='top'|'right'|'bottom'|'left';
 export type RelationshipRouting={pairOffset:number;sourceFanOffset:number;targetFanOffset:number};
 type Relationship=DiagramDocument['relationships'][number];
