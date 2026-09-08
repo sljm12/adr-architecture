@@ -44,35 +44,46 @@ and confirm that the content, status, and timestamps are preserved.
 
 ---
 
-### User Story 2 - Optionally link an ADR to diagram components (Priority: P1)
+### User Story 2 - Optionally link an ADR to diagram components and relationships (Priority: P1)
 
-An architecture practitioner links an ADR to one or more specific components in a software
-architecture diagram when the decision directly affects those components, while retaining the
-option to keep the ADR unlinked when its scope is broader or not yet known.
+An architecture practitioner links an ADR to one or more specific components and/or relationships
+in a software architecture diagram when the decision directly affects those artifacts, while
+retaining the option to keep the ADR unlinked when its scope is broader or not yet known.
 
-**Why this priority**: Component references make decisions explainable in architectural context,
-while optional linking supports cross-cutting, exploratory, and platform-level decisions.
+**Why this priority**: Component and relationship references make decisions explainable in
+architectural context, while optional linking supports cross-cutting, exploratory, and
+platform-level decisions.
 
-**Independent Test**: Create an ADR, attach it to one component and then multiple components,
-save and reopen it, and verify the references; view each linked component and verify its ADR
-references; also save an ADR with no component references.
+**Independent Test**: Create an ADR, attach it to one component, one relationship, and then
+multiple components and relationships, save and reopen it, and verify the references; view each
+linked artifact and verify its ADR references; also save an ADR with no component or relationship
+references.
 
 **Acceptance Scenarios**:
 
 1. **Given** an ADR and an existing diagram, **When** the user selects one or more components to
    tag, **Then** the ADR shows those component names as linked references.
-2. **Given** an ADR with component references, **When** the user removes one reference and saves,
-   **Then** the remaining references are preserved and the removed reference is no longer shown.
-3. **Given** an ADR with no component references, **When** the user saves and reopens it,
-   **Then** the ADR remains valid and is clearly identified as unlinked rather than requiring a
-   component selection.
-4. **Given** a component referenced by an ADR is renamed or repositioned, **When** the user views
-   the ADR, **Then** the reference still resolves to the same component.
-5. **Given** a component has one or more linked ADRs, **When** the user views that component,
-   **Then** the component view shows each linked ADR by title and status and provides a way to
-   open the corresponding ADR.
-6. **Given** a component has no linked ADRs, **When** the user views that component, **Then** the
-   component view clearly indicates that no ADRs are linked without treating the state as an error.
+2. **Given** an ADR and an existing diagram, **When** the user selects one or more relationships to
+   tag, **Then** the ADR shows those relationship references with enough endpoint or label
+   information to distinguish each relationship.
+3. **Given** an ADR, **When** the user selects both components and relationships, **Then** the ADR
+   preserves and displays both sets of links together.
+4. **Given** an ADR with component or relationship references, **When** the user removes one
+   reference and saves, **Then** the remaining references are preserved and the removed reference
+   is no longer shown.
+5. **Given** an ADR with no component or relationship references, **When** the user saves and
+   reopens it, **Then** the ADR remains valid and is clearly identified as unlinked rather than
+   requiring an artifact selection.
+6. **Given** a linked component or relationship is renamed, repositioned, or otherwise edited,
+   **When** the user views the ADR, **Then** the reference still resolves to the same artifact.
+7. **Given** a component or relationship has one or more linked ADRs, **When** the user views that
+   artifact, **Then** its view shows each linked ADR by title and status and provides a way to open
+   the corresponding ADR.
+8. **Given** a component or relationship has no linked ADRs, **When** the user views that artifact,
+   **Then** its view clearly indicates that no ADRs are linked without treating the state as an
+   error.
+9. **Given** an ADR displays a linked component or relationship, **When** the user chooses that
+   reference, **Then** the corresponding artifact is selected or focused in the active diagram.
 
 ---
 
@@ -99,25 +110,33 @@ superseded, and verify that the original remains discoverable with its status an
 
 ### Edge Cases
 
-- An ADR may be intentionally unlinked from all components; it MUST remain valid and discoverable.
+- An ADR may be intentionally unlinked from all components and relationships; it MUST remain valid
+  and discoverable.
 - A referenced component may be deleted; the system MUST identify the affected ADR reference and
   require an explicit repair or removal rather than silently dropping the link.
+- A referenced relationship may be deleted; the system MUST identify the affected ADR reference
+  and require an explicit repair or removal rather than silently dropping the link.
 - A referenced component may be renamed or moved; the ADR link MUST continue to resolve by stable
   component identity.
-- Attempting to link an ADR to a component from a different diagram or to a missing component
-  MUST be rejected with an actionable message.
+- A referenced relationship may be relabeled or have its visual representation edited; the ADR
+  link MUST continue to resolve by stable relationship identity.
+- Attempting to link an ADR to a component or relationship from a different diagram or to a missing
+  artifact MUST be rejected with an actionable message.
+- Removing a component that would also remove relationships linked to ADRs MUST identify all
+  affected ADR links and require them to be repaired or explicitly removed before the component
+  removal proceeds.
 - Two ADRs may have similar or identical titles; each MUST remain distinguishable by stable
   identity and visible metadata.
 - Content containing punctuation, non-Latin characters, or long text MUST remain readable and
   persist without truncation.
-- Changing an ADR status or deleting an ADR MUST not silently remove its component references or
-  history.
+- Changing an ADR status or deleting an ADR MUST not silently remove its component or relationship
+  references or history.
 - An ADR referenced as the replacement for another ADR MUST NOT be deleted until those replacement
   references are repaired or explicitly removed.
 - If saving an ADR fails because the backend is unavailable, the system MUST preserve the user's
   edits, clearly identify the ADR as unsaved, and provide a retry action.
-- A diagram component with ADR links MUST NOT be deleted until all affected ADR links are repaired
-  or explicitly removed.
+- A diagram component or relationship with ADR links MUST NOT be deleted until all affected ADR
+  links are repaired or explicitly removed.
 
 ## Requirements *(mandatory)*
 
@@ -136,19 +155,21 @@ superseded, and verify that the original remains discoverable with its status an
   rejected. Status changes MAY move between any supported statuses, but an ADR marked superseded
   MUST reference its replacement ADR.
 - **FR-006**: The system MUST allow a user to associate an ADR with zero, one, or multiple
-  specific components in an existing software architecture diagram.
-- **FR-007**: Component associations MUST reference stable component identities rather than names
-  or visual positions, so links remain valid after component renaming or repositioning.
-- **FR-008**: The system MUST prevent an ADR from being linked to a missing component or a
-  component outside the selected diagram and MUST report the validation failure clearly.
-- **FR-009**: The system MUST show an ADR's linked components and provide a way to navigate from
-  the ADR to each linked component when the component is available.
-- **FR-010**: The system MUST show whether an ADR has no component links without treating the
-  absence of links as an error.
-- **FR-011**: When a linked component is deleted, the system MUST surface the affected ADR links
-  and require the user to repair or remove those links explicitly.
+  specific components and/or relationships in an existing software architecture diagram.
+- **FR-007**: Component and relationship associations MUST reference stable artifact identities
+  rather than names, labels, or visual positions, so links remain valid after an artifact is
+  renamed, relabeled, repositioned, or otherwise visually edited.
+- **FR-008**: The system MUST prevent an ADR from being linked to a missing component or
+  relationship, or to an artifact outside the selected diagram, and MUST report the validation
+  failure clearly.
+- **FR-009**: The system MUST show an ADR's linked components and relationships and provide a way
+  to navigate from the ADR to each linked artifact when it is available.
+- **FR-010**: The system MUST show whether an ADR has no component or relationship links without
+  treating the absence of links as an error.
+- **FR-011**: When a linked component or relationship is deleted, the system MUST surface the
+  affected ADR links and require the user to repair or remove those links explicitly.
 - **FR-012**: The system MUST preserve ADR content, status, timestamps, stable identity, and
-  component associations when the ADR is saved and reopened.
+  component and relationship associations when the ADR is saved and reopened.
 - **FR-013**: The system MUST keep superseded and rejected ADRs discoverable and visibly labeled
   rather than silently deleting them.
 - **FR-014**: The system MUST require clear confirmation before deleting an ADR and MUST provide
@@ -169,43 +190,61 @@ superseded, and verify that the original remains discoverable with its status an
   the user to search for it again.
 - **FR-021**: When a component has no linked ADRs, the system MUST show a clear no-linked-ADRs
   state that is distinct from an error or unavailable-data state.
+- **FR-022**: When a user views a diagram relationship, the system MUST show all ADRs linked to
+  that relationship, including each ADR's title and current status.
+- **FR-023**: The relationship view MUST provide a way to open each displayed ADR without requiring
+  the user to search for it again.
+- **FR-024**: When a relationship has no linked ADRs, the system MUST show a clear no-linked-ADRs
+  state that is distinct from an error or unavailable-data state.
+- **FR-025**: The system MUST prevent deletion of a diagram relationship with ADR links until
+  each affected link is repaired or explicitly removed, and MUST identify the blocking ADRs to the
+  user.
+- **FR-026**: The system MUST identify ADR links to relationships that would be removed as a
+  consequence of component deletion and MUST require those links to be repaired or explicitly
+  removed before the component deletion proceeds.
 
 ### Key Entities *(include if feature involves data)*
 
 - **Architecture Decision Record (ADR)**: A first-class architecture artifact containing a stable
   identity, title, context, decision, consequences, alternatives or constraints, lifecycle status,
-  timestamps, zero or more component references, and a replacement ADR reference when its status is
-  superseded.
+  timestamps, zero or more component and relationship references, and a replacement ADR reference
+  when its status is superseded.
 - **Component Reference**: A link from an ADR to a specific diagram component identified by the
   component's stable identity, with enough information to show and navigate to the component.
+- **Relationship Reference**: A link from an ADR to a specific diagram relationship identified by
+  the relationship's stable identity, with enough endpoint or label information to show and navigate
+  to the relationship.
 - **Component ADR Summary**: The set of linked ADR titles and statuses shown when a user views a
   diagram component, with access to open each referenced ADR.
+- **Relationship ADR Summary**: The set of linked ADR titles and statuses shown when a user views a
+  diagram relationship, with access to open each referenced ADR.
 - **ADR Status**: The lifecycle state of an ADR: draft, accepted, superseded, or rejected.
-- **Diagram**: The existing software architecture artifact that owns the components eligible for
-  ADR references.
+- **Diagram**: The existing software architecture artifact that owns the components and
+  relationships eligible for ADR references.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: A new user can create and save a complete ADR with no component links in under 3
+- **SC-001**: A new user can create and save a complete ADR with no component or relationship links in under 3
   minutes without external instructions.
 - **SC-002**: At least 95% of valid ADR save-and-reopen acceptance tests preserve all required
-  content, status, timestamps, stable identity, and component references.
+  content, status, timestamps, stable identity, and component or relationship references.
 - **SC-003**: At least 95% of tested ADRs can be linked to zero, one, or multiple valid diagram
-  components with the displayed references matching the selected components.
-- **SC-004**: At least 95% of tested component renames and repositioning operations leave existing
-  ADR references resolvable to the same components.
-- **SC-005**: 100% of tested missing-component or cross-diagram link attempts provide an actionable
+  components and/or relationships with the displayed references matching the selected artifacts.
+- **SC-004**: At least 95% of tested component and relationship edits leave existing ADR references
+  resolvable to the same artifacts.
+- **SC-005**: 100% of tested missing-artifact or cross-diagram link attempts provide an actionable
   validation message and do not create a broken reference.
 - **SC-006**: At least 90% of representative users complete the create, optionally link, save,
   reopen, and review workflow on their first attempt.
-- **SC-007**: Users can determine an ADR's status, component-link state, and save outcome within
-  3 seconds of opening or completing the relevant action.
+- **SC-007**: Users can determine an ADR's status, component-or-relationship-link state, and save
+  outcome within 3 seconds of opening or completing the relevant action.
 - **SC-008**: In 100% of tested backend-save failures, the user's edits remain available for retry,
   the ADR is visibly marked unsaved, and no completed-save state is falsely reported.
-- **SC-009**: In 100% of tested component-deletion attempts involving ADR links, deletion is blocked
-  until the affected links are repaired or explicitly removed, and the blocking ADRs are identified.
+- **SC-009**: In 100% of tested component- or relationship-deletion attempts involving ADR links,
+  deletion is blocked until the affected links are repaired or explicitly removed, and the blocking
+  ADRs are identified.
 - **SC-010**: In 100% of tested ADR save attempts, records missing a title, context, decision, or
   consequences are rejected with an actionable message, while records omitting alternatives or
   constraints can be saved when the other required fields are complete.
@@ -213,16 +252,20 @@ superseded, and verify that the original remains discoverable with its status an
   current status, and each displayed ADR can be opened directly.
 - **SC-012**: In 100% of tested component views with no linked ADRs, the user sees a clear
   no-linked-ADRs state rather than an empty or ambiguous panel.
+- **SC-013**: In 100% of tested relationship views, every linked ADR is shown with its title and
+  current status, each displayed ADR can be opened directly, and an unlinked relationship shows a
+  distinct no-linked-ADRs state.
 
 ## Assumptions
 
 - The first release targets individual users working with one active diagram at a time; shared
   real-time editing and permission management are out of scope.
-- An ADR can be created before its related diagram components are known, and component tagging is
-  optional rather than a save prerequisite.
+- An ADR can be created before its related diagram components or relationships are known, and
+  artifact linking is optional rather than a save prerequisite.
 - The existing diagram model provides stable component identities and retains them through normal
-  rename and reposition operations.
+  rename and reposition operations, and provides stable relationship identities through normal
+  label, endpoint, and visual edits.
 - ADR import, export, templates, and bulk editing are out of scope unless added by a later feature.
-- Component ADR summaries are shown for the currently viewed component in the active diagram;
-  cross-diagram search and a separate ADR reporting view are out of scope.
+- Component and relationship ADR summaries are shown for the currently viewed artifact in the
+  active diagram; cross-diagram search and a separate ADR reporting view are out of scope.
 - ADR data and history follow the project's existing storage, privacy, and recovery policies.
