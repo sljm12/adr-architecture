@@ -27,4 +27,29 @@ describe('ADR API contract', () => {
     expect(response.statusCode).toBe(422); expect(response.json().fields).toMatchObject({ title: expect.any(String), context: expect.any(String) });
     await app.close();
   });
+
+  it('replaces links, permits unlinking, and rejects missing or cross-diagram components atomically', async () => {
+    const app = buildApp(); await app.ready();
+    const firstDiagram = await app.inject({ method: 'POST', url: '/diagrams', payload: { name: 'Payments' } });
+    const secondDiagram = await app.inject({ method: 'POST', url: '/diagrams', payload: { name: 'Other' } });
+    const first = firstDiagram.json(); const second = secondDiagram.json();
+    const component = { id: '00000000-0000-0000-0000-000000000011', diagramId: first.id, name: 'API', description: null, type: null, position: { x: 0, y: 0 }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' };
+    const otherComponent = { ...component, id: '00000000-0000-0000-0000-000000000012', diagramId: second.id };
+    await app.inject({ method: 'PUT', url: `/diagrams/${first.id}`, payload: { ...first, components: [component], relationships: [] } });
+    await app.inject({ method: 'PUT', url: `/diagrams/${second.id}`, payload: { ...second, components: [otherComponent], relationships: [] } });
+    const created = await app.inject({ method: 'POST', url: `/diagrams/${first.id}/adrs`, payload: completeAdrPayload });
+    const adr = created.json();
+    const linked = await app.inject({ method: 'PUT', url: `/adrs/${adr.id}/components`, payload: { componentIds: [component.id] } });
+    expect(linked.statusCode).toBe(200); expect(linked.json().componentIds).toEqual([component.id]);
+    const invalid = await app.inject({ method: 'PUT', url: `/adrs/${adr.id}/components`, payload: { componentIds: [otherComponent.id] } });
+    expect(invalid.statusCode).toBe(422); expect(invalid.json().fields.componentIds).toContain('different diagram');
+    const stillLinked = await app.inject({ method: 'GET', url: `/adrs/${adr.id}` });
+    expect(stillLinked.json().componentIds).toEqual([component.id]);
+    const missing = await app.inject({ method: 'PUT', url: `/adrs/${adr.id}/components`, payload: { componentIds: ['00000000-0000-0000-0000-000000000099'] } });
+    expect(missing.statusCode).toBe(422); expect(missing.json().fields.componentIds).toContain('missing component');
+    expect((await app.inject({ method: 'GET', url: `/adrs/${adr.id}` })).json().componentIds).toEqual([component.id]);
+    const unlinked = await app.inject({ method: 'PUT', url: `/adrs/${adr.id}/components`, payload: { componentIds: [] } });
+    expect(unlinked.statusCode).toBe(200); expect(unlinked.json().componentIds).toEqual([]);
+    await app.close();
+  });
 });

@@ -1,6 +1,8 @@
 import { useAdrStore, adrStatuses } from '../state/adr-store';
+import type { Component } from '../../../shared/src/index';
+import { AdrLinkPicker } from './AdrLinkPicker';
 
-export function AdrEditor() {
+export function AdrEditor({ components = [], onSelectComponent }: { components?: Component[]; onSelectComponent?: (componentId: string) => void }) {
   const draft = useAdrStore(state => state.draft); const status = useAdrStore(state => state.status); const error = useAdrStore(state => state.error); const fieldErrors = useAdrStore(state => state.fieldErrors); const update = useAdrStore(state => state.update); const save = useAdrStore(state => state.save); const retry = useAdrStore(state => state.retry);
   if (!draft) return <div className="adr-editor-empty"><p>Select a decision or create a new one.</p></div>;
   const field = (name: 'title' | 'context' | 'decision' | 'consequences' | 'alternativesOrConstraints') => ({ value: draft[name] ?? '', onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => update(current => ({ ...current, [name]: event.target.value })) });
@@ -12,6 +14,7 @@ export function AdrEditor() {
     <label htmlFor="adr-alternatives">Alternatives or constraints <span>optional</span><textarea id="adr-alternatives" rows={3} {...field('alternativesOrConstraints')} aria-invalid={Boolean(fieldErrors.alternativesOrConstraints)} /></label>
     <label htmlFor="adr-status">Status<select id="adr-status" value={draft.status} onChange={event => update(current => ({ ...current, status: event.target.value as typeof current.status }))}>{adrStatuses.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
     {fieldErrors.replacementAdrId && <p className="field-error" role="alert">{fieldErrors.replacementAdrId}</p>}
+    <AdrLinkPicker components={components} selectedIds={draft.componentIds} onChange={componentIds => update(current => ({ ...current, componentIds }))} onSelectComponent={onSelectComponent} />
     <div className="adr-editor-actions"><button className="primary-pill" type="submit" disabled={status === 'saving'}>{status === 'failed' && draft.id ? 'Retry save' : 'Save decision'}</button>{status === 'failed' && <button className="secondary-action" type="button" onClick={() => void retry()}>Retry</button>}</div>
   </form>;
 }

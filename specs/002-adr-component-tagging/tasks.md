@@ -81,25 +81,25 @@ missing/cross-diagram links are rejected without mutation.
 
 ### Tests for User Story 2
 
-- [ ] T030 [P] [US2] Add link-schema and stable-component-ID tests for zero-to-many links, duplicate IDs, missing components, renames, and repositioning in `shared/tests/adr-validation.test.ts`
-- [ ] T031 [P] [US2] Add link replacement, ownership, missing-component, cross-diagram, and atomic unlink tests in `backend/tests/persistence/adr-repository.test.ts`
-- [ ] T032 [P] [US2] Add ADR component-link route contract tests for replace-links and error responses in `backend/tests/contract/adrs.test.ts`
-- [ ] T033 [P] [US2] Add component deletion conflict tests proving linked components return blocking ADR IDs/titles and are not deleted in `backend/tests/contract/component-dependencies.test.ts`
-- [ ] T034 [P] [US2] Add link selection, unlinking, unlinked-state, component navigation, and rename/reposition persistence tests in `frontend/tests/adr-linking.test.tsx`
-- [ ] T035 [US2] Add the zero/one/multiple-link, unlink, rename/reposition, and invalid-link journeys in `e2e/tests/adr-component-tagging.spec.ts`
+- [X] T030 [P] [US2] Add link-schema and stable-component-ID tests for zero-to-many links, duplicate IDs, missing components, renames, and repositioning in `shared/tests/adr-validation.test.ts`
+- [X] T031 [P] [US2] Add link replacement, ownership, missing-component, cross-diagram, and atomic unlink tests in `backend/tests/persistence/adr-repository.test.ts`
+- [X] T032 [P] [US2] Add ADR component-link route contract tests for replace-links and error responses in `backend/tests/contract/adrs.test.ts`
+- [X] T033 [P] [US2] Add component deletion conflict tests proving linked components return blocking ADR IDs/titles and are not deleted in `backend/tests/contract/component-dependencies.test.ts`
+- [X] T034 [P] [US2] Add link selection, unlinking, unlinked-state, component navigation, and rename/reposition persistence tests in `frontend/tests/adr-linking.test.tsx`
+- [X] T035 [US2] Add the zero/one/multiple-link, unlink, rename/reposition, and invalid-link journeys in `e2e/tests/adr-component-tagging.spec.ts`
 
 ### Implementation for User Story 2
 
-- [ ] T036 [US2] Implement ADR component-link load/replace operations and atomic link persistence in `backend/src/persistence/adr-repository.ts`
-- [ ] T037 [US2] Implement component ownership validation, missing/cross-diagram diagnostics, link replacement, and linked-component dependency queries in `backend/src/services/adr-service.ts`
-- [ ] T038 [US2] Add the replace-links endpoint `/adrs/{adrId}/components` in `backend/src/api/adr-routes.ts`, returning valid empty links and actionable 422 errors
-- [ ] T039 [US2] Update component deletion service/repository flow in `backend/src/persistence/diagram-repository.ts` and `backend/src/services/diagram-service.ts` to block deletion when ADR links exist and return blocking ADR details
-- [ ] T040 [US2] Extend the component deletion route error mapping in `backend/src/api/diagram-routes.ts` and `backend/src/api/errors.ts` for ADR dependency conflicts
-- [ ] T041 [US2] Implement ADR link/unlink client calls and component-link error parsing in `frontend/src/api/adr-client.ts`
-- [ ] T042 [US2] Add component-link draft actions, zero-link representation, and stable-ID updates to `frontend/src/state/adr-store.ts`
-- [ ] T043 [US2] Build accessible multi-select/search link picker with selected component names and unlink controls in `frontend/src/components/AdrLinkPicker.tsx`
-- [ ] T044 [US2] Add linked-component display and navigation callbacks that select the matching diagram component by UUID in `frontend/src/components/AdrEditor.tsx`, `frontend/src/components/DiagramWorkspace.tsx`, and `frontend/src/components/DiagramCanvas.tsx`
-- [ ] T045 [US2] Add link-picker, chip, empty/unlinked, validation-error, and deletion-conflict styles in `frontend/src/styles.css`
+- [X] T036 [US2] Implement ADR component-link load/replace operations and atomic link persistence in `backend/src/persistence/adr-repository.ts`
+- [X] T037 [US2] Implement component ownership validation, missing/cross-diagram diagnostics, link replacement, and linked-component dependency queries in `backend/src/services/adr-service.ts`
+- [X] T038 [US2] Add the replace-links endpoint `/adrs/{adrId}/components` in `backend/src/api/adr-routes.ts`, returning valid empty links and actionable 422 errors
+- [X] T039 [US2] Update component deletion service/repository flow in `backend/src/persistence/diagram-repository.ts` and `backend/src/services/diagram-service.ts` to block deletion when ADR links exist and return blocking ADR details
+- [X] T040 [US2] Extend the component deletion route error mapping in `backend/src/api/diagram-routes.ts` and `backend/src/api/errors.ts` for ADR dependency conflicts
+- [X] T041 [US2] Implement ADR link/unlink client calls and component-link error parsing in `frontend/src/api/adr-client.ts`
+- [X] T042 [US2] Add component-link draft actions, zero-link representation, and stable-ID updates to `frontend/src/state/adr-store.ts`
+- [X] T043 [US2] Build accessible multi-select/search link picker with selected component names and unlink controls in `frontend/src/components/AdrLinkPicker.tsx`
+- [X] T044 [US2] Add linked-component display and navigation callbacks that select the matching diagram component by UUID in `frontend/src/components/AdrEditor.tsx`, `frontend/src/components/DiagramWorkspace.tsx`, and `frontend/src/components/DiagramCanvas.tsx`
+- [X] T045 [US2] Add link-picker, chip, empty/unlinked, validation-error, and deletion-conflict styles in `frontend/src/styles.css`
 
 **Checkpoint**: US2 is independently usable when an ADR can be saved unlinked or with valid
 component UUID links, and linked component deletion is safely blocked with repair guidance.

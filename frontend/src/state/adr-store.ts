@@ -5,7 +5,7 @@ import { adrClient } from '../api/adr-client';
 import { BoundedHistory } from './history';
 
 export type AdrSaveStatus = 'idle' | 'loading' | 'unsaved' | 'saving' | 'saved' | 'failed';
-export type AdrDraft = AdrWritePayload & { id?: string; diagramId: string; createdAt?: string; updatedAt?: string };
+export type AdrDraft = AdrWritePayload & { id?: string; diagramId: string; componentIds: string[]; createdAt?: string; updatedAt?: string };
 type State = {
   diagramId: string | null;
   records: AdrSummary[];
@@ -20,6 +20,9 @@ type State = {
   startNew: (diagramId?: string) => void;
   open: (record: ArchitectureDecisionRecord) => void;
   update: (fn: (draft: AdrDraft) => AdrDraft) => void;
+  setComponentIds: (componentIds: string[]) => void;
+  addComponentLink: (componentId: string) => void;
+  removeComponentLink: (componentId: string) => void;
   undo: () => void;
   redo: () => void;
   save: () => Promise<boolean>;
@@ -29,10 +32,11 @@ type State = {
 const history = new BoundedHistory<AdrDraft>();
 const copy = (draft: AdrDraft) => structuredClone(draft);
 const historyState = () => ({ canUndo: history.canUndo, canRedo: history.canRedo });
-const emptyDraft = (diagramId: string): AdrDraft => ({ diagramId, title: '', context: '', decision: '', consequences: '', alternativesOrConstraints: null, status: 'draft', replacementAdrId: null });
+const emptyDraft = (diagramId: string): AdrDraft => ({ diagramId, title: '', context: '', decision: '', consequences: '', alternativesOrConstraints: null, status: 'draft', replacementAdrId: null, componentIds: [] });
 const writePayload = (draft: AdrDraft): AdrWritePayload => ({ title: draft.title, context: draft.context, decision: draft.decision, consequences: draft.consequences, alternativesOrConstraints: draft.alternativesOrConstraints ?? null, status: draft.status, replacementAdrId: draft.replacementAdrId ?? null });
 const summary = (record: ArchitectureDecisionRecord): AdrSummary => ({ id: record.id, title: record.title, status: record.status, updatedAt: record.updatedAt, componentCount: record.componentIds.length });
 const replaceSummary = (records: AdrSummary[], next: AdrSummary) => records.some(record => record.id === next.id) ? records.map(record => record.id === next.id ? next : record) : [...records, next];
+const sameIds = (left: string[], right: string[]) => left.length === right.length && left.every((id, index) => id === right[index]);
 
 export const useAdrStore = create<State>((set, get) => ({
   diagramId: null, records: [], draft: null, status: 'idle', error: null, fieldErrors: {}, canUndo: false, canRedo: false,
@@ -41,6 +45,9 @@ export const useAdrStore = create<State>((set, get) => ({
   startNew: diagramId => { const id = diagramId ?? get().diagramId; if (!id) return; const draft = history.reset(emptyDraft(id)); set({ diagramId: id, draft, status: 'idle', error: null, fieldErrors: {}, ...historyState() }); },
   open: record => { const draft = history.reset({ ...record }); set({ diagramId: record.diagramId, draft, status: 'saved', error: null, fieldErrors: {}, ...historyState() }); },
   update: fn => { const current = get().draft; if (!current) return; const draft = history.push(copy(fn(copy(current)))); set({ draft, status: 'unsaved', error: null, fieldErrors: {}, ...historyState() }); },
+  setComponentIds: componentIds => { const unique = [...new Set(componentIds)]; get().update(current => ({ ...current, componentIds: unique })); },
+  addComponentLink: componentId => { const current = get().draft; if (!current || current.componentIds.includes(componentId)) return; get().setComponentIds([...current.componentIds, componentId]); },
+  removeComponentLink: componentId => { const current = get().draft; if (!current || !current.componentIds.includes(componentId)) return; get().setComponentIds(current.componentIds.filter(id => id !== componentId)); },
   undo: () => { const draft = history.undo(); if (draft) set({ draft: copy(draft), status: 'unsaved', error: null, ...historyState() }); },
   redo: () => { const draft = history.redo(); if (draft) set({ draft: copy(draft), status: 'unsaved', error: null, ...historyState() }); },
   save: async () => {
@@ -48,8 +55,20 @@ export const useAdrStore = create<State>((set, get) => ({
     const validation = adrWriteSchema.safeParse(writePayload(draft));
     if (!validation.success) { const fieldErrors = Object.fromEntries(validation.error.issues.map(issue => [issue.path.join('.') || 'form', issue.message])); set({ status: 'failed', error: 'Complete the required ADR fields before saving.', fieldErrors }); return false; }
     const snapshot = draft; set({ status: 'saving', error: null, fieldErrors: {} });
-    try { const saved = snapshot.id ? await adrClient.update(snapshot.id, validation.data) : await adrClient.create(snapshot.diagramId, validation.data); if (get().draft !== snapshot) { set({ status: 'unsaved', error: null }); return false; } history.reset({ ...saved }); set(state => ({ draft: saved, status: 'saved', error: null, fieldErrors: {}, records: replaceSummary(state.records, summary(saved)), ...historyState() })); return true; }
-    catch (error) { if (get().draft === snapshot) set({ status: 'failed', error: error instanceof Error ? error.message : 'Save failed. Your edits are preserved.' }); return false; }
+    let saved: ArchitectureDecisionRecord | null = null;
+    try {
+      saved = snapshot.id ? await adrClient.update(snapshot.id, validation.data) : await adrClient.create(snapshot.diagramId, validation.data);
+      if (!sameIds(snapshot.componentIds, saved.componentIds)) saved = await adrClient.replaceLinks(saved.id, { componentIds: snapshot.componentIds });
+      if (get().draft !== snapshot) { set({ status: 'unsaved', error: null }); return false; }
+      history.reset({ ...saved }); set(state => ({ draft: saved, status: 'saved', error: null, fieldErrors: {}, records: replaceSummary(state.records, summary(saved!)), ...historyState() })); return true;
+    }
+    catch (error) {
+      if (get().draft === snapshot) {
+        const draft = saved && !snapshot.id ? { ...saved, componentIds: snapshot.componentIds } : undefined;
+        set({ ...(draft ? { draft } : {}), status: 'failed', error: error instanceof Error ? error.message : 'Save failed. Your edits are preserved.' });
+      }
+      return false;
+    }
   },
   retry: async () => get().save(),
 }));

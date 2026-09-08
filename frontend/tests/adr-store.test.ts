@@ -25,4 +25,16 @@ describe('ADR draft state', () => {
     useAdrStore.getState().update(draft => ({ ...draft, title: 'Local edit' })); const pending = useAdrStore.getState().save(); useAdrStore.getState().update(draft => ({ ...draft, title: 'Newer local edit' })); await pending;
     expect(useAdrStore.getState().draft?.title).toBe('Newer local edit'); expect(useAdrStore.getState().status).toBe('unsaved');
   });
+
+  it('saves component links through the replace endpoint and preserves an explicit zero-link state', async () => {
+    const componentId = '00000000-0000-0000-0000-000000000403';
+    vi.spyOn(adrClient, 'create').mockResolvedValue({ ...record, id: '00000000-0000-0000-0000-000000000404', componentIds: [] });
+    const replaceLinks = vi.spyOn(adrClient, 'replaceLinks').mockResolvedValue({ ...record, id: '00000000-0000-0000-0000-000000000404', componentIds: [componentId] });
+    useAdrStore.getState().startNew(record.diagramId);
+    useAdrStore.getState().update(draft => ({ ...draft, title: record.title, context: record.context, decision: record.decision, consequences: record.consequences }));
+    useAdrStore.getState().setComponentIds([componentId]);
+    await useAdrStore.getState().save();
+    expect(replaceLinks).toHaveBeenCalledWith('00000000-0000-0000-0000-000000000404', { componentIds: [componentId] });
+    expect(useAdrStore.getState().draft?.componentIds).toEqual([componentId]);
+  });
 });

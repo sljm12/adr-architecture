@@ -21,4 +21,23 @@ describe('ADR repository', () => {
     repository.update(original.id, { ...completeAdrPayload, status: 'rejected', replacementAdrId: null });
     expect(repository.delete(replacement.id)).toEqual({ deleted: true });
   });
+
+  it('replaces zero-to-many links without changing the ADR identity', () => {
+    const repository = new AdrRepository();
+    repository.registerComponent({ id: '00000000-0000-0000-0000-000000000002', diagramId: '00000000-0000-0000-0000-000000000001', name: 'API' });
+    repository.registerComponent({ id: '00000000-0000-0000-0000-000000000003', diagramId: '00000000-0000-0000-0000-000000000001', name: 'Database' });
+    const adr = repository.create('00000000-0000-0000-0000-000000000001', completeAdrPayload);
+    const linked = repository.replaceLinks(adr.id, ['00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000003']);
+    expect(linked).toMatchObject({ id: adr.id, componentIds: ['00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000003'] });
+    const unlinked = repository.replaceLinks(adr.id, []);
+    expect(unlinked).toMatchObject({ id: adr.id, componentIds: [] });
+    expect(unlinked?.createdAt).toBe(adr.createdAt);
+  });
+
+  it('reports every ADR linked to a component for deletion guards', () => {
+    const repository = new AdrRepository();
+    const adr = repository.create('00000000-0000-0000-0000-000000000001', completeAdrPayload);
+    repository.replaceLinks(adr.id, ['00000000-0000-0000-0000-000000000002']);
+    expect(repository.componentBlockers('00000000-0000-0000-0000-000000000002')).toEqual([expect.objectContaining({ adrId: adr.id, title: adr.title })]);
+  });
 });
