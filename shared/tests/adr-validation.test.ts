@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { adrComponentsWriteSchema, adrWriteSchema, architectureDecisionRecordSchema, assertAdrComponentOwnership } from '../src/index';
+import { adrComponentsWriteSchema, adrWriteSchema, architectureDecisionRecordSchema, assertAdrComponentOwnership, componentAdrSummaryListSchema } from '../src/index';
 import { adrComponentFixtures, completeAdrFixture } from './adr-fixtures';
 
 describe('ADR validation schemas', () => {
@@ -31,5 +31,13 @@ describe('ADR validation schemas', () => {
     const renamed = { ...adrComponentFixtures[0], name: 'Renamed gateway', position: { x: 640, y: 280 } };
     expect(adr.componentIds).toEqual([renamed.id]);
     expect(() => assertAdrComponentOwnership(adr, [renamed])).not.toThrow();
+  });
+
+  it('validates component-scoped summaries without losing stable identity or metadata', () => {
+    const summary = { id: completeAdrFixture().id, title: completeAdrFixture().title, status: 'accepted', updatedAt: '2026-01-02T00:00:00.000Z' };
+    expect(componentAdrSummaryListSchema.parse([summary])).toEqual([summary]);
+    expect(componentAdrSummaryListSchema.parse([])).toEqual([]);
+    expect(componentAdrSummaryListSchema.safeParse([{ ...summary, id: 'not-a-uuid' }]).success).toBe(false);
+    expect(componentAdrSummaryListSchema.safeParse([{ ...summary, status: 'unknown' }]).success).toBe(false);
   });
 });

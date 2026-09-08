@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { AdrStatus, AdrSummary, AdrWritePayload, ArchitectureDecisionRecord } from '../../../shared/src/index';
+import type { AdrStatus, AdrSummary, AdrWritePayload, ArchitectureDecisionRecord, ComponentAdrSummary } from '../../../shared/src/index';
 import { adrWriteSchema } from '../../../shared/src/index';
 import { adrClient } from '../api/adr-client';
 import { BoundedHistory } from './history';
@@ -13,6 +13,10 @@ type State = {
   status: AdrSaveStatus;
   error: string | null;
   fieldErrors: Record<string, string>;
+  componentSummaries: ComponentAdrSummary[];
+  componentSummaryComponentId: string | null;
+  componentSummaryStatus: 'idle' | 'loading' | 'loaded' | 'failed';
+  componentSummaryError: string | null;
   canUndo: boolean;
   canRedo: boolean;
   load: (diagramId: string) => Promise<void>;
@@ -27,6 +31,7 @@ type State = {
   redo: () => void;
   save: () => Promise<boolean>;
   retry: () => Promise<boolean>;
+  loadComponentSummary: (diagramId: string, componentId: string) => Promise<void>;
 };
 
 const history = new BoundedHistory<AdrDraft>();
@@ -39,8 +44,8 @@ const replaceSummary = (records: AdrSummary[], next: AdrSummary) => records.some
 const sameIds = (left: string[], right: string[]) => left.length === right.length && left.every((id, index) => id === right[index]);
 
 export const useAdrStore = create<State>((set, get) => ({
-  diagramId: null, records: [], draft: null, status: 'idle', error: null, fieldErrors: {}, canUndo: false, canRedo: false,
-  load: async diagramId => { set({ diagramId, status: 'loading', error: null }); try { const records = await adrClient.list(diagramId); set({ records, status: 'idle', draft: null, fieldErrors: {}, ...historyState() }); } catch (error) { set({ status: 'failed', error: error instanceof Error ? error.message : 'Could not load ADRs.' }); } },
+  diagramId: null, records: [], draft: null, status: 'idle', error: null, fieldErrors: {}, componentSummaries: [], componentSummaryComponentId: null, componentSummaryStatus: 'idle', componentSummaryError: null, canUndo: false, canRedo: false,
+  load: async diagramId => { set({ diagramId, status: 'loading', error: null }); try { const records = await adrClient.list(diagramId); set(state => { const keepDraft = state.draft?.diagramId === diagramId; return { records, status: keepDraft ? state.status : 'idle', draft: keepDraft ? state.draft : null, fieldErrors: keepDraft ? state.fieldErrors : {}, ...historyState() }; }); } catch (error) { set({ status: 'failed', error: error instanceof Error ? error.message : 'Could not load ADRs.' }); } },
   select: async id => { set({ status: 'loading', error: null }); try { const record = await adrClient.get(id); const draft = history.reset({ ...record }); set({ draft, diagramId: record.diagramId, status: 'saved', error: null, fieldErrors: {}, ...historyState() }); } catch (error) { set({ status: 'failed', error: error instanceof Error ? error.message : 'Could not load ADR.' }); } },
   startNew: diagramId => { const id = diagramId ?? get().diagramId; if (!id) return; const draft = history.reset(emptyDraft(id)); set({ diagramId: id, draft, status: 'idle', error: null, fieldErrors: {}, ...historyState() }); },
   open: record => { const draft = history.reset({ ...record }); set({ diagramId: record.diagramId, draft, status: 'saved', error: null, fieldErrors: {}, ...historyState() }); },
@@ -71,6 +76,17 @@ export const useAdrStore = create<State>((set, get) => ({
     }
   },
   retry: async () => get().save(),
+  loadComponentSummary: async (diagramId, componentId) => {
+    set({ componentSummaries: [], componentSummaryComponentId: componentId, componentSummaryStatus: 'loading', componentSummaryError: null });
+    try {
+      const summaries = await adrClient.componentSummaries(diagramId, componentId);
+      if (get().componentSummaryComponentId !== componentId) return;
+      set({ componentSummaries: summaries, componentSummaryStatus: 'loaded', componentSummaryError: null });
+    } catch (error) {
+      if (get().componentSummaryComponentId !== componentId) return;
+      set({ componentSummaryStatus: 'failed', componentSummaryError: error instanceof Error ? error.message : 'Could not load linked ADRs.' });
+    }
+  },
 }));
 
 export const adrDraftPayload = writePayload;

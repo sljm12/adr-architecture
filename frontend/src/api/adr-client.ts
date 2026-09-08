@@ -1,4 +1,5 @@
-import type { AdrComponentsWritePayload, AdrSummary, ArchitectureDecisionRecord, AdrWritePayload } from '../../../shared/src/index';
+import type { AdrComponentsWritePayload, AdrSummary, ArchitectureDecisionRecord, AdrWritePayload, ComponentAdrSummary } from '../../../shared/src/index';
+import { componentAdrSummaryListSchema } from '../../../shared/src/index';
 import { DiagramApiError } from './diagram-client';
 
 export class AdrApiError extends DiagramApiError { constructor(message: string, status: number, details: Record<string, unknown> = {}) { super(message, status, details); this.name = 'AdrApiError'; } }
@@ -10,5 +11,6 @@ export const adrClient = {
   create: (diagramId: string, payload: AdrWritePayload) => fetch(`/api/diagrams/${diagramId}/adrs`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) }).then(json) as Promise<ArchitectureDecisionRecord>,
   update: (id: string, payload: AdrWritePayload) => fetch(`/api/adrs/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) }).then(json) as Promise<ArchitectureDecisionRecord>,
   replaceLinks: (id: string, payload: AdrComponentsWritePayload) => fetch(`/api/adrs/${id}/components`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) }).then(json) as Promise<ArchitectureDecisionRecord>,
+  componentSummaries: async (diagramId: string, componentId: string): Promise<ComponentAdrSummary[]> => componentAdrSummaryListSchema.parse(await fetch(`/api/diagrams/${diagramId}/components/${componentId}/adrs`).then(json)),
   remove: async (id: string) => { const response = await fetch(`/api/adrs/${id}`, { method: 'DELETE' }); if (!response.ok) { const body = await response.json().catch(() => ({})); throw new AdrApiError(body.message ?? 'Could not delete ADR', response.status, body); } },
 };

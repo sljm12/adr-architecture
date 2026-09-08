@@ -89,27 +89,27 @@ components to verify titles/statuses, direct opening, and the explicit no-linked
 - [X] T033 [P] [US2] Add component deletion conflict tests proving linked components return blocking ADR IDs/titles and are not deleted in `backend/tests/contract/component-dependencies.test.ts`
 - [X] T034 [P] [US2] Add link selection, unlinking, unlinked-state, component navigation, and rename/reposition persistence tests in `frontend/tests/adr-linking.test.tsx`
 - [X] T035 [US2] Add the zero/one/multiple-link, unlink, rename/reposition, and invalid-link journeys in `e2e/tests/adr-component-tagging.spec.ts`
-- [ ] T036 [P] [US2] Add component-scoped ADR summary tests for linked, empty, stable-ID, title/status, and update-time responses in `shared/tests/adr-validation.test.ts`
-- [ ] T037 [P] [US2] Add reverse component-to-ADR repository tests for same-diagram ownership, all linked summaries, deterministic ordering, and an empty result in `backend/tests/persistence/adr-repository.test.ts`
-- [ ] T038 [P] [US2] Add `GET /diagrams/{diagramId}/components/{componentId}/adrs` contract tests for linked summaries, empty arrays, and missing diagram/component errors in `backend/tests/contract/adrs.test.ts`
-- [ ] T039 [P] [US2] Add selected-component ADR summary tests for title/status rendering, direct open actions, loading/error feedback, and the distinct no-linked-ADRs state in `frontend/tests/component-adr-summary.test.tsx`
-- [ ] T040 [US2] Add linked-component and unlinked-component summary journeys, including direct ADR opening, to `e2e/tests/adr-component-tagging.spec.ts`
+- [X] T036 [P] [US2] Add component-scoped ADR summary tests for linked, empty, stable-ID, title/status, and update-time responses in `shared/tests/adr-validation.test.ts`
+- [X] T037 [P] [US2] Add reverse component-to-ADR repository tests for same-diagram ownership, all linked summaries, deterministic ordering, and an empty result in `backend/tests/persistence/adr-repository.test.ts`
+- [X] T038 [P] [US2] Add `GET /diagrams/{diagramId}/components/{componentId}/adrs` contract tests for linked summaries, empty arrays, and missing diagram/component errors in `backend/tests/contract/adrs.test.ts`
+- [X] T039 [P] [US2] Add selected-component ADR summary tests for title/status rendering, direct open actions, loading/error feedback, and the distinct no-linked-ADRs state in `frontend/tests/component-adr-summary.test.tsx`
+- [X] T040 [US2] Add linked-component and unlinked-component summary journeys, including direct ADR opening, to `e2e/tests/adr-component-tagging.spec.ts`
 
 ### Implementation for User Story 2
 
-- [ ] T041 [US2] Add the `ComponentAdrSummary` read-model type and response validation in `shared/src/domain/types.ts`, `shared/src/validation/schemas.ts`, and `shared/src/index.ts`
-- [ ] T042 [US2] Extend `backend/src/persistence/adr-repository.ts` with the reverse component-summary query while preserving existing atomic ADR component-link persistence
-- [ ] T043 [US2] Extend `backend/src/services/adr-service.ts` with component-summary lookup and same-diagram component ownership checks while preserving existing link validation and dependency queries
-- [ ] T044 [US2] Extend the existing replace-links route and add `GET /diagrams/{diagramId}/components/{componentId}/adrs` in `backend/src/api/adr-routes.ts`, returning valid empty summaries and actionable 404/422 errors
+- [X] T041 [US2] Add the `ComponentAdrSummary` read-model type and response validation in `shared/src/domain/types.ts`, `shared/src/validation/schemas.ts`, and `shared/src/index.ts`
+- [X] T042 [US2] Extend `backend/src/persistence/adr-repository.ts` with the reverse component-summary query while preserving existing atomic ADR component-link persistence
+- [X] T043 [US2] Extend `backend/src/services/adr-service.ts` with component-summary lookup and same-diagram component ownership checks while preserving existing link validation and dependency queries
+- [X] T044 [US2] Extend the existing replace-links route and add `GET /diagrams/{diagramId}/components/{componentId}/adrs` in `backend/src/api/adr-routes.ts`, returning valid empty summaries and actionable 404/422 errors
 - [X] T045 [US2] Update component deletion service/repository flow in `backend/src/persistence/diagram-repository.ts` and `backend/src/services/diagram-service.ts` to block deletion when ADR links exist and return blocking ADR details
 - [X] T046 [US2] Extend the component deletion route error mapping in `backend/src/api/diagram-routes.ts` and `backend/src/api/errors.ts` for ADR dependency conflicts
-- [ ] T047 [US2] Extend `frontend/src/api/adr-client.ts` with the component-summary call and structured 404/error parsing while preserving existing ADR link/unlink calls
+- [X] T047 [US2] Extend `frontend/src/api/adr-client.ts` with the component-summary call and structured 404/error parsing while preserving existing ADR link/unlink calls
 - [X] T048 [US2] Add component-link draft actions, zero-link representation, and stable-ID updates to `frontend/src/state/adr-store.ts`
 - [X] T049 [US2] Build accessible multi-select/search link picker with selected component names and unlink controls in `frontend/src/components/AdrLinkPicker.tsx`
 - [X] T050 [US2] Add linked-component display and navigation callbacks that select the matching diagram component by UUID in `frontend/src/components/AdrEditor.tsx`, `frontend/src/components/DiagramWorkspace.tsx`, and `frontend/src/components/DiagramCanvas.tsx`
-- [ ] T051 [US2] Build the selected-component ADR summary with title/status rows, direct ADR opening, loading/error feedback, and the explicit no-linked-ADRs state in `frontend/src/components/ComponentAdrSummary.tsx` and `frontend/src/components/WorkspaceInspector.tsx`
-- [ ] T052 [US2] Connect component selection, summary loading, and direct ADR selection between `frontend/src/components/DiagramWorkspace.tsx`, `frontend/src/components/WorkspaceInspector.tsx`, and `frontend/src/state/adr-store.ts`
-- [ ] T053 [US2] Extend existing link-picker, chip, empty/unlinked, validation-error, and deletion-conflict styles in `frontend/src/styles.css` with component-summary styles consistent with `DESIGN.md`
+- [X] T051 [US2] Build the selected-component ADR summary with title/status rows, direct ADR opening, loading/error feedback, and the explicit no-linked-ADRs state in `frontend/src/components/ComponentAdrSummary.tsx` and `frontend/src/components/WorkspaceInspector.tsx`
+- [X] T052 [US2] Connect component selection, summary loading, and direct ADR selection between `frontend/src/components/DiagramWorkspace.tsx`, `frontend/src/components/WorkspaceInspector.tsx`, and `frontend/src/state/adr-store.ts`
+- [X] T053 [US2] Extend existing link-picker, chip, empty/unlinked, validation-error, and deletion-conflict styles in `frontend/src/styles.css` with component-summary styles consistent with `DESIGN.md`
 
 **Checkpoint**: US2 is independently usable when an ADR can be saved unlinked or with valid
 component UUID links, linked component deletion is safely blocked with repair guidance, and a

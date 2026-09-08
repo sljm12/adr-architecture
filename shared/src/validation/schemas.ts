@@ -54,6 +54,13 @@ export const adrSummarySchema = z.object({
 });
 
 export const adrSummaryListSchema = z.array(adrSummarySchema);
+export const componentAdrSummarySchema = z.object({
+  id: uuidSchema,
+  title: requiredAdrText('Title'),
+  status: adrStatusSchema,
+  updatedAt: z.string().datetime({ offset: true }),
+});
+export const componentAdrSummaryListSchema = z.array(componentAdrSummarySchema);
 export const adrListPathSchema = z.object({ diagramId: uuidSchema });
 export const adrPathSchema = z.object({ adrId: uuidSchema });
 export const adrApiErrorSchema = z.object({ message: z.string(), fields: z.record(z.string()).optional(), blockers: z.array(z.object({ adrId: uuidSchema, title: z.string(), reason: z.string() })).optional() });

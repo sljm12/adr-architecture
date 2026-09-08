@@ -1,10 +1,11 @@
-import { assertAdrComponentOwnership, assertAdrReplacement, adrComponentsWriteSchema, adrWriteSchema, type AdrComponentsWritePayload, type AdrWritePayload, type ArchitectureDecisionRecord, type AdrSummary, type Component } from '../../../shared/src/index';
+import { assertAdrComponentOwnership, assertAdrReplacement, adrComponentsWriteSchema, adrWriteSchema, type AdrComponentsWritePayload, type AdrWritePayload, type ArchitectureDecisionRecord, type AdrSummary, type Component, type ComponentAdrSummary } from '../../../shared/src/index';
 import type { AdrRepositoryLike } from '../persistence/adr-repository';
 import type { DiagramRepositoryLike, MaybePromise } from '../persistence/diagram-repository';
 import { ApiValidationError, DependencyConflictError } from '../api/errors';
 
 export class AdrNotFoundError extends Error {}
 export class AdrDiagramNotFoundError extends Error {}
+export class AdrComponentNotFoundError extends Error {}
 export class AdrDependencyConflictError extends DependencyConflictError {}
 
 export class AdrService {
@@ -43,6 +44,14 @@ export class AdrService {
       const message = external && external.diagramId !== adr.diagramId ? `Component ${invalidId} belongs to a different diagram` : error instanceof Error ? error.message : 'Component link is invalid';
       throw new ApiValidationError({ componentIds: message });
     }
+  }
+
+  async componentSummaries(diagramId: string, componentId: string): Promise<ComponentAdrSummary[]> {
+    const diagram = await this.diagram(diagramId);
+    if (!diagram.components.some(component => component.id === componentId)) throw new AdrComponentNotFoundError('Component not found');
+    const summaries = await this.adrs.listByComponent(diagramId, componentId);
+    if (!summaries) throw new AdrComponentNotFoundError('Component not found');
+    return summaries;
   }
   private async validateReplacement(input: AdrWritePayload, diagramId: string, currentId?: string) { if (!input.replacementAdrId) return; if (input.replacementAdrId === currentId) throw new Error('An ADR cannot replace itself'); const replacement = await this.adrs.get(input.replacementAdrId); assertAdrReplacement({ id: currentId ?? crypto.randomUUID(), diagramId, ...input, componentIds: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), alternativesOrConstraints: input.alternativesOrConstraints ?? null, replacementAdrId: input.replacementAdrId ?? null }, replacement); }
   private async linkOwnership(adr: ArchitectureDecisionRecord) { const diagram = await this.diagram(adr.diagramId); assertAdrComponentOwnership(adr, diagram.components); return adr; }

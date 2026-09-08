@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AdrRepository } from '../../src/persistence/adr-repository';
 import { completeAdrPayload } from '../fixtures';
+import { adrFixtureIds, completeAdrFixture } from '../../../shared/tests/adr-fixtures';
 
 describe('ADR repository', () => {
   it('preserves a stable ID, server timestamps, duplicate titles, and long text', () => {
@@ -39,5 +40,22 @@ describe('ADR repository', () => {
     const adr = repository.create('00000000-0000-0000-0000-000000000001', completeAdrPayload);
     repository.replaceLinks(adr.id, ['00000000-0000-0000-0000-000000000002']);
     expect(repository.componentBlockers('00000000-0000-0000-0000-000000000002')).toEqual([expect.objectContaining({ adrId: adr.id, title: adr.title })]);
+  });
+
+  it('returns deterministic reverse component summaries and an empty result for an unlinked component', () => {
+    const repository = new AdrRepository();
+    repository.registerComponent({ id: adrFixtureIds.componentA, diagramId: adrFixtureIds.diagram, name: 'API' });
+    repository.registerComponent({ id: adrFixtureIds.componentB, diagramId: adrFixtureIds.diagram, name: 'Database' });
+    repository.registerComponent({ id: adrFixtureIds.otherComponent, diagramId: adrFixtureIds.otherDiagram, name: 'Other' });
+    const older = completeAdrFixture({ id: adrFixtureIds.adr, componentIds: [adrFixtureIds.componentA], updatedAt: '2026-01-01T00:00:00.000Z' });
+    const newer = completeAdrFixture({ id: adrFixtureIds.replacementAdr, title: 'Use a queue', componentIds: [adrFixtureIds.componentA], updatedAt: '2026-01-02T00:00:00.000Z' });
+    repository.registerAdr(older); repository.registerAdr(newer);
+
+    expect(repository.listByComponent(adrFixtureIds.diagram, adrFixtureIds.componentA)).toEqual([
+      expect.objectContaining({ id: older.id, title: older.title, status: older.status, updatedAt: older.updatedAt }),
+      expect.objectContaining({ id: newer.id, title: newer.title, status: newer.status, updatedAt: newer.updatedAt }),
+    ]);
+    expect(repository.listByComponent(adrFixtureIds.diagram, adrFixtureIds.componentB)).toEqual([]);
+    expect(repository.listByComponent(adrFixtureIds.diagram, adrFixtureIds.otherComponent)).toBeUndefined();
   });
 });
