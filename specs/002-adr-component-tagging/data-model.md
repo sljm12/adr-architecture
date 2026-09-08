@@ -33,6 +33,20 @@ The composite primary key `(adrId, componentId)` prevents duplicate links. Link 
 atomic: validate every requested component belongs to the ADR's diagram, then replace the complete
 set. An empty set is valid and is represented as an explicitly unlinked ADR.
 
+## ComponentAdrSummary (read model)
+
+| Field | Type | Rules |
+|---|---|---|
+| `id` | UUID | Stable ADR identity; direct navigation target. |
+| `title` | string | Current ADR title. |
+| `status` | `draft \| accepted \| superseded \| rejected` | Current ADR lifecycle status. |
+| `updatedAt` | timestamp | Last successful ADR mutation. |
+
+For a valid component in the active diagram, the component-scoped ADR summary returns every linked
+ADR exactly once, ordered consistently with the ADR list. A valid component with no links returns an
+empty collection, which the UI presents as a no-linked-ADRs state rather than an error. The summary
+is derived from `adr_component_links` and `adrs`; it is not persisted as a second copy.
+
 ## Existing related entities
 
 `Diagram` owns `Component` records. Component `id` remains stable through rename and reposition, so
@@ -51,6 +65,8 @@ component IDs independently of ADR links.
 7. Create/update/link/unlink operations preserve stable IDs and unrelated links.
 8. Save failures leave the local draft intact with `unsaved`/`failed` state and a retry action.
 9. UI deletion requires confirmation; server-side dependency checks remain authoritative.
+10. Component summary reads are scoped to the active diagram and component identity; they expose
+    only linked ADR metadata and preserve the stable ADR ID needed to open the full record.
 
 ## State transitions
 

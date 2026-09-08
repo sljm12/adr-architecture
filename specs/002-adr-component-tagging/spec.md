@@ -54,7 +54,8 @@ option to keep the ADR unlinked when its scope is broader or not yet known.
 while optional linking supports cross-cutting, exploratory, and platform-level decisions.
 
 **Independent Test**: Create an ADR, attach it to one component and then multiple components,
-save and reopen it, and verify the references; also save an ADR with no component references.
+save and reopen it, and verify the references; view each linked component and verify its ADR
+references; also save an ADR with no component references.
 
 **Acceptance Scenarios**:
 
@@ -67,6 +68,11 @@ save and reopen it, and verify the references; also save an ADR with no componen
    component selection.
 4. **Given** a component referenced by an ADR is renamed or repositioned, **When** the user views
    the ADR, **Then** the reference still resolves to the same component.
+5. **Given** a component has one or more linked ADRs, **When** the user views that component,
+   **Then** the component view shows each linked ADR by title and status and provides a way to
+   open the corresponding ADR.
+6. **Given** a component has no linked ADRs, **When** the user views that component, **Then** the
+   component view clearly indicates that no ADRs are linked without treating the state as an error.
 
 ---
 
@@ -157,6 +163,12 @@ superseded, and verify that the original remains discoverable with its status an
   the user's edits, clearly identify the ADR as unsaved, and provide a retry action.
 - **FR-018**: The system MUST prevent deletion of a diagram component with ADR links until each
   affected link is repaired or explicitly removed, and MUST identify the blocking ADRs to the user.
+- **FR-019**: When a user views a diagram component, the system MUST show all ADRs linked to that
+  component, including each ADR's title and current status.
+- **FR-020**: The component view MUST provide a way to open each displayed ADR without requiring
+  the user to search for it again.
+- **FR-021**: When a component has no linked ADRs, the system MUST show a clear no-linked-ADRs
+  state that is distinct from an error or unavailable-data state.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -166,6 +178,8 @@ superseded, and verify that the original remains discoverable with its status an
   superseded.
 - **Component Reference**: A link from an ADR to a specific diagram component identified by the
   component's stable identity, with enough information to show and navigate to the component.
+- **Component ADR Summary**: The set of linked ADR titles and statuses shown when a user views a
+  diagram component, with access to open each referenced ADR.
 - **ADR Status**: The lifecycle state of an ADR: draft, accepted, superseded, or rejected.
 - **Diagram**: The existing software architecture artifact that owns the components eligible for
   ADR references.
@@ -195,6 +209,10 @@ superseded, and verify that the original remains discoverable with its status an
 - **SC-010**: In 100% of tested ADR save attempts, records missing a title, context, decision, or
   consequences are rejected with an actionable message, while records omitting alternatives or
   constraints can be saved when the other required fields are complete.
+- **SC-011**: In 100% of tested component views, every linked ADR is shown with its title and
+  current status, and each displayed ADR can be opened directly.
+- **SC-012**: In 100% of tested component views with no linked ADRs, the user sees a clear
+  no-linked-ADRs state rather than an empty or ambiguous panel.
 
 ## Assumptions
 
@@ -205,4 +223,6 @@ superseded, and verify that the original remains discoverable with its status an
 - The existing diagram model provides stable component identities and retains them through normal
   rename and reposition operations.
 - ADR import, export, templates, and bulk editing are out of scope unless added by a later feature.
+- Component ADR summaries are shown for the currently viewed component in the active diagram;
+  cross-diagram search and a separate ADR reporting view are out of scope.
 - ADR data and history follow the project's existing storage, privacy, and recovery policies.

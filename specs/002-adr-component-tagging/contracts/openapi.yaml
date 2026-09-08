@@ -108,6 +108,26 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /diagrams/{diagramId}/components/{componentId}/adrs:
+    get:
+      summary: List ADR summaries linked to a diagram component
+      parameters:
+        - $ref: '#/components/parameters/DiagramId'
+        - name: componentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Linked ADR summaries; an empty array is valid when no ADRs are linked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComponentAdrSummaryList'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /diagrams/{diagramId}/components/{componentId}:
     delete:
       summary: Delete a component only after ADR links are repaired
@@ -242,6 +262,25 @@ components:
           componentCount:
             type: integer
             minimum: 0
+    ComponentAdrSummaryList:
+      type: array
+      items:
+        $ref: '#/components/schemas/ComponentAdrSummary'
+    ComponentAdrSummary:
+      type: object
+      required: [id, title, status, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        status:
+          type: string
+          enum: [draft, accepted, superseded, rejected]
+        updatedAt:
+          type: string
+          format: date-time
     Error:
       type: object
       required: [message]

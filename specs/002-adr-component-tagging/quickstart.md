@@ -31,16 +31,20 @@ entities/invariants are defined in [data-model.md](./data-model.md).
 3. Link an ADR to zero, one, and multiple components. Verify names are shown, links use component
    UUIDs, and unlinking one preserves the remaining links.
 4. Rename and reposition a linked component. Reopen the ADR and verify the same component resolves.
-5. Attempt a missing-component and cross-diagram link. Verify a 422-style actionable error and no
+5. View a component with linked ADRs. Verify every linked ADR appears with its title and current
+   status, and activate each summary to open the corresponding ADR without searching.
+6. View a component with no linked ADRs. Verify the component view shows a clear no-linked-ADRs
+   state that is distinct from an error or unavailable-data state.
+7. Attempt a missing-component and cross-diagram link. Verify a 422-style actionable error and no
    broken link.
-6. Mark an ADR superseded without a replacement; verify rejection. Select a same-diagram replacement;
+8. Mark an ADR superseded without a replacement; verify rejection. Select a same-diagram replacement;
    verify the original remains discoverable with its replacement reference.
-7. Attempt to delete a replacement target and a linked component. Verify deletion is blocked and
+9. Attempt to delete a replacement target and a linked component. Verify deletion is blocked and
    blocking ADR IDs/titles are identified. Repair or explicitly remove links, retry, and verify clear
    success feedback.
-8. Attempt to delete an ADR from the UI. Verify confirmation is required and success/failure feedback
+10. Attempt to delete an ADR from the UI. Verify confirmation is required and success/failure feedback
    is visible.
-9. Simulate API unavailability during save. Verify edits remain visible, the ADR is marked unsaved/
+11. Simulate API unavailability during save. Verify edits remain visible, the ADR is marked unsaved/
    failed, and retry succeeds after the backend returns.
-10. Navigate create, edit, link, status, save, retry, and delete flows by keyboard; verify labels,
-    focus order, 44px targets, contrast, and accessible status announcements.
+12. Navigate create, edit, link, status, component-summary, save, retry, and delete flows by keyboard; verify labels,
+   focus order, 44px targets, contrast, and accessible status announcements.

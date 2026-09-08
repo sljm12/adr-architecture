@@ -81,3 +81,16 @@ baseline.
 
 **Alternatives considered:** A separate ADR application or a new visual language was rejected because
 it fragments navigation and increases first-release complexity.
+
+## Decision: Provide a component-scoped ADR summary read model
+
+**Rationale:** The updated requirements make the relationship navigable in both directions. A
+component view needs a focused list of linked ADR IDs, titles, statuses, and update times, while
+the existing ADR detail response already supports opening the selected record. A component-scoped
+read endpoint can derive this summary from `adr_component_links` and `adrs`, preserving one source
+of truth for links and returning an empty list for a valid component with no linked ADRs.
+
+**Alternatives considered:** Loading every ADR for the diagram and filtering in the browser was
+rejected because it over-fetches data and makes component ownership/error handling less explicit.
+Duplicating ADR summaries inside component records was rejected because it would create stale,
+second-copy metadata and complicate link updates.
