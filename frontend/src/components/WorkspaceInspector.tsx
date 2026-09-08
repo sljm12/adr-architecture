@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useDiagramStore } from '../state/diagram-store';
 import { RecoveryControls } from './RecoveryControls';
 import type { InspectorMode } from './DiagramToolbar';
+import { AdrList } from './AdrList';
+import { AdrEditor } from './AdrEditor';
 
 export type CanvasSelection = { kind: 'component' | 'relationship'; id: string } | null;
 
@@ -12,8 +14,12 @@ export function WorkspaceInspector({ mode, selection, onClose }: { mode: Inspect
   if (!document) return <aside className="workspace-inspector" aria-label="Diagram inspector"><div className="inspector-header"><div><span className="eyebrow">Start here</span><h2>Create a diagram</h2></div></div><form className="inspector-form" onSubmit={createDiagram}><label htmlFor="diagram-name">Diagram name</label><input id="diagram-name" value={name} onChange={event => setName(event.target.value)} placeholder="e.g. Payments platform" autoComplete="off" autoFocus /><button className="primary-pill" type="submit" disabled={!name.trim()}>Create diagram</button></form></aside>;
   const add = (event: React.FormEvent) => { event.preventDefault(); addComponent(name); setName(''); onClose(); };
   const connect = (event: React.FormEvent) => { event.preventDefault(); addRelationship(source, target, label, direction); setLabel(''); onClose(); };
-  return <aside className="workspace-inspector" aria-label="Diagram inspector"><div className="inspector-header"><div><span className="eyebrow">Inspector</span><h2>{mode === 'component' ? 'Add component' : mode === 'relationship' ? 'Connect components' : 'Details'}</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Close inspector">×</button></div>
+  const heading = mode === 'component' ? 'Add component' : mode === 'relationship' ? 'Connect components' : mode === 'adr' ? 'Decisions' : 'Details';
+  const inspectorClassName = `workspace-inspector${mode === 'adr' ? ' workspace-inspector-adr' : ''}`;
+  return <aside className={inspectorClassName} aria-label={mode === 'adr' ? 'ADR workspace' : 'Diagram inspector'}><div className="inspector-header"><div><span className="eyebrow">Inspector</span><h2>{heading}</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Close inspector">×</button></div>
+    {mode === 'adr' && <div className="adr-workspace-body"><AdrList diagramId={document.id} /><AdrEditor /></div>}
     {mode === 'component' && <form className="inspector-form" onSubmit={add}><label htmlFor="component-name">Component name</label><input id="component-name" value={name} onChange={event => setName(event.target.value)} placeholder="e.g. API gateway" autoComplete="off" autoFocus /><button className="primary-pill" type="submit" disabled={!name.trim()}>Add component</button></form>}
     {mode === 'relationship' && <form className="inspector-form" onSubmit={connect}><label htmlFor="relationship-source">From</label><select id="relationship-source" value={source} onChange={event => setSource(event.target.value)}><option value="">Choose a component…</option>{document.components.map(component => <option key={component.id} value={component.id}>{component.name}</option>)}</select><label htmlFor="relationship-target">To</label><select id="relationship-target" value={target} onChange={event => setTarget(event.target.value)}><option value="">Choose a component…</option>{document.components.map(component => <option key={component.id} value={component.id}>{component.name}</option>)}</select><label htmlFor="relationship-label">Label <span>optional</span></label><input id="relationship-label" value={label} onChange={event => setLabel(event.target.value)} placeholder="e.g. sends events" autoComplete="off" /><label htmlFor="relationship-direction">Direction</label><select id="relationship-direction" value={direction} onChange={event => setDirection(event.target.value as 'directed' | 'undirected')}><option value="directed">Directed</option><option value="undirected">Undirected</option></select><button className="primary-pill" type="submit" disabled={!source || !target || source === target}>Connect components</button></form>}
-    {mode === null && <RecoveryControls selection={selection} />}</aside>;
+    {mode === null && <RecoveryControls selection={selection} />}
+  </aside>;
 }

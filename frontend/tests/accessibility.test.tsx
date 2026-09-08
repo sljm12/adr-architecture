@@ -24,10 +24,13 @@ describe('core workflow accessibility contract', () => {
     expect(workspace).toContain('Skip to diagram workspace');
     expect(workspace).toContain('id="diagram-workspace" aria-label="Diagram editor"');
     expect(inspector).toContain('<form className="inspector-form" onSubmit={add}>');
+    expect(inspector).toContain('workspace-inspector-adr');
+    expect(inspector).toContain('adr-workspace-body');
     expect(inspector).toContain('htmlFor="relationship-source"');
     expect(inspector).toContain('htmlFor="relationship-target"');
     expect(inspector).toContain('htmlFor="relationship-direction"');
     expect(workspace).toContain('>New diagram</button>');
+    expect(workspace).toContain('adr-mode');
     expect(workspace).toContain('Discard unsaved changes?');
   });
 

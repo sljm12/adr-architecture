@@ -1,4 +1,4 @@
-import type { DiagramDocument, DiagramSummary } from '../../../../shared/src/index';
+import type { DiagramDocument, DiagramSummary } from '../../../shared/src/index';
 export class DiagramApiError extends Error { constructor(message: string, readonly status: number, readonly details: Record<string, unknown> = {}) { super(message); this.name = 'DiagramApiError'; } }
 const json = async (response: Response) => { const body = await response.json().catch(() => ({})); if (!response.ok) throw new DiagramApiError(body.message ?? 'Request failed', response.status, body); return body; };
 export const diagramClient = {

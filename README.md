@@ -58,3 +58,17 @@ the complete domain document first; invalid content produces an actionable messa
 
 The shared domain model is authoritative. React Flow is only a visual adapter, and Mermaid export
 consumes validated domain data. This keeps component UUIDs stable for future ADR component links.
+# ADR Diagram
+
+## Local database setup
+
+The API uses PostgreSQL. Set `DATABASE_URL` in `backend/.env` (see
+`backend/.env.example`), then apply the migrations in order:
+
+```text
+backend/drizzle/0001_initial.sql
+backend/drizzle/0002_adrs.sql
+```
+
+The second migration adds Architecture Decision Records and their component links. It is
+additive and preserves existing diagram/component UUIDs.
