@@ -11,6 +11,7 @@ export interface DiagramRepositoryLike {
   list(): MaybePromise<DiagramDocument[]>;
   listTrash(): MaybePromise<DiagramDocument[]>;
   get(id: string): MaybePromise<DiagramDocument | undefined>;
+  findComponent(id: string): MaybePromise<{ id: string; diagramId: string; name: string } | undefined>;
   create(document: DiagramDocument): MaybePromise<DiagramDocument>;
   replace(document: DiagramDocument): MaybePromise<DiagramDocument | undefined>;
   removeComponent(diagramId: string, componentId: string): MaybePromise<RemoveComponentResult | undefined>;
@@ -31,6 +32,7 @@ export class DiagramRepository implements DiagramRepositoryLike {
   list() { return [...this.documents.values()].filter(d => d.status === 'active').map(clone); }
   listTrash() { return [...this.documents.values()].filter(d => d.status === 'trashed').map(clone); }
   get(id: string) { const document = this.documents.get(id); return document && clone(document); }
+  findComponent(id: string) { for (const document of this.documents.values()) { const component = document.components.find(item => item.id === id); if (component) return { id: component.id, diagramId: component.diagramId, name: component.name }; } return undefined; }
   create(document: DiagramDocument) { this.documents.set(document.id, clone(document)); return clone(document); }
   replace(document: DiagramDocument) { this.documents.set(document.id, clone(document)); return clone(document); }
 
@@ -133,6 +135,8 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
   }
 
   async get(id: string): Promise<DiagramDocument | undefined> { return this.load(id); }
+
+  async findComponent(id: string) { const [component] = await this.db.select({ id: schema.components.id, diagramId: schema.components.diagramId, name: schema.components.name }).from(schema.components).where(eq(schema.components.id, id)).limit(1); return component; }
 
   async create(document: DiagramDocument): Promise<DiagramDocument> {
     validatePersistableDocument(document);

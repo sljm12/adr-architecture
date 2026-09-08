@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AdrRepository } from '../../src/persistence/adr-repository';
 import { completeAdrPayload } from '../fixtures';
+import { adrFixtureIds, completeAdrFixture } from '../../../shared/tests/adr-fixtures';
 
 describe('ADR repository', () => {
   it('preserves a stable ID, server timestamps, duplicate titles, and long text', () => {
@@ -20,5 +21,41 @@ describe('ADR repository', () => {
     expect(blocked).toMatchObject({ deleted: false, blockers: [expect.objectContaining({ adrId: original.id })] });
     repository.update(original.id, { ...completeAdrPayload, status: 'rejected', replacementAdrId: null });
     expect(repository.delete(replacement.id)).toEqual({ deleted: true });
+  });
+
+  it('replaces zero-to-many links without changing the ADR identity', () => {
+    const repository = new AdrRepository();
+    repository.registerComponent({ id: '00000000-0000-0000-0000-000000000002', diagramId: '00000000-0000-0000-0000-000000000001', name: 'API' });
+    repository.registerComponent({ id: '00000000-0000-0000-0000-000000000003', diagramId: '00000000-0000-0000-0000-000000000001', name: 'Database' });
+    const adr = repository.create('00000000-0000-0000-0000-000000000001', completeAdrPayload);
+    const linked = repository.replaceLinks(adr.id, ['00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000003']);
+    expect(linked).toMatchObject({ id: adr.id, componentIds: ['00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000003'] });
+    const unlinked = repository.replaceLinks(adr.id, []);
+    expect(unlinked).toMatchObject({ id: adr.id, componentIds: [] });
+    expect(unlinked?.createdAt).toBe(adr.createdAt);
+  });
+
+  it('reports every ADR linked to a component for deletion guards', () => {
+    const repository = new AdrRepository();
+    const adr = repository.create('00000000-0000-0000-0000-000000000001', completeAdrPayload);
+    repository.replaceLinks(adr.id, ['00000000-0000-0000-0000-000000000002']);
+    expect(repository.componentBlockers('00000000-0000-0000-0000-000000000002')).toEqual([expect.objectContaining({ adrId: adr.id, title: adr.title })]);
+  });
+
+  it('returns deterministic reverse component summaries and an empty result for an unlinked component', () => {
+    const repository = new AdrRepository();
+    repository.registerComponent({ id: adrFixtureIds.componentA, diagramId: adrFixtureIds.diagram, name: 'API' });
+    repository.registerComponent({ id: adrFixtureIds.componentB, diagramId: adrFixtureIds.diagram, name: 'Database' });
+    repository.registerComponent({ id: adrFixtureIds.otherComponent, diagramId: adrFixtureIds.otherDiagram, name: 'Other' });
+    const older = completeAdrFixture({ id: adrFixtureIds.adr, componentIds: [adrFixtureIds.componentA], updatedAt: '2026-01-01T00:00:00.000Z' });
+    const newer = completeAdrFixture({ id: adrFixtureIds.replacementAdr, title: 'Use a queue', componentIds: [adrFixtureIds.componentA], updatedAt: '2026-01-02T00:00:00.000Z' });
+    repository.registerAdr(older); repository.registerAdr(newer);
+
+    expect(repository.listByComponent(adrFixtureIds.diagram, adrFixtureIds.componentA)).toEqual([
+      expect.objectContaining({ id: older.id, title: older.title, status: older.status, updatedAt: older.updatedAt }),
+      expect.objectContaining({ id: newer.id, title: newer.title, status: newer.status, updatedAt: newer.updatedAt }),
+    ]);
+    expect(repository.listByComponent(adrFixtureIds.diagram, adrFixtureIds.componentB)).toEqual([]);
+    expect(repository.listByComponent(adrFixtureIds.diagram, adrFixtureIds.otherComponent)).toBeUndefined();
   });
 });

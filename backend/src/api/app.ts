@@ -11,7 +11,7 @@ import { AdrService } from '../services/adr-service';
 
 export function buildApp(repository: DiagramRepositoryLike = new DiagramRepository(), adrRepository: AdrRepositoryLike = new AdrRepository()) {
   const app = Fastify({ logger: false });
-  const service = new DiagramService(repository);
+  const service = new DiagramService(repository, adrRepository);
   const adrService = new AdrService(adrRepository, repository);
 
   app.get('/health', async () => ({ ok: true }));

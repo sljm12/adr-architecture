@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { AdrRepositoryLike } from '../persistence/adr-repository';
-import { AdrDiagramNotFoundError, AdrNotFoundError, AdrService } from '../services/adr-service';
+import { AdrComponentNotFoundError, AdrDiagramNotFoundError, AdrNotFoundError, AdrService } from '../services/adr-service';
 import { sendError } from './errors';
 
 export function registerAdrRoutes(app: FastifyInstance, service: AdrService): void {
@@ -19,6 +19,17 @@ export function registerAdrRoutes(app: FastifyInstance, service: AdrService): vo
   app.patch<{ Params: { adrId: string } }>('/adrs/:adrId', async (request, reply) => {
     try { return reply.send(await service.update(request.params.adrId, request.body)); }
     catch (error) { if (error instanceof AdrNotFoundError) return reply.code(404).send({ message: error.message }); return sendError(reply, error); }
+  });
+  app.put<{ Params: { adrId: string } }>('/adrs/:adrId/components', async (request, reply) => {
+    try { return reply.send(await service.replaceLinks(request.params.adrId, request.body)); }
+    catch (error) { if (error instanceof AdrNotFoundError) return reply.code(404).send({ message: error.message }); return sendError(reply, error); }
+  });
+  app.get<{ Params: { diagramId: string; componentId: string } }>('/diagrams/:diagramId/components/:componentId/adrs', async (request, reply) => {
+    try { return reply.send(await service.componentSummaries(request.params.diagramId, request.params.componentId)); }
+    catch (error) {
+      if (error instanceof AdrDiagramNotFoundError || error instanceof AdrComponentNotFoundError) return reply.code(404).send({ message: error.message });
+      return sendError(reply, error);
+    }
   });
   app.delete<{ Params: { adrId: string } }>('/adrs/:adrId', async (request, reply) => {
     try { await service.remove(request.params.adrId); return reply.code(204).send(); }

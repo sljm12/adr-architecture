@@ -1,6 +1,6 @@
 # Implementation Plan: Architecture Decision Records
 
-**Branch**: `002-adr-component-tagging` | **Date**: 2026-09-07 | **Spec**: [spec.md](./spec.md)
+**Branch**: `002-adr-component-tagging` | **Date**: 2026-09-08 | **Spec**: [spec.md](./spec.md)
 
 **Input**: Feature specification from `/specs/002-adr-component-tagging/spec.md`
 
@@ -8,10 +8,13 @@
 
 Add first-class ADR artifacts to the existing diagram workspace. ADR content and lifecycle state
 will live in the framework-independent shared domain, while component tags will reference existing
-component UUIDs through an explicit link table. The Fastify API and PostgreSQL/Drizzle persistence
-will validate ownership and dependency rules transactionally. The React/Vite frontend will add an
-ADR list/detail workflow backed by a Zustand store with explicit undo/redo and a recoverable
-unsaved/failed save state.
+component UUIDs through an explicit link table. The feature will expose the relationship in both
+directions: ADR views can navigate to linked components, and component views can show linked ADR
+titles/statuses with direct navigation, including a distinct no-linked-ADRs state. The Fastify API
+and PostgreSQL/Drizzle persistence will validate ownership and dependency rules transactionally.
+The React/Vite frontend will add an ADR list/detail workflow backed by a Zustand store with explicit
+undo/redo and a recoverable unsaved/failed save state, plus a component ADR summary in the selected
+component view.
 
 ## Technical Context
 
@@ -27,7 +30,7 @@ reuse `diagrams` and `components` as ownership/reference sources. Use an additiv
 
 **Testing**: Vitest for shared types/schemas/invariants, in-memory and PostgreSQL repository rules,
 Fastify contract behavior, and frontend Zustand/client behavior; Playwright for create/edit/link/
-save/reopen/status/deletion-blocking/failure-retry and accessibility workflows.
+save/reopen/status/component-summary/deletion-blocking/failure-retry and accessibility workflows.
 
 **Target Platform**: Modern desktop browser, static Vite frontend, containerized Fastify API, and
 managed PostgreSQL.
@@ -115,30 +118,46 @@ e2e/tests/
 └── adr-component-tagging.spec.ts
 ```
 
+The frontend component-view implementation may be a dedicated `ComponentAdrSummary` component or
+an equivalent extension of the selected-component inspector; it must use the component-scoped ADR
+summary contract and provide direct opening of each returned ADR.
+
 **Structure Decision**: Extend the existing `shared/`, `backend/`, `frontend/`, and `e2e/`
 boundaries. React Flow remains a visual adapter for diagram components; ADRs and component links
 are serialized from shared domain data and are never derived from node positions or display names.
-The backend repository/service is authoritative for cross-entity checks, while the frontend store
-keeps an editable draft until a successful API response replaces it.
+The backend repository/service is authoritative for cross-entity checks, including component-scoped
+ADR summaries, while the frontend store keeps an editable draft until a successful API response
+replaces it. The selected component view reads summary metadata and uses the stable ADR ID to open
+the existing ADR workflow; it does not persist a duplicate summary.
 
 ## Implementation Design
 
-1. **Shared domain and validation**: Add `ArchitectureDecisionRecord`, `ComponentReference`, and
-   `AdrStatus` types. Add create/update/link schemas with trimmed required text, UUID checks,
-   supported statuses, unique component IDs, and the superseded/replacement rule. Keep persisted
-   timestamps server-managed and return field-addressable Zod errors through the existing error shape.
+1. **Shared domain and validation**: Add `ArchitectureDecisionRecord`, `ComponentReference`,
+   `ComponentAdrSummary`, and `AdrStatus` types. Add create/update/link schemas with trimmed
+   required text, UUID checks, supported statuses, unique component IDs, and the
+   superseded/replacement rule. Keep persisted timestamps server-managed and return field-
+   addressable Zod errors through the existing error shape. Define the component summary as a
+   read model containing the ADR UUID, title, current status, and update time; its UUID is the
+   navigation target and its absence is represented by an explicit empty list, not an error.
 2. **Persistence and service rules**: Add the ADR tables and indexes without cascade deletion. The
-   repository loads ADRs with component IDs and summaries; the service verifies diagram ownership,
-   same-diagram replacement, missing/cross-diagram components, duplicate links, and dependency
-   conflicts inside transaction boundaries. Component deletion must query ADR links before deleting.
+   repository loads ADRs with component IDs and summaries and provides a reverse lookup of ADR
+   summaries by component UUID, scoped to the owning diagram. The service verifies diagram and
+   component ownership, same-diagram replacement, missing/cross-diagram components, duplicate
+   links, and dependency conflicts inside transaction boundaries. Component deletion must query ADR
+   links before deleting.
 3. **REST contract**: Add list/create/get/update/delete ADR routes scoped by diagram where ownership
-   matters, plus a replace-links route. Return 422 for actionable validation, 404 for missing
-   entities, and 409 dependency details including blocking ADR IDs/titles or replacement references.
+   matters, a replace-links route, and `GET /diagrams/{diagramId}/components/{componentId}/adrs` for
+   the component view. Return 422 for actionable validation, 404 for missing entities, and 409
+   dependency details including blocking ADR IDs/titles or replacement references. The component
+   summary response returns an empty array for a valid component with no links and includes each
+   linked ADR's stable ID, title, status, and updated timestamp for direct opening.
 4. **Frontend workflow**: Add a Decisions surface to the current workspace. The editor supports
    required fields, optional alternatives/constraints, status, replacement selection when needed,
    component search/selection, unlinking, linked-component navigation, confirmation dialogs, and
-   visible unlinked/unsaved/error/saved states. Use the existing Apple-style DESIGN.md tokens and
-   existing 44px focusable controls.
+   visible unlinked/unsaved/error/saved states. Extend the selected component view with a labeled
+   ADR summary that shows every linked ADR's title/status and opens the ADR editor/list selection;
+   show a non-error no-linked-ADRs message when the response is empty. Use the existing Apple-style
+   DESIGN.md tokens and existing 44px focusable controls.
 5. **History and failure handling**: ADR edits, link changes, and status changes are draft updates
    recorded by explicit Zustand history. A failed save leaves the draft and marks it unsaved/failed;
    retry resubmits the unchanged draft. A stale save response must not overwrite newer local edits.
@@ -146,10 +165,11 @@ keeps an editable draft until a successful API response replaces it.
 ## Post-design Constitution Re-check
 
 **PASS**: The design preserves stable artifact identities and references, stores ADRs and links as
-structured PostgreSQL records, rejects invalid/cross-diagram references, prevents destructive
-cascades, keeps superseded/rejected decisions discoverable, and verifies user-visible behavior at
-shared, persistence, API, frontend, and end-to-end boundaries. It adds no authentication,
-collaboration, offline migration, or revision-system complexity outside the specification.
+structured PostgreSQL records, supports reverse component-to-ADR summaries without duplicating
+link data, rejects invalid/cross-diagram references, prevents destructive cascades, keeps
+superseded/rejected decisions discoverable, and verifies user-visible behavior at shared,
+persistence, API, frontend, and end-to-end boundaries. It adds no authentication, collaboration,
+offline migration, or revision-system complexity outside the specification.
 
 ## Complexity Tracking
 

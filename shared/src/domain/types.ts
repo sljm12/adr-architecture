@@ -39,6 +39,13 @@ export interface AdrSummary {
   componentCount: number;
 }
 
+export interface ComponentAdrSummary {
+  id: UUID;
+  title: string;
+  status: AdrStatus;
+  updatedAt: string;
+}
+
 export interface AdrWritePayload {
   title: string;
   context: string;

@@ -15,3 +15,59 @@ test('creates, validates, saves, reopens, and retries an ADR', async ({ page }) 
   await fillAdrForm(page); await adrWorkspace.getByRole('button', { name: 'Save decision' }).click(); await expect(adrWorkspace.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
   await page.getByRole('button', { name: 'Existing decision' }).count().catch(() => undefined);
 });
+
+test('links zero, one, and multiple components, then unlinks without changing component identity', async ({ page }) => {
+  const diagram = { id: '00000000-0000-0000-0000-000000000511', name: 'Payments', status: 'active', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', trashedAt: null, components: [
+    { id: '00000000-0000-0000-0000-000000000512', diagramId: '00000000-0000-0000-0000-000000000511', name: 'API gateway', description: null, type: 'service', position: { x: 80, y: 100 }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
+    { id: '00000000-0000-0000-0000-000000000513', diagramId: '00000000-0000-0000-0000-000000000511', name: 'Payments database', description: null, type: 'store', position: { x: 320, y: 100 }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
+  ], relationships: [] };
+  let adr: any = null;
+  await page.route('**/api/diagrams', route => route.fulfill({ status: route.request().method() === 'POST' ? 201 : 200, contentType: 'application/json', body: JSON.stringify(route.request().method() === 'POST' ? diagram : [diagram]) }));
+  await page.route('**/api/diagrams/*/adrs', async route => {
+    if (route.request().method() === 'GET') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr ? [{ id: adr.id, title: adr.title, status: adr.status, updatedAt: adr.updatedAt, componentCount: adr.componentIds.length }] : []) });
+    const payload = route.request().postDataJSON(); adr = { ...payload, id: '00000000-0000-0000-0000-000000000514', diagramId: diagram.id, componentIds: [], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }; return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(adr) });
+  });
+  await page.route('**/api/adrs/**', async route => {
+    const url = route.request().url();
+    if (url.endsWith('/components') && route.request().method() === 'PUT') { adr = { ...adr, componentIds: route.request().postDataJSON().componentIds, updatedAt: '2026-01-02T00:00:00.000Z' }; return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr) }); }
+    if (route.request().method() === 'GET') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr) });
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr) });
+  });
+  await page.goto('/');
+  await page.getByLabel('Diagram name').fill('Payments'); await page.getByRole('button', { name: 'Create diagram' }).click();
+  const workspace = page.getByLabel('ADR workspace'); await page.getByRole('button', { name: 'Decision' }).click(); await workspace.getByRole('button', { name: 'New decision' }).click(); await fillAdrForm(page);
+  await expect(workspace.getByText('Unlinked — this ADR applies across the diagram.')).toBeVisible();
+  await workspace.getByRole('checkbox', { name: 'API gateway' }).check(); await workspace.getByRole('checkbox', { name: 'Payments database' }).check();
+  await workspace.getByRole('button', { name: 'Save decision' }).click(); await expect(workspace.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
+  expect(adr.componentIds).toEqual([diagram.components[0].id, diagram.components[1].id]);
+  await workspace.getByRole('button', { name: `Remove ${diagram.components[0].name}` }).click(); await workspace.getByRole('button', { name: 'Save decision' }).click();
+  expect(adr.componentIds).toEqual([diagram.components[1].id]);
+});
+
+test('shows linked and unlinked component ADR summaries and opens a decision directly', async ({ page }) => {
+  const diagram = { id: '00000000-0000-0000-0000-000000000521', name: 'Payments', status: 'active', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', trashedAt: null, components: [
+    { id: '00000000-0000-0000-0000-000000000522', diagramId: '00000000-0000-0000-0000-000000000521', name: 'API gateway', description: null, type: 'service', position: { x: 80, y: 100 }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
+    { id: '00000000-0000-0000-0000-000000000523', diagramId: '00000000-0000-0000-0000-000000000521', name: 'Payments database', description: null, type: 'store', position: { x: 320, y: 100 }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
+  ], relationships: [] };
+  const adr = { id: '00000000-0000-0000-0000-000000000524', diagramId: diagram.id, title: 'Use a payment boundary', context: 'Context', decision: 'Decision', consequences: 'Consequences', alternativesOrConstraints: null, status: 'accepted', replacementAdrId: null, componentIds: [diagram.components[0].id], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-02T00:00:00.000Z' };
+  await page.route('**/api/diagrams', route => route.fulfill({ status: route.request().method() === 'POST' ? 201 : 200, contentType: 'application/json', body: JSON.stringify(route.request().method() === 'POST' ? diagram : [diagram]) }));
+  await page.route('**/api/diagrams/*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(diagram) }));
+  await page.route('**/api/diagrams/*/adrs', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify([{ id: adr.id, title: adr.title, status: adr.status, updatedAt: adr.updatedAt, componentCount: 1 }]) }));
+  await page.route('**/api/diagrams/*/components/*/adrs', async route => {
+    const componentId = route.request().url().split('/components/')[1].split('/adrs')[0];
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify(componentId === diagram.components[0].id ? [{ id: adr.id, title: adr.title, status: adr.status, updatedAt: adr.updatedAt }] : []) });
+  });
+  await page.route('**/api/adrs/*', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr) }));
+
+  await page.goto('/');
+  await page.getByLabel('Diagram name').fill('Payments'); await page.getByRole('button', { name: 'Create diagram' }).click();
+  await page.getByRole('group', { name: 'Component API gateway' }).click();
+  const inspector = page.getByLabel('Diagram inspector');
+  await expect(inspector.getByRole('heading', { name: 'Linked ADRs' })).toBeVisible();
+  await expect(inspector.getByRole('button', { name: 'Open ADR: Use a payment boundary' })).toBeVisible();
+  await inspector.getByRole('button', { name: 'Open ADR: Use a payment boundary' }).click();
+  await expect(page.getByLabel('ADR workspace')).toContainText('Architecture Decision Record');
+  await page.getByRole('button', { name: 'Close inspector' }).click();
+  await page.getByRole('group', { name: 'Component Payments database' }).click();
+  await expect(page.getByLabel('Diagram inspector')).toContainText('No linked ADRs for this component.');
+});

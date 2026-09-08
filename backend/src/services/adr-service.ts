@@ -1,10 +1,11 @@
-import { assertAdrComponentOwnership, assertAdrReplacement, adrComponentsWriteSchema, adrWriteSchema, type AdrComponentsWritePayload, type AdrWritePayload, type ArchitectureDecisionRecord, type AdrSummary } from '../../../shared/src/index';
+import { assertAdrComponentOwnership, assertAdrReplacement, adrComponentsWriteSchema, adrWriteSchema, type AdrComponentsWritePayload, type AdrWritePayload, type ArchitectureDecisionRecord, type AdrSummary, type Component, type ComponentAdrSummary } from '../../../shared/src/index';
 import type { AdrRepositoryLike } from '../persistence/adr-repository';
 import type { DiagramRepositoryLike, MaybePromise } from '../persistence/diagram-repository';
-import { DependencyConflictError } from '../api/errors';
+import { ApiValidationError, DependencyConflictError } from '../api/errors';
 
 export class AdrNotFoundError extends Error {}
 export class AdrDiagramNotFoundError extends Error {}
+export class AdrComponentNotFoundError extends Error {}
 export class AdrDependencyConflictError extends DependencyConflictError {}
 
 export class AdrService {
@@ -28,13 +29,30 @@ export class AdrService {
 
   async replaceLinks(id: string, payload: unknown): Promise<ArchitectureDecisionRecord> {
     const adr = await this.load(id); const input = adrComponentsWriteSchema.parse(payload) as AdrComponentsWritePayload; const diagram = await this.diagram(adr.diagramId);
-    assertAdrComponentOwnership({ ...adr, componentIds: input.componentIds }, diagram.components);
+    await this.validateComponentLinks(adr, input.componentIds, diagram.components);
     const updated = await this.adrs.replaceLinks(id, input.componentIds); if (!updated) throw new AdrNotFoundError('ADR not found'); return updated;
   }
 
   async remove(id: string): Promise<void> { const result = await this.adrs.delete(id); if (!result) throw new AdrNotFoundError('ADR not found'); if (!result.deleted) throw new AdrDependencyConflictError(result.blockers, 'ADR cannot be deleted while it is referenced as a replacement'); }
 
   private async diagram(id: string) { const diagram = await this.diagrams.get(id); if (!diagram || diagram.status !== 'active') throw new AdrDiagramNotFoundError('Diagram not found'); return diagram; }
+  private async validateComponentLinks(adr: ArchitectureDecisionRecord, componentIds: string[], components: Component[]) {
+    try { assertAdrComponentOwnership({ ...adr, componentIds }, components); }
+    catch (error) {
+      const invalidId = componentIds.find(id => !components.some(component => component.id === id));
+      const external = invalidId && this.diagrams.findComponent ? await this.diagrams.findComponent(invalidId) : undefined;
+      const message = external && external.diagramId !== adr.diagramId ? `Component ${invalidId} belongs to a different diagram` : error instanceof Error ? error.message : 'Component link is invalid';
+      throw new ApiValidationError({ componentIds: message });
+    }
+  }
+
+  async componentSummaries(diagramId: string, componentId: string): Promise<ComponentAdrSummary[]> {
+    const diagram = await this.diagram(diagramId);
+    if (!diagram.components.some(component => component.id === componentId)) throw new AdrComponentNotFoundError('Component not found');
+    const summaries = await this.adrs.listByComponent(diagramId, componentId);
+    if (!summaries) throw new AdrComponentNotFoundError('Component not found');
+    return summaries;
+  }
   private async validateReplacement(input: AdrWritePayload, diagramId: string, currentId?: string) { if (!input.replacementAdrId) return; if (input.replacementAdrId === currentId) throw new Error('An ADR cannot replace itself'); const replacement = await this.adrs.get(input.replacementAdrId); assertAdrReplacement({ id: currentId ?? crypto.randomUUID(), diagramId, ...input, componentIds: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), alternativesOrConstraints: input.alternativesOrConstraints ?? null, replacementAdrId: input.replacementAdrId ?? null }, replacement); }
   private async linkOwnership(adr: ArchitectureDecisionRecord) { const diagram = await this.diagram(adr.diagramId); assertAdrComponentOwnership(adr, diagram.components); return adr; }
 }
