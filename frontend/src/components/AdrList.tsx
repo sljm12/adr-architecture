@@ -7,7 +7,7 @@ const formatDate = (value: string) => new Intl.DateTimeFormat(undefined, { dateS
 export function AdrList({ diagramId }: { diagramId: string }) {
   const records = useAdrStore(state => state.records); const status = useAdrStore(state => state.status); const error = useAdrStore(state => state.error); const draft = useAdrStore(state => state.draft); const load = useAdrStore(state => state.load); const select = useAdrStore(state => state.select); const startNew = useAdrStore(state => state.startNew);
   useEffect(() => { void load(diagramId); }, [diagramId, load]);
-  return <section className="adr-list" aria-labelledby="adr-list-heading">
+  return <section className="adr-list adr-list-panel" aria-labelledby="adr-list-heading">
     <div className="adr-list-heading"><div><span className="eyebrow">Decision record</span><h3 id="adr-list-heading">Decisions</h3></div><button className="primary-pill" type="button" onClick={() => startNew(diagramId)}>New decision</button></div>
     {status === 'loading' && <p className="adr-feedback" role="status">Loading decisions…</p>}
     {status === 'failed' && !draft && <p className="adr-feedback adr-error" role="status">{error}</p>}

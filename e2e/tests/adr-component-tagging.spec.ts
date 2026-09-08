@@ -10,8 +10,8 @@ test('creates, validates, saves, reopens, and retries an ADR', async ({ page }) 
   await page.route('**/api/adrs/*', async route => { if (route.request().method() === 'GET') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr) }); if (route.request().method() === 'PATCH' && failNextSave) { failNextSave = false; return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Backend unavailable' }) }); } const payload = route.request().postDataJSON(); adr = { ...adr, ...payload, updatedAt: '2026-01-02T00:00:00.000Z' }; return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr) }); });
   await page.goto('/');
   await page.getByLabel('Diagram name').fill('Payments'); await page.getByRole('button', { name: 'Create diagram' }).click();
-  await page.getByRole('button', { name: 'Decision' }).click(); await page.getByRole('button', { name: 'New decision' }).click();
-  await page.getByRole('button', { name: 'Save decision' }).click(); await expect(page.getByRole('status').filter({ hasText: 'Needs attention' })).toBeVisible();
-  await fillAdrForm(page); await page.getByRole('button', { name: 'Save decision' }).click(); await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
+  await page.getByRole('button', { name: 'Decision' }).click(); const adrWorkspace = page.getByLabel('ADR workspace'); await adrWorkspace.getByRole('button', { name: 'New decision' }).click();
+  await adrWorkspace.getByRole('button', { name: 'Save decision' }).click(); await expect(adrWorkspace.getByRole('status').filter({ hasText: 'Needs attention' })).toBeVisible();
+  await fillAdrForm(page); await adrWorkspace.getByRole('button', { name: 'Save decision' }).click(); await expect(adrWorkspace.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
   await page.getByRole('button', { name: 'Existing decision' }).count().catch(() => undefined);
 });

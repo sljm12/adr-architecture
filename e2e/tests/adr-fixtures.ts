@@ -8,6 +8,6 @@ export const adrTestIds = {
 export const fillAdrForm = async (page: { getByLabel: (label: string) => { fill: (value: string) => Promise<void> } }) => {
   await page.getByLabel('Title').fill(adrTestIds.title);
   await page.getByLabel('Context').fill(adrTestIds.context);
-  await page.getByLabel('Decision').fill(adrTestIds.decision);
+  await page.getByRole('textbox', { name: 'Decision required' }).fill(adrTestIds.decision);
   await page.getByLabel('Consequences').fill(adrTestIds.consequences);
 };
