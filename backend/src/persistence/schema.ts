@@ -15,3 +15,7 @@ export const adrComponentLinks=pgTable('adr_component_links',{
   adrId:uuid('adr_id').notNull().references(()=>adrs.id), componentId:uuid('component_id').notNull().references(()=>components.id),
   createdAt:timestamp('created_at',{withTimezone:true}).notNull(),
 }, table => ({ pk:primaryKey({ columns:[table.adrId, table.componentId] }), componentIdx:index('adr_component_links_component_idx').on(table.componentId) }));
+export const adrRelationshipLinks=pgTable('adr_relationship_links',{
+  adrId:uuid('adr_id').notNull().references(()=>adrs.id), relationshipId:uuid('relationship_id').notNull().references(()=>relationships.id),
+  createdAt:timestamp('created_at',{withTimezone:true}).notNull(),
+}, table => ({ pk:primaryKey({ columns:[table.adrId, table.relationshipId] }), relationshipIdx:index('adr_relationship_links_relationship_idx').on(table.relationshipId) }));

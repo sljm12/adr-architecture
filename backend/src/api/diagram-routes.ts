@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { DiagramNotFoundError, DiagramService } from '../services/diagram-service';
+import { DiagramConflictError, DiagramNotFoundError, DiagramService, RelationshipDependencyConflictError } from '../services/diagram-service';
 import type { DiagramRepositoryLike } from '../persistence/diagram-repository';
 import { sendError } from './errors';
 
@@ -22,6 +22,16 @@ export function registerDiagramRoutes(app: FastifyInstance, repository: DiagramR
     catch (error) {
       if (error instanceof DiagramNotFoundError) return reply.code(404).send({ message: error.message });
       if (error instanceof Error && error.message === 'Path and document IDs must match') return reply.code(422).send({ message: error.message, fields: { id: 'Must match diagramId' } });
+      return sendError(reply, error);
+    }
+  });
+
+  app.delete<{ Params: { diagramId: string; relationshipId: string } }>('/diagrams/:diagramId/relationships/:relationshipId', async (request, reply) => {
+      try { return reply.send(await service.removeRelationship(request.params.diagramId, request.params.relationshipId)); }
+      catch (error) {
+        if (error instanceof DiagramNotFoundError) return reply.code(404).send({ message: error.message });
+      if (error instanceof RelationshipDependencyConflictError) return reply.code(409).send({ message: error.message, blockers: error.blockers });
+      if (error instanceof DiagramConflictError) return reply.code(409).send({ message: error.message });
       return sendError(reply, error);
     }
   });

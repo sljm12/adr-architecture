@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { adrComponentsWriteSchema, adrWriteSchema, architectureDecisionRecordSchema, assertAdrComponentOwnership, componentAdrSummaryListSchema } from '../src/index';
+import { adrComponentsWriteSchema, adrRelationshipsWriteSchema, adrWriteSchema, architectureDecisionRecordSchema, assertAdrComponentOwnership, assertAdrRelationshipOwnership, componentAdrSummaryListSchema, relationshipAdrSummaryListSchema } from '../src/index';
 import { adrComponentFixtures, completeAdrFixture } from './adr-fixtures';
 
 describe('ADR validation schemas', () => {
@@ -39,5 +39,29 @@ describe('ADR validation schemas', () => {
     expect(componentAdrSummaryListSchema.parse([])).toEqual([]);
     expect(componentAdrSummaryListSchema.safeParse([{ ...summary, id: 'not-a-uuid' }]).success).toBe(false);
     expect(componentAdrSummaryListSchema.safeParse([{ ...summary, status: 'unknown' }]).success).toBe(false);
+  });
+
+  it('accepts zero, one, and many stable relationship UUID links and rejects duplicates', () => {
+    const adr = completeAdrFixture();
+    expect(adrRelationshipsWriteSchema.parse({ relationshipIds: [] })).toEqual({ relationshipIds: [] });
+    expect(adrRelationshipsWriteSchema.parse({ relationshipIds: ['00000000-0000-0000-0000-000000000231'] }).relationshipIds).toHaveLength(1);
+    expect(adrRelationshipsWriteSchema.safeParse({ relationshipIds: ['00000000-0000-0000-0000-000000000231', '00000000-0000-0000-0000-000000000231'] }).success).toBe(false);
+    expect(() => assertAdrRelationshipOwnership({ ...adr, relationshipIds: ['00000000-0000-0000-0000-000000000299'] }, [{ id: '00000000-0000-0000-0000-000000000231', diagramId: adr.diagramId }])).toThrow('missing relationship');
+    expect(() => assertAdrRelationshipOwnership({ ...adr, relationshipIds: ['00000000-0000-0000-0000-000000000232'] }, [{ id: '00000000-0000-0000-0000-000000000232', diagramId: '00000000-0000-0000-0000-000000000202' }])).toThrow('different diagram');
+  });
+
+  it('keeps relationship links keyed by relationship ID after label or visual edits', () => {
+    const relationship = { id: '00000000-0000-0000-0000-000000000231', diagramId: completeAdrFixture().diagramId };
+    const adr = completeAdrFixture({ relationshipIds: [relationship.id] });
+    expect(adr.relationshipIds).toEqual([relationship.id]);
+    expect(() => assertAdrRelationshipOwnership(adr, [relationship])).not.toThrow();
+    expect(() => assertAdrRelationshipOwnership(adr, [{ ...relationship, label: 'renamed', position: { x: 1, y: 2 } }])).not.toThrow();
+  });
+
+  it('validates relationship-scoped summaries and mixed ADR link payloads', () => {
+    const summary = { id: completeAdrFixture().id, title: completeAdrFixture().title, status: 'accepted', updatedAt: '2026-01-02T00:00:00.000Z' };
+    expect(relationshipAdrSummaryListSchema.parse([summary])).toEqual([summary]);
+    expect(relationshipAdrSummaryListSchema.parse([])).toEqual([]);
+    expect(architectureDecisionRecordSchema.parse(completeAdrFixture({ componentIds: [], relationshipIds: ['00000000-0000-0000-0000-000000000231'] })).relationshipIds).toEqual(['00000000-0000-0000-0000-000000000231']);
   });
 });

@@ -24,8 +24,24 @@ describe('ADR component linking', () => {
     expect(workspace).toContain('selectedComponentId');
   });
 
+  it('supports mixed component and relationship links with stable relationship navigation', () => {
+    const picker = source('../src/components/AdrLinkPicker.tsx');
+    const editor = source('../src/components/AdrEditor.tsx');
+    const workspace = source('../src/components/WorkspaceInspector.tsx');
+    const canvas = source('../src/components/DiagramCanvas.tsx');
+    const store = source('../src/state/adr-store.ts');
+    expect(picker).toContain('relationshipIds');
+    expect(picker).toContain('onSelectRelationship');
+    expect(editor).toContain('relationships={relationships}');
+    expect(workspace).toContain('RelationshipAdrSummary');
+    expect(canvas).toContain('selectedRelationshipId');
+    expect(store).toContain('replaceRelationshipLinks');
+    expect(store).toContain('loadRelationshipSummary');
+  });
+
   it('does not require a link for a valid unlinked ADR draft', () => {
     useAdrStore.getState().startNew('00000000-0000-0000-0000-000000000031');
     expect(useAdrStore.getState().draft?.componentIds).toEqual([]);
+    expect(useAdrStore.getState().draft?.relationshipIds).toEqual([]);
   });
 });

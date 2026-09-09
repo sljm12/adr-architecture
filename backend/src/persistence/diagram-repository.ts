@@ -12,9 +12,11 @@ export interface DiagramRepositoryLike {
   listTrash(): MaybePromise<DiagramDocument[]>;
   get(id: string): MaybePromise<DiagramDocument | undefined>;
   findComponent(id: string): MaybePromise<{ id: string; diagramId: string; name: string } | undefined>;
+  findRelationship(id: string): MaybePromise<{ id: string; diagramId: string } | undefined>;
   create(document: DiagramDocument): MaybePromise<DiagramDocument>;
   replace(document: DiagramDocument): MaybePromise<DiagramDocument | undefined>;
   removeComponent(diagramId: string, componentId: string): MaybePromise<RemoveComponentResult | undefined>;
+  removeRelationship(diagramId: string, relationshipId: string): MaybePromise<RemoveRelationshipResult | undefined>;
   trash(id: string): MaybePromise<DiagramDocument | undefined>;
   restore(id: string): MaybePromise<DiagramDocument | undefined>;
 }
@@ -22,6 +24,9 @@ export interface DiagramRepositoryLike {
 export type RemoveComponentResult =
   | { document: DiagramDocument; relationshipCount: number }
   | { conflict: true; relationshipCount: number };
+export type RemoveRelationshipResult =
+  | { document: DiagramDocument }
+  | { conflict: true };
 
 const clone = (document: DiagramDocument) => structuredClone(document);
 
@@ -33,6 +38,7 @@ export class DiagramRepository implements DiagramRepositoryLike {
   listTrash() { return [...this.documents.values()].filter(d => d.status === 'trashed').map(clone); }
   get(id: string) { const document = this.documents.get(id); return document && clone(document); }
   findComponent(id: string) { for (const document of this.documents.values()) { const component = document.components.find(item => item.id === id); if (component) return { id: component.id, diagramId: component.diagramId, name: component.name }; } return undefined; }
+  findRelationship(id: string) { for (const document of this.documents.values()) { const relationship = document.relationships.find(item => item.id === id); if (relationship) return { id: relationship.id, diagramId: relationship.diagramId }; } return undefined; }
   create(document: DiagramDocument) { this.documents.set(document.id, clone(document)); return clone(document); }
   replace(document: DiagramDocument) { this.documents.set(document.id, clone(document)); return clone(document); }
 
@@ -45,6 +51,15 @@ export class DiagramRepository implements DiagramRepositoryLike {
     const updated = { ...document, updatedAt: now, components: document.components.filter(c => c.id !== componentId) };
     this.documents.set(diagramId, clone(updated));
     return { document: clone(updated), relationshipCount: 0 };
+  }
+
+  removeRelationship(diagramId: string, relationshipId: string): RemoveRelationshipResult | undefined {
+    const document = this.documents.get(diagramId);
+    if (!document || document.status !== 'active' || !document.relationships.some(relationship => relationship.id === relationshipId)) return undefined;
+    const now = new Date().toISOString();
+    const updated = { ...document, updatedAt: now, relationships: document.relationships.filter(relationship => relationship.id !== relationshipId) };
+    this.documents.set(diagramId, clone(updated));
+    return { document: clone(updated) };
   }
 
   trash(id: string) {
@@ -137,6 +152,7 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
   async get(id: string): Promise<DiagramDocument | undefined> { return this.load(id); }
 
   async findComponent(id: string) { const [component] = await this.db.select({ id: schema.components.id, diagramId: schema.components.diagramId, name: schema.components.name }).from(schema.components).where(eq(schema.components.id, id)).limit(1); return component; }
+  async findRelationship(id: string) { const [relationship] = await this.db.select({ id: schema.relationships.id, diagramId: schema.relationships.diagramId }).from(schema.relationships).where(eq(schema.relationships.id, id)).limit(1); return relationship; }
 
   async create(document: DiagramDocument): Promise<DiagramDocument> {
     validatePersistableDocument(document);
@@ -160,9 +176,7 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
     const existingRelationships = new Map(existing.relationships.map(relationship => [relationship.id, relationship]));
     await this.db.transaction(async tx => {
       await tx.update(schema.diagrams).set({ name: document.name.trim(), updatedAt: now }).where(eq(schema.diagrams.id, document.id));
-      await tx.delete(schema.relationships).where(eq(schema.relationships.diagramId, document.id));
-      await tx.delete(schema.components).where(eq(schema.components.diagramId, document.id));
-      await this.insertChildren(tx, document, now, existingComponents, existingRelationships);
+      await this.replaceChildren(tx, document, now, existingComponents, existingRelationships);
     });
     return (await this.get(document.id))!;
   }
@@ -178,6 +192,17 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
       await tx.update(schema.diagrams).set({ updatedAt: now }).where(eq(schema.diagrams.id, diagramId));
     });
     return { document: (await this.get(diagramId))!, relationshipCount: 0 };
+  }
+
+  async removeRelationship(diagramId: string, relationshipId: string): Promise<RemoveRelationshipResult | undefined> {
+    const existing = await this.get(diagramId);
+    if (!existing || existing.status !== 'active' || !existing.relationships.some(relationship => relationship.id === relationshipId)) return undefined;
+    const now = new Date();
+    await this.db.transaction(async tx => {
+      await tx.delete(schema.relationships).where(eq(schema.relationships.id, relationshipId));
+      await tx.update(schema.diagrams).set({ updatedAt: now }).where(eq(schema.diagrams.id, diagramId));
+    });
+    return { document: (await this.get(diagramId))! };
   }
 
   async trash(id: string): Promise<DiagramDocument | undefined> {
@@ -234,6 +259,41 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
           updatedAt: now,
         };
       }));
+    }
+  }
+
+  private async replaceChildren(
+    tx: any,
+    document: DiagramDocument,
+    now: Date,
+    existingComponents: Map<string, DiagramDocument['components'][number]>,
+    existingRelationships: Map<string, DiagramDocument['relationships'][number]>,
+  ): Promise<void> {
+    const componentIds = new Set(document.components.map(component => component.id));
+    const relationshipIds = new Set(document.relationships.map(relationship => relationship.id));
+    for (const id of existingRelationships.keys()) {
+      if (!relationshipIds.has(id)) await tx.delete(schema.relationships).where(eq(schema.relationships.id, id));
+    }
+    for (const id of existingComponents.keys()) {
+      if (!componentIds.has(id)) await tx.delete(schema.components).where(eq(schema.components.id, id));
+    }
+    for (const component of document.components) {
+      const previous = existingComponents.get(component.id);
+      const values = {
+        diagramId: document.id, name: component.name.trim(), description: component.description, type: component.type,
+        x: component.position.x, y: component.position.y, updatedAt: now,
+      };
+      if (previous) await tx.update(schema.components).set(values).where(eq(schema.components.id, component.id));
+      else await tx.insert(schema.components).values({ id: component.id, ...values, createdAt: dateValue(component.createdAt, `components.${component.id}.createdAt`) });
+    }
+    for (const relationship of document.relationships) {
+      const previous = existingRelationships.get(relationship.id);
+      const values = {
+        diagramId: document.id, sourceComponentId: relationship.sourceComponentId, targetComponentId: relationship.targetComponentId,
+        direction: relationship.direction, label: relationship.label?.trim() || null, updatedAt: now,
+      };
+      if (previous) await tx.update(schema.relationships).set(values).where(eq(schema.relationships.id, relationship.id));
+      else await tx.insert(schema.relationships).values({ id: relationship.id, ...values, createdAt: dateValue(relationship.createdAt, `relationships.${relationship.id}.createdAt`) });
     }
   }
 }

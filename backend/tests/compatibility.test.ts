@@ -24,6 +24,8 @@ describe('backend ADR link compatibility', () => {
     expect(migration).toContain('CREATE TABLE adrs');
     expect(migration).toContain('CREATE TABLE adr_component_links');
     expect(migration).toContain('PRIMARY KEY (adr_id, component_id)');
+    expect(migration).toContain('CREATE TABLE adr_relationship_links');
+    expect(migration).toContain('PRIMARY KEY (adr_id, relationship_id)');
     expect(migration).not.toContain('ON DELETE CASCADE');
   });
 });

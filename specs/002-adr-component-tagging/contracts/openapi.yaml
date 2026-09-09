@@ -40,7 +40,7 @@ paths:
           $ref: '#/components/responses/ValidationError'
   /adrs/{adrId}:
     get:
-      summary: Get an ADR with its component links
+      summary: Get an ADR with its component and relationship links
       parameters:
         - $ref: '#/components/parameters/AdrId'
       responses:
@@ -108,6 +108,28 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /adrs/{adrId}/relationships:
+    put:
+      summary: Replace all relationship links for an ADR
+      parameters:
+        - $ref: '#/components/parameters/AdrId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdrRelationshipsWrite'
+      responses:
+        '200':
+          description: ADR with replaced links; an empty relationshipIds array is valid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Adr'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /diagrams/{diagramId}/components/{componentId}/adrs:
     get:
       summary: List ADR summaries linked to a diagram component
@@ -128,9 +150,24 @@ paths:
                 $ref: '#/components/schemas/ComponentAdrSummaryList'
         '404':
           $ref: '#/components/responses/NotFound'
+  /diagrams/{diagramId}/relationships/{relationshipId}/adrs:
+    get:
+      summary: List ADR summaries linked to a diagram relationship
+      parameters:
+        - $ref: '#/components/parameters/DiagramId'
+        - $ref: '#/components/parameters/RelationshipId'
+      responses:
+        '200':
+          description: Linked ADR summaries; an empty array is valid when no ADRs are linked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelationshipAdrSummaryList'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /diagrams/{diagramId}/components/{componentId}:
     delete:
-      summary: Delete a component only after ADR links are repaired
+      summary: Delete a component only after direct and dependent relationship ADR links are repaired
       parameters:
         - $ref: '#/components/parameters/DiagramId'
         - name: componentId
@@ -142,6 +179,19 @@ paths:
       responses:
         '200':
           description: Component deleted and updated diagram returned
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/DependencyConflict'
+  /diagrams/{diagramId}/relationships/{relationshipId}:
+    delete:
+      summary: Delete a relationship only after ADR links are repaired
+      parameters:
+        - $ref: '#/components/parameters/DiagramId'
+        - $ref: '#/components/parameters/RelationshipId'
+      responses:
+        '200':
+          description: Relationship deleted and updated diagram returned
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
@@ -162,9 +212,16 @@ components:
       schema:
         type: string
         format: uuid
+    RelationshipId:
+      name: relationshipId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
   responses:
     NotFound:
-      description: Requested diagram, ADR, replacement, or component was not found
+      description: Requested diagram, ADR, replacement, component, or relationship was not found
       content:
         application/json:
           schema:
@@ -218,11 +275,21 @@ components:
           items:
             type: string
             format: uuid
+    AdrRelationshipsWrite:
+      type: object
+      required: [relationshipIds]
+      properties:
+        relationshipIds:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
     Adr:
       allOf:
         - $ref: '#/components/schemas/AdrWrite'
         - type: object
-          required: [id, diagramId, componentIds, createdAt, updatedAt]
+          required: [id, diagramId, componentIds, relationshipIds, createdAt, updatedAt]
           properties:
             id:
               type: string
@@ -231,6 +298,12 @@ components:
               type: string
               format: uuid
             componentIds:
+              type: array
+              uniqueItems: true
+              items:
+                type: string
+                format: uuid
+            relationshipIds:
               type: array
               uniqueItems: true
               items:
@@ -246,7 +319,7 @@ components:
       type: array
       items:
         type: object
-        required: [id, title, status, updatedAt, componentCount]
+        required: [id, title, status, updatedAt, componentCount, relationshipCount]
         properties:
           id:
             type: string
@@ -262,11 +335,33 @@ components:
           componentCount:
             type: integer
             minimum: 0
+          relationshipCount:
+            type: integer
+            minimum: 0
     ComponentAdrSummaryList:
       type: array
       items:
         $ref: '#/components/schemas/ComponentAdrSummary'
+    RelationshipAdrSummaryList:
+      type: array
+      items:
+        $ref: '#/components/schemas/RelationshipAdrSummary'
     ComponentAdrSummary:
+      type: object
+      required: [id, title, status, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        status:
+          type: string
+          enum: [draft, accepted, superseded, rejected]
+        updatedAt:
+          type: string
+          format: date-time
+    RelationshipAdrSummary:
       type: object
       required: [id, title, status, updatedAt]
       properties:

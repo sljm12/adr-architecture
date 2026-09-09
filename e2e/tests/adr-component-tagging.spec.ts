@@ -71,3 +71,35 @@ test('shows linked and unlinked component ADR summaries and opens a decision dir
   await page.getByRole('group', { name: 'Component Payments database' }).click();
   await expect(page.getByLabel('Diagram inspector')).toContainText('No linked ADRs for this component.');
 });
+
+test('links a mixed component and relationship scope, opens its relationship summary, and keeps the relationship label', async ({ page }) => {
+  const diagram = { id: '00000000-0000-0000-0000-000000000531', name: 'Payments', status: 'active', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', trashedAt: null, components: [
+    { id: '00000000-0000-0000-0000-000000000532', diagramId: '00000000-0000-0000-0000-000000000531', name: 'API gateway', description: null, type: 'service', position: { x: 80, y: 100 }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
+    { id: '00000000-0000-0000-0000-000000000533', diagramId: '00000000-0000-0000-0000-000000000531', name: 'Payments database', description: null, type: 'store', position: { x: 320, y: 100 }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
+  ], relationships: [{ id: '00000000-0000-0000-0000-000000000534', diagramId: '00000000-0000-0000-0000-000000000531', sourceComponentId: '00000000-0000-0000-0000-000000000532', targetComponentId: '00000000-0000-0000-0000-000000000533', direction: 'directed', label: 'sends', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }], };
+  let adr: any = null;
+  await page.route('**/api/diagrams', route => route.fulfill({ status: route.request().method() === 'POST' ? 201 : 200, contentType: 'application/json', body: JSON.stringify(route.request().method() === 'POST' ? diagram : [diagram]) }));
+  await page.route('**/api/diagrams/*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(diagram) }));
+  await page.route('**/api/diagrams/*/adrs', async route => {
+    if (route.request().method() === 'GET') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr ? [{ id: adr.id, title: adr.title, status: adr.status, updatedAt: adr.updatedAt, componentCount: adr.componentIds.length, relationshipCount: adr.relationshipIds.length }] : []) });
+    const payload = route.request().postDataJSON(); adr = { ...payload, id: '00000000-0000-0000-0000-000000000535', diagramId: diagram.id, componentIds: [], relationshipIds: [], createdAt: diagram.createdAt, updatedAt: diagram.updatedAt }; return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(adr) });
+  });
+  await page.route('**/api/diagrams/*/relationships/*/adrs', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr ? [{ id: adr.id, title: adr.title, status: adr.status, updatedAt: adr.updatedAt }] : []) }));
+  await page.route('**/api/adrs/**', async route => {
+    const url = route.request().url(); const payload = route.request().method() === 'PUT' ? route.request().postDataJSON() : undefined;
+    if (url.endsWith('/components')) adr = { ...adr, componentIds: payload.componentIds, updatedAt: '2026-01-02T00:00:00.000Z' };
+    if (url.endsWith('/relationships')) adr = { ...adr, relationshipIds: payload.relationshipIds, updatedAt: '2026-01-02T00:00:00.000Z' };
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr) });
+  });
+  await page.goto('/');
+  await page.getByLabel('Diagram name').fill('Payments'); await page.getByRole('button', { name: 'Create diagram' }).click();
+  const workspace = page.getByLabel('ADR workspace'); await page.getByRole('button', { name: 'Decision' }).click(); await workspace.getByRole('button', { name: 'New decision' }).click(); await fillAdrForm(page);
+  await workspace.getByRole('checkbox', { name: 'API gateway', exact: true }).check(); await workspace.getByRole('checkbox', { name: 'Relationship API gateway → Payments database · sends', exact: true }).check();
+  await workspace.getByRole('button', { name: 'Save decision' }).click(); await expect(workspace.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
+  expect(adr.componentIds).toEqual([diagram.components[0].id]); expect(adr.relationshipIds).toEqual([diagram.relationships[0].id]);
+  await workspace.getByRole('button', { name: 'Remove relationship API gateway → Payments database · sends' }).click();
+  await workspace.getByRole('checkbox', { name: 'Relationship API gateway → Payments database · sends' }).check();
+  await workspace.getByRole('button', { name: 'View' }).last().click();
+  const inspector = page.getByLabel('Diagram inspector'); await expect(inspector.getByRole('heading', { name: 'Linked ADRs' })).toBeVisible(); await expect(inspector).toContainText('API gateway → Payments database · sends');
+  await inspector.getByRole('button', { name: 'Open ADR: Use a payment service boundary' }).click(); await expect(page.getByLabel('ADR workspace')).toContainText('Architecture Decision Record');
+});

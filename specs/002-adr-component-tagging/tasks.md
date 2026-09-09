@@ -70,16 +70,18 @@ the backend unavailable to verify actionable validation and draft preservation.
 **Checkpoint**: US1 is independently usable when a user can create, validate, save, reopen, edit,
 and retry an ADR without losing local content.
 
-## Phase 4: User Story 2 - Optionally Link ADRs to Diagram Components (Priority: P1)
+## Phase 4: User Story 2 - Optionally Link ADRs to Diagram Components and Relationships (Priority: P1)
 
 **Goal**: Associate an ADR with zero, one, or multiple components in the active diagram, display
-those references, navigate to available components, preserve links through rename/reposition, and
-show the reverse component-to-ADR summary with direct ADR opening and a clear empty state.
+and navigate to component or relationship references, preserve links through ordinary artifact
+edits, and show reverse component-to-ADR and relationship-to-ADR summaries with direct ADR opening
+and clear empty states.
 
-**Independent Test**: Starting with a saved ADR and a diagram containing components, link one and
-then multiple components, remove one, save/reopen, verify an unlinked ADR remains valid, verify
-missing/cross-diagram links are rejected without mutation, and view both linked and unlinked
-components to verify titles/statuses, direct opening, and the explicit no-linked-ADRs state.
+**Independent Test**: Starting with a saved ADR and a diagram containing components and
+relationships, link one and then multiple components and relationships, remove one, save/reopen,
+verify an unlinked ADR remains valid, verify missing/cross-diagram artifact links are rejected
+without mutation, and view linked and unlinked components and relationships to verify
+titles/statuses, direct opening, and explicit no-linked-ADRs states.
 
 ### Tests for User Story 2
 
@@ -111,9 +113,23 @@ components to verify titles/statuses, direct opening, and the explicit no-linked
 - [X] T052 [US2] Connect component selection, summary loading, and direct ADR selection between `frontend/src/components/DiagramWorkspace.tsx`, `frontend/src/components/WorkspaceInspector.tsx`, and `frontend/src/state/adr-store.ts`
 - [X] T053 [US2] Extend existing link-picker, chip, empty/unlinked, validation-error, and deletion-conflict styles in `frontend/src/styles.css` with component-summary styles consistent with `DESIGN.md`
 
+### Relationship-link extension for User Story 2
+
+- [X] T054 [P] [US2] Add relationship-link schema, mixed-link, stable-relationship-ID, duplicate, missing, cross-diagram, relabel, and edit tests in `shared/tests/adr-validation.test.ts`
+- [X] T055 [P] [US2] Add relationship-link replacement, ownership, atomic unlink, relationship-deletion, and component-dependent-relationship conflict tests in `backend/tests/persistence/adr-repository.test.ts`
+- [X] T056 [P] [US2] Add contract tests for ADR relationship-link replacement, relationship-scoped ADR summaries, response link/count fields, and relationship deletion conflicts in `backend/tests/contract/adrs.test.ts` and `backend/tests/contract/component-dependencies.test.ts`
+- [X] T057 [P] [US2] Add relationship deletion and component deletion with linked dependent relationships tests proving blocking ADR IDs/titles in `backend/tests/contract/relationship-dependencies.test.ts`
+- [X] T058 [P] [US2] Add mixed component/relationship picker, unlink, relationship navigation, relabel/edit persistence, summary, loading/error, and empty-state tests in `frontend/tests/adr-linking.test.tsx` and `frontend/tests/relationship-adr-summary.test.tsx`
+- [X] T059 [US2] Add relationship-link, mixed-link, relationship-summary, invalid-link, and relationship/component deletion-blocking journeys in `e2e/tests/adr-component-tagging.spec.ts`
+- [X] T060 [US2] Add `RelationshipReference`, relationship IDs on ADR payloads, relationship summary types, schemas, invariants, and exports in `shared/src/domain/types.ts`, `shared/src/validation/schemas.ts`, `shared/src/domain/invariants.ts`, and `shared/src/index.ts`
+- [X] T061 [US2] Add the relationship-link migration/table and Drizzle definitions, repository operations, same-diagram checks, reverse summaries, and deletion dependency queries in `backend/drizzle/0002_adrs.sql`, `backend/src/persistence/schema.ts`, `backend/src/persistence/adr-repository.ts`, and `backend/src/persistence/diagram-repository.ts`
+- [X] T062 [US2] Add relationship-link replacement, relationship-scoped summary, relationship deletion, component dependent-relationship conflict, and structured error handling in `backend/src/services/adr-service.ts`, `backend/src/services/diagram-service.ts`, `backend/src/api/adr-routes.ts`, `backend/src/api/diagram-routes.ts`, and `backend/src/api/errors.ts`
+- [X] T063 [US2] Extend the ADR client/store/link picker/editor and selected-artifact inspector with relationship selection, unlinking, navigation, summaries, empty/error states, and stable-ID handling in `frontend/src/api/adr-client.ts`, `frontend/src/state/adr-store.ts`, `frontend/src/components/AdrLinkPicker.tsx`, `frontend/src/components/AdrEditor.tsx`, `frontend/src/components/RelationshipAdrSummary.tsx`, and `frontend/src/components/WorkspaceInspector.tsx`
+
 **Checkpoint**: US2 is independently usable when an ADR can be saved unlinked or with valid
-component UUID links, linked component deletion is safely blocked with repair guidance, and a
-selected component exposes linked ADR summaries or a clear no-linked-ADRs state.
+component and/or relationship UUID links, linked component or relationship deletion is safely
+blocked with repair guidance, and selected components and relationships expose linked ADR summaries
+or clear no-linked-ADRs states.
 
 ## Phase 5: User Story 3 - Find and Manage Decision Status (Priority: P2)
 
@@ -126,21 +142,21 @@ clear success/conflict feedback.
 
 ### Tests for User Story 3
 
-- [ ] T054 [P] [US3] Add unrestricted status-transition, superseded-without-replacement, same-diagram replacement, and rejected-record tests in `shared/tests/adr-domain.test.ts`
-- [ ] T055 [P] [US3] Add replacement-reference deletion conflict and successful repaired-delete tests in `backend/tests/persistence/adr-repository.test.ts`
-- [ ] T056 [P] [US3] Add status update, list discoverability, delete confirmation contract, and 409 blocker response tests in `backend/tests/contract/adrs.test.ts`
-- [ ] T057 [P] [US3] Add status badge, filtering, replacement selection, delete confirmation, and success/error announcement tests in `frontend/tests/adr-status.test.tsx`
-- [ ] T058 [US3] Add lifecycle review, supersede, blocked replacement delete, confirmed delete, and rejected/superseded discoverability journeys in `e2e/tests/adr-component-tagging.spec.ts`
+- [ ] T064 [P] [US3] Add unrestricted status-transition, superseded-without-replacement, same-diagram replacement, and rejected-record tests in `shared/tests/adr-domain.test.ts`
+- [ ] T065 [P] [US3] Add replacement-reference deletion conflict and successful repaired-delete tests in `backend/tests/persistence/adr-repository.test.ts`
+- [ ] T066 [P] [US3] Add status update, list discoverability, delete confirmation contract, and 409 blocker response tests in `backend/tests/contract/adrs.test.ts`
+- [ ] T067 [P] [US3] Add status badge, filtering, replacement selection, delete confirmation, and success/error announcement tests in `frontend/tests/adr-status.test.tsx`
+- [ ] T068 [US3] Add lifecycle review, supersede, blocked replacement delete, confirmed delete, and rejected/superseded discoverability journeys in `e2e/tests/adr-component-tagging.spec.ts`
 
 ### Implementation for User Story 3
 
-- [ ] T059 [US3] Implement replacement-reference queries, guarded ADR deletion, and transactional cleanup of an ADR's own component links in `backend/src/persistence/adr-repository.ts`
-- [ ] T060 [US3] Implement unrestricted supported status transitions, superseded replacement validation, and dependency conflict details in `backend/src/services/adr-service.ts`
-- [ ] T061 [US3] Add ADR delete and lifecycle update behavior, including 409 blocking references, in `backend/src/api/adr-routes.ts`
-- [ ] T062 [US3] Implement status update, delete, and replacement-repair actions with retained failed drafts in `frontend/src/state/adr-store.ts` and `frontend/src/api/adr-client.ts`
-- [ ] T063 [US3] Build status badges, status filtering, replacement ADR selection, and visible superseded/rejected metadata in `frontend/src/components/AdrStatusBadge.tsx` and `frontend/src/components/AdrList.tsx`
-- [ ] T064 [US3] Add delete confirmation, dependency-blocker dialog, repair/remove-link guidance, and success/failure announcements in `frontend/src/components/AdrEditor.tsx`, `frontend/src/components/ConfirmDialog.tsx`, and `frontend/src/components/WorkspaceInspector.tsx`
-- [ ] T065 [US3] Integrate lifecycle controls and list refresh behavior into `frontend/src/components/DiagramWorkspace.tsx` without losing the active draft during failed mutations
+- [ ] T069 [US3] Implement replacement-reference queries, guarded ADR deletion, and transactional cleanup of an ADR's own component and relationship links in `backend/src/persistence/adr-repository.ts`
+- [ ] T070 [US3] Implement unrestricted supported status transitions, superseded replacement validation, and dependency conflict details in `backend/src/services/adr-service.ts`
+- [ ] T071 [US3] Add ADR delete and lifecycle update behavior, including 409 blocking references, in `backend/src/api/adr-routes.ts`
+- [ ] T072 [US3] Implement status update, delete, and replacement-repair actions with retained failed drafts in `frontend/src/state/adr-store.ts` and `frontend/src/api/adr-client.ts`
+- [ ] T073 [US3] Build status badges, status filtering, replacement ADR selection, and visible superseded/rejected metadata in `frontend/src/components/AdrStatusBadge.tsx` and `frontend/src/components/AdrList.tsx`
+- [ ] T074 [US3] Add delete confirmation, dependency-blocker dialog, repair/remove-link guidance, and success/failure announcements in `frontend/src/components/AdrEditor.tsx`, `frontend/src/components/ConfirmDialog.tsx`, and `frontend/src/components/WorkspaceInspector.tsx`
+- [ ] T075 [US3] Integrate lifecycle controls and list refresh behavior into `frontend/src/components/DiagramWorkspace.tsx` without losing the active draft during failed mutations
 
 **Checkpoint**: US3 is independently usable when all statuses remain discoverable, superseding is
 validated, and destructive actions are confirmed or blocked with actionable references.
@@ -150,12 +166,12 @@ validated, and destructive actions are confirmed or blocked with actionable refe
 **Purpose**: Verify the complete feature against the constitution, design system, contract, and
 quickstart without adding out-of-scope collaboration/authentication/revision complexity.
 
-- [ ] T066 [P] Add focused keyboard, accessible-name, focus-order, status-announcement, and contrast coverage for the complete ADR workflow in `frontend/tests/adr-accessibility.test.tsx` and `frontend/tests/accessibility.test.tsx`
-- [ ] T067 [P] Add API error, retry, concurrent-edit, and no-silent-data-loss regression coverage in `backend/tests/adrs.test.ts` and `frontend/tests/adr-store.test.ts`
-- [ ] T068 [P] Review ADR UI at the DESIGN.md breakpoints and refine responsive layout, overflow, long-text readability, and 44px touch targets in `frontend/src/styles.css`
-- [ ] T069 [P] Update `specs/002-adr-component-tagging/contracts/openapi.yaml`, `data-model.md`, and `quickstart.md` if implementation response shapes or validation commands changed
-- [ ] T070 Run `npm test`, `npm run build`, and `npm run test:e2e`, then resolve ADR-related failures without weakening existing diagram, persistence, or Mermaid tests
-- [ ] T071 Run every acceptance scenario in `specs/002-adr-component-tagging/quickstart.md` against a migrated PostgreSQL instance and record the validation result in the implementation handoff
+- [ ] T076 [P] Add focused keyboard, accessible-name, focus-order, status-announcement, and contrast coverage for the complete ADR workflow in `frontend/tests/adr-accessibility.test.tsx` and `frontend/tests/accessibility.test.tsx`
+- [ ] T077 [P] Add API error, retry, concurrent-edit, and no-silent-data-loss regression coverage for component and relationship links in `backend/tests/adrs.test.ts` and `frontend/tests/adr-store.test.ts`
+- [ ] T078 [P] Review ADR UI at the DESIGN.md breakpoints and refine responsive layout, overflow, long-text readability, and 44px touch targets for component and relationship link controls in `frontend/src/styles.css`
+- [ ] T079 [P] Update `specs/002-adr-component-tagging/contracts/openapi.yaml`, `data-model.md`, and `quickstart.md` if implementation response shapes or validation commands changed
+- [ ] T080 Run `npm test`, `npm run build`, and `npm run test:e2e`, then resolve ADR-related failures without weakening existing diagram, persistence, or Mermaid tests
+- [ ] T081 Run every acceptance scenario in `specs/002-adr-component-tagging/quickstart.md` against a migrated PostgreSQL instance and record the validation result in the implementation handoff
 
 ## Dependencies & Execution Order
 
@@ -165,8 +181,8 @@ quickstart without adding out-of-scope collaboration/authentication/revision com
 - **Phase 2 Foundational**: Depends on Phase 1; T004-T013 establish the shared contract, migration,
   repository seams, and error shape required by all stories.
 - **Phase 3 US1**: Depends on Phase 2; delivers the MVP ADR create/save/reopen workflow.
-- **Phase 4 US2**: Depends on Phase 2 and the ADR persistence/read-write flow from US1; adds links,
-  component deletion protection, and the reverse component-to-ADR summary workflow.
+- **Phase 4 US2**: Depends on Phase 2 and the ADR persistence/read-write flow from US1; adds component
+  and relationship links, artifact deletion protection, and reverse summaries for both artifact types.
 - **Phase 5 US3**: Depends on US1 and US2 because status/deletion behavior must preserve ADR links and
   replacement references.
 - **Phase 6 Polish**: Depends on all required user stories being complete.
@@ -184,12 +200,13 @@ quickstart without adding out-of-scope collaboration/authentication/revision com
 - T004-T008 can proceed in parallel with T009-T013 after the repository structure is agreed.
 - Within US1, T014-T018 are parallel test tasks; T024-T029 are mostly parallel frontend tasks after
   the store/client contract is settled, while T020-T023 are backend tasks.
-- Within US2, T030-T039 are parallel unit, repository, contract, and component-view test tasks;
-  T040 is the integrated browser journey. T041-T046 are shared/backend tasks and T047-T053 are
-  frontend tasks that can proceed in parallel once the summary contract is stable.
-- Within US3, T054-T057 are parallel test tasks; T059-T061 are backend tasks and T062-T065 are
+- Within US2, T030-T039 are parallel component-link tests and T040 is the integrated component
+  journey. T041-T046 are the completed component summary/backend tasks and T047-T053 are the
+  completed component frontend tasks. T054-T059 are parallel relationship-link tests and T060-T063
+  are shared/backend/frontend relationship-extension tasks that can proceed once the contracts are stable.
+- Within US3, T064-T067 are parallel test tasks; T069-T071 are backend tasks and T072-T075 are
   frontend tasks that can proceed in parallel once conflict payloads are stable.
-- T066-T069 are parallel polish tasks; T070-T071 remain final validation tasks.
+- T076-T079 are parallel polish tasks; T080-T081 remain final validation tasks.
 
 ## Parallel Execution Examples
 
@@ -205,19 +222,20 @@ Integration: T019 after the API and UI lanes are available
 ### User Story 2
 
 ```text
-Parallel tests: T030, T031, T032, T033, T034, T036, T037, T038, T039
+Parallel tests: T030, T031, T032, T033, T034, T036, T037, T038, T039, T054, T055, T056, T057, T058
 Backend lane: T041 -> T042 -> T043 -> T044/T045/T046
-Frontend lane: T047 -> T048/T049 -> T050/T051/T052/T053
-Integration: T035 and T040 after the link and summary APIs are available
+Relationship lane: T060 -> T061 -> T062 -> T063
+Frontend lane: T047 -> T048/T049 -> T050/T051/T052/T053, then T063
+Integration: T035, T040, and T059 after the link and summary APIs are available
 ```
 
 ### User Story 3
 
 ```text
-Parallel tests: T054, T055, T056, T057
-Backend lane: T059 -> T060 -> T061
-Frontend lane: T062 -> T063/T064 -> T065
-Integration: T058 after lifecycle API and UI are available
+Parallel tests: T064, T065, T066, T067
+Backend lane: T069 -> T070 -> T071
+Frontend lane: T072 -> T073/T074 -> T075
+Integration: T068 after lifecycle API and UI are available
 ```
 
 ## Implementation Strategy
@@ -232,7 +250,7 @@ Integration: T058 after lifecycle API and UI are available
 ### Incremental Delivery
 
 1. Add US1 as the standalone ADR recording MVP.
-2. Add US2 to make component scope optional and reference-safe.
+2. Add US2 to make component and relationship scope optional and reference-safe.
 3. Add US3 to make lifecycle review, superseding, and deletion safe.
 4. Complete Phase 6 and run the full quickstart validation.
 
