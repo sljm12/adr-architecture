@@ -111,4 +111,44 @@ describe('ADR API contract', () => {
     expect(emptySummary.json()).toEqual([]);
     await app.close();
   });
+
+  it('allows unrestricted lifecycle updates and keeps rejected/superseded records discoverable', async () => {
+    const app = buildApp(); await app.ready();
+    const diagram = (await app.inject({ method: 'POST', url: '/diagrams', payload: { name: 'Payments' } })).json();
+    const original = (await app.inject({ method: 'POST', url: `/diagrams/${diagram.id}/adrs`, payload: completeAdrPayload })).json();
+    const replacement = (await app.inject({ method: 'POST', url: `/diagrams/${diagram.id}/adrs`, payload: { ...completeAdrPayload, title: 'Replacement decision', status: 'accepted' } })).json();
+
+    for (const status of ['accepted', 'rejected'] as const) {
+      const response = await app.inject({ method: 'PATCH', url: `/adrs/${original.id}`, payload: { ...completeAdrPayload, status, replacementAdrId: null } });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ id: original.id, status });
+    }
+    const superseded = await app.inject({ method: 'PATCH', url: `/adrs/${original.id}`, payload: { ...completeAdrPayload, status: 'superseded', replacementAdrId: replacement.id } });
+    expect(superseded.statusCode).toBe(200);
+    expect(superseded.json()).toMatchObject({ id: original.id, status: 'superseded', replacementAdrId: replacement.id });
+    const listed = await app.inject({ method: 'GET', url: `/diagrams/${diagram.id}/adrs` });
+    expect(listed.json()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: original.id, status: 'superseded' }),
+      expect.objectContaining({ id: replacement.id, status: 'accepted' }),
+    ]));
+    await app.close();
+  });
+
+  it('rejects superseded writes without a replacement and blocks then permits repaired deletion', async () => {
+    const app = buildApp(); await app.ready();
+    const diagram = (await app.inject({ method: 'POST', url: '/diagrams', payload: { name: 'Payments' } })).json();
+    const original = (await app.inject({ method: 'POST', url: `/diagrams/${diagram.id}/adrs`, payload: completeAdrPayload })).json();
+    const replacement = (await app.inject({ method: 'POST', url: `/diagrams/${diagram.id}/adrs`, payload: completeAdrPayload })).json();
+    const invalid = await app.inject({ method: 'PATCH', url: `/adrs/${original.id}`, payload: { ...completeAdrPayload, status: 'superseded', replacementAdrId: null } });
+    expect(invalid.statusCode).toBe(422);
+    expect(invalid.json().fields.replacementAdrId).toContain('replacement');
+    await app.inject({ method: 'PATCH', url: `/adrs/${original.id}`, payload: { ...completeAdrPayload, status: 'superseded', replacementAdrId: replacement.id } });
+    const blocked = await app.inject({ method: 'DELETE', url: `/adrs/${replacement.id}` });
+    expect(blocked.statusCode).toBe(409);
+    expect(blocked.json()).toMatchObject({ blockers: [{ adrId: original.id, title: original.title }] });
+    await app.inject({ method: 'PATCH', url: `/adrs/${original.id}`, payload: { ...completeAdrPayload, status: 'rejected', replacementAdrId: null } });
+    const deleted = await app.inject({ method: 'DELETE', url: `/adrs/${replacement.id}` });
+    expect(deleted.statusCode).toBe(204);
+    await app.close();
+  });
 });

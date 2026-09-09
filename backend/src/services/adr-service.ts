@@ -77,6 +77,15 @@ export class AdrService {
     if (!summaries) throw new AdrRelationshipNotFoundError('Relationship not found');
     return summaries;
   }
-  private async validateReplacement(input: AdrWritePayload, diagramId: string, currentId?: string) { if (!input.replacementAdrId) return; if (input.replacementAdrId === currentId) throw new Error('An ADR cannot replace itself'); const replacement = await this.adrs.get(input.replacementAdrId); assertAdrReplacement({ id: currentId ?? crypto.randomUUID(), diagramId, ...input, componentIds: [], relationshipIds: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), alternativesOrConstraints: input.alternativesOrConstraints ?? null, replacementAdrId: input.replacementAdrId ?? null }, replacement); }
+  private async validateReplacement(input: AdrWritePayload, diagramId: string, currentId?: string) {
+    if (!input.replacementAdrId) return;
+    try {
+      if (input.replacementAdrId === currentId) throw new Error('An ADR cannot replace itself');
+      const replacement = await this.adrs.get(input.replacementAdrId);
+      assertAdrReplacement({ id: currentId ?? crypto.randomUUID(), diagramId, ...input, componentIds: [], relationshipIds: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), alternativesOrConstraints: input.alternativesOrConstraints ?? null, replacementAdrId: input.replacementAdrId ?? null }, replacement);
+    } catch (error) {
+      throw new ApiValidationError({ replacementAdrId: error instanceof Error ? error.message : 'Replacement ADR is invalid' });
+    }
+  }
   private async linkOwnership(adr: ArchitectureDecisionRecord) { const diagram = await this.diagram(adr.diagramId); assertAdrComponentOwnership(adr, diagram.components); assertAdrRelationshipOwnership(adr, diagram.relationships); return adr; }
 }

@@ -20,4 +20,18 @@ describe('ADR domain invariants', () => {
     expect(() => assertAdrReplacement(superseded, completeAdrFixture({ id: adrFixtureIds.replacementAdr, diagramId: adrFixtureIds.otherDiagram }))).toThrow('same diagram');
     expect(() => assertAdrComponentOwnership(completeAdrFixture({ componentIds: [adrFixtureIds.otherComponent] }), adrComponentFixtures)).toThrow('different diagram');
   });
+
+  it('permits every supported status transition while keeping superseded records explicit', () => {
+    for (const status of ['draft', 'accepted', 'rejected'] as const) {
+      expect(() => assertAdrInvariants(completeAdrFixture({ status, replacementAdrId: null }))).not.toThrow();
+    }
+    expect(() => assertAdrInvariants(completeAdrFixture({ status: 'superseded', replacementAdrId: adrFixtureIds.replacementAdr }))).not.toThrow();
+    expect(() => assertAdrInvariants(completeAdrFixture({ status: 'superseded', replacementAdrId: null }))).toThrow('replacement ADR');
+  });
+
+  it('keeps rejected decisions valid and discoverable as first-class records', () => {
+    const rejected = completeAdrFixture({ status: 'rejected', replacementAdrId: null });
+    expect(rejected.status).toBe('rejected');
+    expect(() => assertAdrInvariants(rejected)).not.toThrow();
+  });
 });

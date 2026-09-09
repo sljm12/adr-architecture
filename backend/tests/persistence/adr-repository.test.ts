@@ -91,4 +91,24 @@ describe('ADR repository', () => {
       expect.objectContaining({ adrId: newer.id, title: newer.title }),
     ]);
   });
+
+  it('blocks replacement-target deletion until references are repaired, then removes the ADR and its own links', () => {
+    const repository = new AdrRepository();
+    repository.registerDiagram(adrFixtureIds.diagram);
+    repository.registerComponent({ id: adrFixtureIds.componentA, diagramId: adrFixtureIds.diagram, name: 'API' });
+    const relationship = { id: '00000000-0000-0000-0000-000000000233', diagramId: adrFixtureIds.diagram };
+    repository.registerRelationship(relationship);
+    const replacement = repository.create(adrFixtureIds.diagram, completeAdrPayload);
+    const original = repository.create(adrFixtureIds.diagram, { ...completeAdrPayload, status: 'superseded', replacementAdrId: replacement.id });
+    repository.replaceLinks(original.id, [adrFixtureIds.componentA]);
+    repository.replaceRelationshipLinks(original.id, [relationship.id]);
+
+    expect(repository.delete(replacement.id)).toMatchObject({ deleted: false, blockers: [expect.objectContaining({ adrId: original.id, title: original.title })] });
+    repository.update(original.id, { ...completeAdrPayload, status: 'rejected', replacementAdrId: null });
+    expect(repository.delete(replacement.id)).toEqual({ deleted: true });
+    expect(repository.get(replacement.id)).toBeUndefined();
+    expect(repository.get(original.id)).toMatchObject({ componentIds: [adrFixtureIds.componentA], relationshipIds: [relationship.id] });
+    expect(repository.delete(original.id)).toEqual({ deleted: true });
+    expect(repository.get(original.id)).toBeUndefined();
+  });
 });

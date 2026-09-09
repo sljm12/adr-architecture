@@ -134,3 +134,54 @@ test('edits component names and relationship label/direction without changing ar
   expect(diagram.components.find((component: any) => component.id === '00000000-0000-0000-0000-000000000542').name).toBe('Gateway');
   expect(diagram.relationships[0]).toMatchObject({ id: '00000000-0000-0000-0000-000000000544', sourceComponentId: '00000000-0000-0000-0000-000000000543', targetComponentId: '00000000-0000-0000-0000-000000000542', direction: 'undirected', label: 'sends events' });
 });
+
+test('reviews statuses, supersedes with a replacement, blocks replacement deletion, and repairs then confirms delete', async ({ page }) => {
+  const diagram = { id: '00000000-0000-0000-0000-000000000551', name: 'Payments', status: 'active', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', trashedAt: null, components: [], relationships: [] };
+  const originalId = '00000000-0000-0000-0000-000000000552';
+  const replacementId = '00000000-0000-0000-0000-000000000553';
+  const rejectedId = '00000000-0000-0000-0000-000000000554';
+  let adrs: any[] = [];
+  await page.route('**/api/diagrams', route => route.fulfill({ status: route.request().method() === 'POST' ? 201 : 200, contentType: 'application/json', body: JSON.stringify(route.request().method() === 'POST' ? diagram : [diagram]) }));
+  await page.route('**/api/diagrams/*/adrs', async route => {
+    if (route.request().method() === 'GET') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adrs.map(adr => ({ id: adr.id, title: adr.title, status: adr.status, updatedAt: adr.updatedAt, componentCount: 0, relationshipCount: 0 }))) });
+    const payload = route.request().postDataJSON();
+    const id = adrs.length === 0 ? originalId : adrs.length === 1 ? replacementId : rejectedId;
+    const adr = { ...payload, id, diagramId: diagram.id, componentIds: [], relationshipIds: [], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' };
+    adrs = [...adrs, adr];
+    return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(adr) });
+  });
+  await page.route('**/api/adrs/**', async route => {
+    const id = route.request().url().split('/api/adrs/')[1];
+    const adr = adrs.find(item => item.id === id);
+    if (route.request().method() === 'GET') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr) });
+    if (route.request().method() === 'DELETE') {
+      const blocker = adrs.find(item => item.replacementAdrId === id);
+      if (blocker) return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ message: 'ADR cannot be deleted while it is referenced as a replacement', blockers: [{ adrId: blocker.id, title: blocker.title, reason: 'This ADR is the replacement for the blocking ADR.' }] }) });
+      adrs = adrs.filter(item => item.id !== id);
+      return route.fulfill({ status: 204 });
+    }
+    const payload = route.request().postDataJSON();
+    const updated = { ...adr, ...payload, updatedAt: '2026-01-02T00:00:00.000Z' };
+    adrs = adrs.map(item => item.id === id ? updated : item);
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify(updated) });
+  });
+
+  await page.goto('/');
+  await page.getByLabel('Diagram name').fill('Payments'); await page.getByRole('button', { name: 'Create diagram' }).click();
+  await page.getByRole('button', { name: 'Decision' }).click();
+  const workspace = page.getByLabel('ADR workspace');
+  await workspace.getByRole('button', { name: 'New decision' }).click(); await fillAdrForm(page); await workspace.getByRole('button', { name: 'Save decision' }).click();
+  await workspace.getByRole('button', { name: 'New decision' }).click(); await fillAdrForm(page); await page.getByLabel('Title').fill('Replacement decision'); await page.locator('#adr-status').selectOption('accepted'); await workspace.getByRole('button', { name: 'Save decision' }).click();
+  await workspace.getByRole('button', { name: 'New decision' }).click(); await fillAdrForm(page); await page.getByLabel('Title').fill('Rejected decision'); await page.locator('#adr-status').selectOption('rejected'); await workspace.getByRole('button', { name: 'Save decision' }).click();
+  await expect(workspace.locator('.adr-status-rejected').last()).toBeVisible();
+
+  await workspace.getByRole('button', { name: /Use a payment service boundary/ }).first().click();
+  await page.locator('#adr-status').selectOption('superseded'); await workspace.getByLabel('Replacement decision').selectOption(replacementId); await workspace.getByRole('button', { name: 'Save decision' }).click();
+  await expect(workspace.locator('.adr-status-superseded').last()).toBeVisible();
+
+  await workspace.getByRole('button', { name: /Replacement decision/ }).click(); await workspace.getByRole('button', { name: 'Delete decision' }).click(); await workspace.getByRole('button', { name: 'Delete decision', exact: true }).last().click();
+  await expect(workspace).toContainText('Dependency blocker'); await expect(workspace).toContainText(originalId);
+  await workspace.getByRole('button', { name: 'Open blocking decision' }).click(); await page.locator('#adr-status').selectOption('rejected'); await workspace.getByRole('button', { name: 'Save decision' }).click();
+  await workspace.getByRole('button', { name: /Replacement decision/ }).click(); await workspace.getByRole('button', { name: 'Delete decision' }).click(); await workspace.getByRole('button', { name: 'Delete decision', exact: true }).last().click();
+  await expect(workspace).toContainText('Decision deleted successfully.'); await expect(workspace.getByRole('button', { name: /Replacement decision/ })).toHaveCount(0);
+});

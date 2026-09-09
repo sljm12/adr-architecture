@@ -177,20 +177,20 @@ clear success/conflict feedback.
 
 ### Tests for User Story 4
 
-- [ ] T079 [P] [US4] Add unrestricted status-transition, superseded-without-replacement, same-diagram replacement, and rejected-record tests in `shared/tests/adr-domain.test.ts`
-- [ ] T080 [P] [US4] Add replacement-reference deletion conflict and successful repaired-delete tests in `backend/tests/persistence/adr-repository.test.ts`
-- [ ] T081 [P] [US4] Add status update, list discoverability, delete confirmation contract, and 409 blocker response tests in `backend/tests/contract/adrs.test.ts`
-- [ ] T082 [P] [US4] Add status badge, filtering, replacement selection, delete confirmation, and success/error announcement tests in `frontend/tests/adr-status.test.tsx`
+- [X] T079 [P] [US4] Add unrestricted status-transition, superseded-without-replacement, same-diagram replacement, and rejected-record tests in `shared/tests/adr-domain.test.ts`
+- [X] T080 [P] [US4] Add replacement-reference deletion conflict and successful repaired-delete tests in `backend/tests/persistence/adr-repository.test.ts`
+- [X] T081 [P] [US4] Add status update, list discoverability, delete confirmation contract, and 409 blocker response tests in `backend/tests/contract/adrs.test.ts`
+- [X] T082 [P] [US4] Add status badge, filtering, replacement selection, delete confirmation, and success/error announcement tests in `frontend/tests/adr-status.test.tsx`
 ### Implementation for User Story 4
 
-- [ ] T083 [US4] Implement replacement-reference queries, guarded ADR deletion, and transactional cleanup of an ADR's own component and relationship links in `backend/src/persistence/adr-repository.ts`
-- [ ] T084 [US4] Implement unrestricted supported status transitions, superseded replacement validation, and dependency conflict details in `backend/src/services/adr-service.ts`
-- [ ] T085 [US4] Add ADR delete and lifecycle update behavior, including 409 blocking references, in `backend/src/api/adr-routes.ts`
-- [ ] T086 [US4] Implement status update, delete, and replacement-repair actions with retained failed drafts in `frontend/src/state/adr-store.ts` and `frontend/src/api/adr-client.ts`
-- [ ] T087 [US4] Build status badges, status filtering, replacement ADR selection, and visible superseded/rejected metadata in `frontend/src/components/AdrStatusBadge.tsx` and `frontend/src/components/AdrList.tsx`
-- [ ] T088 [US4] Add delete confirmation, dependency-blocker dialog, repair/remove-link guidance, and success/failure announcements in `frontend/src/components/AdrEditor.tsx`, `frontend/src/components/ConfirmDialog.tsx`, and `frontend/src/components/WorkspaceInspector.tsx`
-- [ ] T089 [US4] Integrate lifecycle controls and list refresh behavior into `frontend/src/components/DiagramWorkspace.tsx` without losing the active draft during failed mutations
-- [ ] T090 [US4] Add lifecycle review, supersede, blocked replacement delete, confirmed delete, and rejected/superseded discoverability journeys in `e2e/tests/adr-component-tagging.spec.ts`
+- [X] T083 [US4] Implement replacement-reference queries, guarded ADR deletion, and transactional cleanup of an ADR's own component and relationship links in `backend/src/persistence/adr-repository.ts`
+- [X] T084 [US4] Implement unrestricted supported status transitions, superseded replacement validation, and dependency conflict details in `backend/src/services/adr-service.ts`
+- [X] T085 [US4] Add ADR delete and lifecycle update behavior, including 409 blocking references, in `backend/src/api/adr-routes.ts`
+- [X] T086 [US4] Implement status update, delete, and replacement-repair actions with retained failed drafts in `frontend/src/state/adr-store.ts` and `frontend/src/api/adr-client.ts`
+- [X] T087 [US4] Build status badges, status filtering, replacement ADR selection, and visible superseded/rejected metadata in `frontend/src/components/AdrStatusBadge.tsx` and `frontend/src/components/AdrList.tsx`
+- [X] T088 [US4] Add delete confirmation, dependency-blocker dialog, repair/remove-link guidance, and success/failure announcements in `frontend/src/components/AdrEditor.tsx`, `frontend/src/components/ConfirmDialog.tsx`, and `frontend/src/components/WorkspaceInspector.tsx`
+- [X] T089 [US4] Integrate lifecycle controls and list refresh behavior into `frontend/src/components/DiagramWorkspace.tsx` without losing the active draft during failed mutations
+- [X] T090 [US4] Add lifecycle review, supersede, blocked replacement delete, confirmed delete, and rejected/superseded discoverability journeys in `e2e/tests/adr-component-tagging.spec.ts`
 
 **Checkpoint**: US4 is independently usable when all statuses remain discoverable, superseding is
 validated, and destructive actions are confirmed or blocked with actionable references.
