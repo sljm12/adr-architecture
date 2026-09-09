@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { DiagramDocument, DiagramSummary } from '../../../shared/src/index';
+import type { DiagramDocument, DiagramSummary, Relationship, RelationshipDirection } from '../../../shared/src/index';
 import { diagramClient } from '../api/diagram-client';
 import { BoundedHistory } from './history';
 
@@ -24,6 +24,10 @@ type State = {
   redo: () => void;
   addComponent: (name: string) => void;
   addRelationship: (source: string, target: string, label: string, direction: 'directed' | 'undirected') => void;
+  renameComponent: (componentId: string, name: string) => boolean;
+  updateRelationship: (relationshipId: string, updates: Partial<Pick<Relationship, 'sourceComponentId' | 'targetComponentId' | 'direction' | 'label'>>) => boolean;
+  reverseRelationship: (relationshipId: string) => boolean;
+  setRelationshipDirection: (relationshipId: string, direction: RelationshipDirection) => boolean;
   removeRelationship: (relationshipId: string) => void;
   save: () => Promise<void>;
   refreshSavedDocuments: () => Promise<void>;
@@ -93,6 +97,51 @@ export const useDiagramStore = create<State>((set, get) => ({
       }],
     }));
   },
+  renameComponent: (componentId, name) => {
+    const trimmedName = name.trim();
+    if (!trimmedName || !get().document?.components.some(component => component.id === componentId)) return false;
+    get().update(current => ({
+      ...current,
+      components: current.components.map(component => component.id === componentId
+        ? { ...component, name: trimmedName, updatedAt: now() }
+        : component),
+    }));
+    return true;
+  },
+  updateRelationship: (relationshipId, updates) => {
+    const current = get().document;
+    const relationship = current?.relationships.find(item => item.id === relationshipId);
+    if (!current || !relationship) return false;
+    const sourceComponentId = updates.sourceComponentId ?? relationship.sourceComponentId;
+    const targetComponentId = updates.targetComponentId ?? relationship.targetComponentId;
+    if (sourceComponentId === targetComponentId
+      || !current.components.some(component => component.id === sourceComponentId)
+      || !current.components.some(component => component.id === targetComponentId)) return false;
+    if (updates.direction && updates.direction !== 'directed' && updates.direction !== 'undirected') return false;
+    get().update(document => ({
+      ...document,
+      relationships: document.relationships.map(item => item.id === relationshipId
+        ? {
+          ...item,
+          sourceComponentId,
+          targetComponentId,
+          direction: updates.direction ?? item.direction,
+          label: updates.label === undefined ? item.label : updates.label.trim() || null,
+          updatedAt: now(),
+        }
+        : item),
+    }));
+    return true;
+  },
+  reverseRelationship: relationshipId => {
+    const relationship = get().document?.relationships.find(item => item.id === relationshipId);
+    if (!relationship) return false;
+    return get().updateRelationship(relationshipId, {
+      sourceComponentId: relationship.targetComponentId,
+      targetComponentId: relationship.sourceComponentId,
+    });
+  },
+  setRelationshipDirection: (relationshipId, direction) => get().updateRelationship(relationshipId, { direction }),
   removeRelationship: relationshipId => {
     const document = get().document;
     if (!document || !document.relationships.some(relationship => relationship.id === relationshipId)) return;

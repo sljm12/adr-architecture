@@ -143,23 +143,23 @@ diagram plus unchanged component/relationship and ADR-link identities.
 
 ### Tests for User Story 3
 
-- [ ] T064 [P] [US3] Add shared validation and invariant tests for trimmed component names, blank-name rejection, valid direction modes, self-reference rejection, and stable IDs in `shared/tests/validation.test.ts` and `shared/tests/domain.test.ts`
-- [ ] T065 [P] [US3] Add diagram-store history tests for component rename, relationship label edit, direction reversal, direction-mode change, undo/redo, and preserved ADR-link IDs in `frontend/tests/diagram-store.test.ts`
-- [ ] T066 [P] [US3] Add persistence tests proving component and relationship edits preserve IDs and creation timestamps while updating editable fields and reopening with ADR links intact in `backend/tests/persistence/diagram-repository.test.ts`
-- [ ] T067 [P] [US3] Add diagram save contract tests for component-name and relationship label/direction edits, invalid blank names, invalid endpoints, and unchanged IDs in `backend/tests/contract/diagrams.test.ts`
-- [ ] T068 [P] [US3] Add selected-artifact inspector and canvas tests for edit controls, validation feedback, direction markers, label updates, stable selection, and accessible names in `frontend/tests/diagram-editing.test.tsx`
+- [X] T064 [P] [US3] Add shared validation and invariant tests for trimmed component names, blank-name rejection, valid direction modes, self-reference rejection, and stable IDs in `shared/tests/validation.test.ts` and `shared/tests/domain.test.ts`
+- [X] T065 [P] [US3] Add diagram-store history tests for component rename, relationship label edit, direction reversal, direction-mode change, undo/redo, and preserved ADR-link IDs in `frontend/tests/diagram-store.test.ts`
+- [X] T066 [P] [US3] Add persistence tests proving component and relationship edits preserve IDs and creation timestamps while updating editable fields and reopening with ADR links intact in `backend/tests/persistence/diagram-repository.test.ts`
+- [X] T067 [P] [US3] Add diagram save contract tests for component-name and relationship label/direction edits, invalid blank names, invalid endpoints, and unchanged IDs in `backend/tests/contract/diagrams.test.ts`
+- [X] T068 [P] [US3] Add selected-artifact inspector and canvas tests for edit controls, validation feedback, direction markers, label updates, stable selection, and accessible names in `frontend/tests/diagram-editing.test.tsx`
 ### Implementation for User Story 3
 
-- [ ] T069 [US3] Extend shared diagram validation and edit invariants for trimmed non-blank component names, valid relationship endpoints, directed/undirected modes, and in-place stable-ID updates in `shared/src/validation/schemas.ts` and `shared/src/domain/invariants.ts`
-- [ ] T070 [US3] Add component-rename, relationship-label, direction-reversal, and direction-mode update actions that record explicit history without changing artifact IDs or ADR links in `frontend/src/state/diagram-store.ts`
-- [ ] T071 [US3] Extend the selected-artifact inspector with accessible component-name editing and relationship label, endpoint, and direction controls, including field validation and retry-safe unsaved feedback in `frontend/src/components/WorkspaceInspector.tsx`
-- [ ] T072 [US3] Ensure the React Flow adapter and canvas render renamed component labels, updated relationship labels, swapped source/target endpoints, and directed/undirected markers from domain data while retaining stable node and edge IDs in `frontend/src/adapters/react-flow/diagram-adapter.ts` and `frontend/src/components/DiagramCanvas.tsx`
-- [ ] T073 [US3] Connect selected component and relationship edit state, save status, validation errors, and stable artifact selection through `frontend/src/components/DiagramWorkspace.tsx` and `frontend/src/components/WorkspaceInspector.tsx`
-- [ ] T074 [US3] Preserve existing component and relationship IDs and creation timestamps while validating and atomically persisting edited names, labels, endpoints, and direction through `backend/src/persistence/diagram-repository.ts` and `backend/src/services/diagram-service.ts`
-- [ ] T075 [US3] Map component and relationship edit validation failures and full-document save responses without changing the existing `PUT /diagrams/{diagramId}` contract in `backend/src/api/diagram-routes.ts` and `backend/src/api/errors.ts`
-- [ ] T076 [US3] Add edit-form, selected-artifact, direction-marker, validation-error, and unsaved-state styles consistent with DESIGN.md and accessible 44px controls in `frontend/src/styles.css`
-- [ ] T077 [US3] Verify component and relationship edits preserve ADR component/relationship links and stale-save protection across the diagram and ADR stores in `frontend/src/state/diagram-store.ts` and `frontend/src/state/adr-store.ts`
-- [ ] T078 [US3] Add the rename, relabel, reverse-direction, direction-mode, save/reopen, and ADR-link-preservation journey to `e2e/tests/adr-component-tagging.spec.ts`
+- [X] T069 [US3] Extend shared diagram validation and edit invariants for trimmed non-blank component names, valid relationship endpoints, directed/undirected modes, and in-place stable-ID updates in `shared/src/validation/schemas.ts` and `shared/src/domain/invariants.ts`
+- [X] T070 [US3] Add component-rename, relationship-label, direction-reversal, and direction-mode update actions that record explicit history without changing artifact IDs or ADR links in `frontend/src/state/diagram-store.ts`
+- [X] T071 [US3] Extend the selected-artifact inspector with accessible component-name editing and relationship label, endpoint, and direction controls, including field validation and retry-safe unsaved feedback in `frontend/src/components/WorkspaceInspector.tsx`
+- [X] T072 [US3] Ensure the React Flow adapter and canvas render renamed component labels, updated relationship labels, swapped source/target endpoints, and directed/undirected markers from domain data while retaining stable node and edge IDs in `frontend/src/adapters/react-flow/diagram-adapter.ts` and `frontend/src/components/DiagramCanvas.tsx`
+- [X] T073 [US3] Connect selected component and relationship edit state, save status, validation errors, and stable artifact selection through `frontend/src/components/DiagramWorkspace.tsx` and `frontend/src/components/WorkspaceInspector.tsx`
+- [X] T074 [US3] Preserve existing component and relationship IDs and creation timestamps while validating and atomically persisting edited names, labels, endpoints, and direction through `backend/src/persistence/diagram-repository.ts` and `backend/src/services/diagram-service.ts`
+- [X] T075 [US3] Map component and relationship edit validation failures and full-document save responses without changing the existing `PUT /diagrams/{diagramId}` contract in `backend/src/api/diagram-routes.ts` and `backend/src/api/errors.ts`
+- [X] T076 [US3] Add edit-form, selected-artifact, direction-marker, validation-error, and unsaved-state styles consistent with DESIGN.md and accessible 44px controls in `frontend/src/styles.css`
+- [X] T077 [US3] Verify component and relationship edits preserve ADR component/relationship links and stale-save protection across the diagram and ADR stores in `frontend/src/state/diagram-store.ts` and `frontend/src/state/adr-store.ts`
+- [X] T078 [US3] Add the rename, relabel, reverse-direction, direction-mode, save/reopen, and ADR-link-preservation journey to `e2e/tests/adr-component-tagging.spec.ts`
 
 **Checkpoint**: US3 is independently usable when existing components and relationships can be
 edited, saved, reopened, undone, and redone without changing stable IDs or breaking ADR links.
