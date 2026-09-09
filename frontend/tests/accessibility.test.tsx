@@ -49,6 +49,16 @@ describe('core workflow accessibility contract', () => {
     expect(switchDialog).toContain('previouslyFocused?.focus()');
   });
 
+  it('labels navigation, inspector controls, and live save feedback', () => {
+    expect(workspace).toContain('nav className="global-nav" aria-label="Global navigation"');
+    expect(workspace).toContain('aria-label="Diagram overview"');
+    expect(workspace).toContain('aria-label="Close diagrams panel"');
+    expect(inspector).toContain('aria-label={mode === \'adr\' ? \'ADR workspace\' : \'Diagram inspector\'}');
+    expect(inspector).toContain('aria-label="Close inspector"');
+    expect(workspace).toContain('id="diagram-workspace" aria-label="Diagram editor"');
+    expect(styles).toContain('.save-status');
+  });
+
   it('uses WCAG AA contrast for the primary controls and muted text', () => {
     expect(contrast('#0066cc', '#ffffff')).toBeGreaterThanOrEqual(4.5);
     expect(contrast('#5f6368', '#f5f5f7')).toBeGreaterThanOrEqual(4.5);

@@ -30,8 +30,10 @@ test('protects unsaved changes before switching saved documents', async ({ page 
   await mockApi(page, [first, second]);
   await page.goto('/');
   await page.getByRole('button', { name: /System, last saved/ }).first().click();
-  await page.getByLabel('Name your next building block').fill('Unsaved');
-  await page.getByRole('button', { name: 'Add' }).click();
+  await page.getByRole('button', { name: 'Add component' }).click();
+  const inspector = page.getByLabel('Diagram inspector');
+  await inspector.getByLabel('Component name').fill('Unsaved');
+  await inspector.getByRole('button', { name: 'Add component' }).click();
   await page.getByRole('button', { name: /System, last saved/ }).nth(1).click();
   await expect(page.getByRole('alertdialog', { name: 'Save changes before loading?' })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel' }).click();

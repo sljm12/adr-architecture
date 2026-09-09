@@ -200,12 +200,12 @@ validated, and destructive actions are confirmed or blocked with actionable refe
 **Purpose**: Verify the complete feature against the constitution, design system, contract, and
 quickstart without adding out-of-scope collaboration/authentication/revision complexity.
 
-- [ ] T091 [P] Add focused keyboard, accessible-name, focus-order, status-announcement, and contrast coverage for the complete ADR and diagram-editing workflow in `frontend/tests/adr-accessibility.test.tsx` and `frontend/tests/accessibility.test.tsx`
-- [ ] T092 [P] Add API error, retry, concurrent-edit, stale-save, and no-silent-data-loss regression coverage for component edits and ADR links in `backend/tests/contract/diagrams.test.ts` and `frontend/tests/diagram-store.test.ts`
-- [ ] T093 [P] Review ADR and diagram-editing UI at the DESIGN.md breakpoints and refine responsive layout, overflow, long-text readability, and 44px edit controls in `frontend/src/styles.css`
-- [ ] T094 [P] Update `specs/002-adr-component-tagging/contracts/openapi.yaml`, `data-model.md`, and `quickstart.md` if implementation response shapes or validation commands changed
-- [ ] T095 Run `npm test`, `npm run build`, and `npm run test:e2e`, then resolve ADR and diagram-editing failures without weakening existing persistence or Mermaid tests
-- [ ] T096 Run every acceptance scenario in `specs/002-adr-component-tagging/quickstart.md` against a migrated PostgreSQL instance and record the validation result in the implementation handoff
+- [X] T091 [P] Add focused keyboard, accessible-name, focus-order, status-announcement, and contrast coverage for the complete ADR and diagram-editing workflow in `frontend/tests/adr-accessibility.test.tsx` and `frontend/tests/accessibility.test.tsx`
+- [X] T092 [P] Add API error, retry, concurrent-edit, stale-save, and no-silent-data-loss regression coverage for component edits and ADR links in `backend/tests/contract/diagrams.test.ts` and `frontend/tests/diagram-store.test.ts`
+- [X] T093 [P] Review ADR and diagram-editing UI at the DESIGN.md breakpoints and refine responsive layout, overflow, long-text readability, and 44px edit controls in `frontend/src/styles.css`
+- [X] T094 [P] Update `specs/002-adr-component-tagging/contracts/openapi.yaml`, `data-model.md`, and `quickstart.md` if implementation response shapes or validation commands changed
+- [X] T095 Run `npm test`, `npm run build`, and `npm run test:e2e`, then resolve ADR and diagram-editing failures without weakening existing persistence or Mermaid tests
+- [X] T096 Run every acceptance scenario in `specs/002-adr-component-tagging/quickstart.md` against a migrated PostgreSQL instance and record the validation result in the implementation handoff
 
 ## Dependencies & Execution Order
 

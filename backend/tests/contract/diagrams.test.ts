@@ -41,6 +41,38 @@ describe('diagram artifact editing API', () => {
     expect((await app.inject({ method: 'PUT', url: `/diagrams/${document.id}`, payload: invalid })).statusCode).toBe(422);
     await app.close();
   });
+
+  it('returns actionable validation errors without mutating component or relationship edits', async () => {
+    const app = buildApp(); await app.ready();
+    const created = await app.inject({ method: 'POST', url: '/diagrams', payload: { name: 'Validation' } });
+    const document = created.json();
+    const componentA = crypto.randomUUID(); const componentB = crypto.randomUUID(); const relationshipId = crypto.randomUUID();
+    const initialDocument = {
+      ...document,
+      components: [
+        { id: componentA, diagramId: document.id, name: 'API', description: null, type: null, position: { x: 0, y: 0 }, createdAt: document.createdAt, updatedAt: document.updatedAt },
+        { id: componentB, diagramId: document.id, name: 'DB', description: null, type: null, position: { x: 200, y: 0 }, createdAt: document.createdAt, updatedAt: document.updatedAt },
+      ],
+      relationships: [{ id: relationshipId, diagramId: document.id, sourceComponentId: componentA, targetComponentId: componentB, direction: 'directed', label: 'reads', createdAt: document.createdAt, updatedAt: document.updatedAt }],
+    };
+    const initial = await app.inject({ method: 'PUT', url: `/diagrams/${document.id}`, payload: initialDocument });
+    expect(initial.statusCode).toBe(200);
+
+    const invalidComponent = { ...initial.json(), components: initial.json().components.map((component: any) => component.id === componentA ? { ...component, name: '   ' } : component) };
+    const componentError = await app.inject({ method: 'PUT', url: `/diagrams/${document.id}`, payload: invalidComponent });
+    expect(componentError.statusCode).toBe(422);
+    expect(componentError.json()).toMatchObject({ message: expect.any(String), fields: expect.any(Object) });
+
+    const invalidRelationship = { ...initial.json(), relationships: [{ ...initial.json().relationships[0], targetComponentId: crypto.randomUUID() }] };
+    const relationshipError = await app.inject({ method: 'PUT', url: `/diagrams/${document.id}`, payload: invalidRelationship });
+    expect(relationshipError.statusCode).toBe(422);
+    expect(relationshipError.json().fields).toEqual(expect.any(Object));
+
+    const reopened = await app.inject({ method: 'GET', url: `/diagrams/${document.id}` });
+    expect(reopened.json().components).toEqual(expect.arrayContaining([expect.objectContaining({ id: componentA, name: 'API' })]));
+    expect(reopened.json().relationships).toEqual([expect.objectContaining({ id: relationshipId, targetComponentId: componentB, label: 'reads' })]);
+    await app.close();
+  });
 });
 
 describe('saved-document API', () => it('lists active summaries, excludes trashed documents, and loads by stable ID', async () => {

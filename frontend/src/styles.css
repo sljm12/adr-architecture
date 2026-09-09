@@ -18,3 +18,32 @@
 .component-adr-summary{display:grid;gap:12px;padding:22px 24px;border-bottom:1px solid #e0e0e0;background:#fff}.component-adr-summary-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.component-adr-summary-heading h3{margin:3px 0 0;font-size:20px}.component-adr-summary-heading .inspector-meta{margin:0}.component-adr-summary-count{display:grid;place-items:center;min-width:28px;min-height:28px;border-radius:9999px;background:#f0f0f0;color:#333;font-size:12px}.component-adr-summary-list{display:grid;gap:8px;list-style:none;padding:0;margin:0}.component-adr-summary-row{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:56px;padding:10px 12px;border:1px solid #e0e0e0;border-radius:9px;background:#fafafc;color:#1d1d1f;text-align:left}.component-adr-summary-row:hover{border-color:#b9d6f5;background:#f5faff}.component-adr-summary-row span{display:grid;gap:2px;min-width:0}.component-adr-summary-row strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}.component-adr-summary-row small{color:#5f6368;font-size:11px}.component-adr-summary-feedback,.component-adr-summary-empty{margin:0;padding:11px 12px;border-radius:8px;color:#5f6368;background:#f5f5f7;font-size:13px}.component-adr-summary-error{color:#9b1c1c;background:#fff1f1}
 .relationship-adr-summary{display:grid;gap:12px;padding:22px 24px;border-bottom:1px solid #e0e0e0;background:#fff}.relationship-adr-summary-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.relationship-adr-summary-heading h3{margin:3px 0 0;font-size:20px}.relationship-adr-summary-heading .inspector-meta{margin:0}.relationship-adr-summary-detail{margin:6px 0 0;color:#5f6368;font-size:13px}.relationship-adr-summary-count{display:grid;place-items:center;min-width:28px;min-height:28px;border-radius:9999px;background:#f0f0f0;color:#333;font-size:12px}.relationship-adr-summary-list{display:grid;gap:8px;list-style:none;padding:0;margin:0}.relationship-adr-summary-row{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:56px;padding:10px 12px;border:1px solid #e0e0e0;border-radius:9px;background:#fafafc;color:#1d1d1f;text-align:left}.relationship-adr-summary-row:hover{border-color:#b9d6f5;background:#f5faff}.relationship-adr-summary-row span{display:grid;gap:2px;min-width:0}.relationship-adr-summary-row strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}.relationship-adr-summary-row small{color:#5f6368;font-size:11px}.relationship-adr-summary-feedback,.relationship-adr-summary-empty{margin:0;padding:11px 12px;border-radius:8px;color:#5f6368;background:#f5f5f7;font-size:13px}.relationship-adr-summary-error{color:#9b1c1c;background:#fff1f1}
 .artifact-edit-panel{display:grid;gap:10px;padding:0 0 22px;margin-bottom:22px;border-bottom:1px solid #e0e0e0}.artifact-edit-panel h3{margin:0;font-size:20px;line-height:1.2}.artifact-edit-form{gap:8px}.artifact-edit-form .primary-pill{margin-top:4px}.artifact-edit-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:4px}.artifact-edit-actions button:not(.primary-pill){min-height:44px;padding:10px 14px;border:1px solid #0066cc;border-radius:9999px;background:#fff;color:#0066cc;font-size:14px}.artifact-edit-error{margin:0;color:#9b1c1c;font-size:13px}
+.adr-list,.adr-editor,.artifact-edit-panel,.component-adr-summary,.relationship-adr-summary{min-width:0}
+.adr-list-item{min-height:44px}
+.adr-list-item strong,.adr-link-chip span,.component-adr-summary-row strong,.relationship-adr-summary-row strong{overflow-wrap:anywhere;word-break:break-word;white-space:normal}
+.adr-editor label,.adr-link-option,.artifact-edit-form{min-width:0}
+.adr-editor input,.adr-editor textarea,.adr-editor select,.adr-link-search input,.inspector-form input,.inspector-form select{max-width:100%;min-width:0}
+.adr-link-chip button{min-height:44px}
+.adr-link-chip{min-height:52px}
+.adr-editor textarea{overflow-wrap:anywhere}
+
+@media(max-width:1068px){
+  .workspace-inspector-adr .adr-editor,.workspace-inspector-adr .adr-list{padding-left:20px;padding-right:20px}
+  .workspace-inspector-adr .adr-editor-actions{flex-wrap:wrap}
+}
+@media(max-width:833px){
+  .workspace-inspector-adr .adr-workspace-body{min-width:0}
+  .workspace-inspector-adr .adr-list,.workspace-inspector-adr .adr-editor{min-width:0}
+  .component-adr-summary,.relationship-adr-summary{padding-left:20px;padding-right:20px}
+}
+@media(max-width:640px){
+  .workspace-inspector-adr .adr-editor-actions .primary-pill,.workspace-inspector-adr .adr-editor-actions .secondary-action{flex:1 1 160px}
+  .workspace-inspector-adr .adr-link-chips{display:grid;grid-template-columns:minmax(0,1fr)}
+  .workspace-inspector-adr .adr-link-chip{justify-content:space-between}
+  .component-adr-summary,.relationship-adr-summary{padding-left:16px;padding-right:16px}
+}
+@media(max-width:480px){
+  .workspace-inspector-adr .adr-link-chip{align-items:flex-start;flex-wrap:wrap}
+  .workspace-inspector-adr .adr-link-chip button{flex:0 0 auto}
+  .component-adr-summary-row,.relationship-adr-summary-row{align-items:flex-start;flex-wrap:wrap}
+}

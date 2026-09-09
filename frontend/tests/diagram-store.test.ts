@@ -79,6 +79,38 @@ describe('explicit diagram saving', () => {
     expect(save).toHaveBeenCalledTimes(2);
     expect(useDiagramStore.getState().status).toBe('saved');
   });
+
+  it('does not lose a newer component or relationship edit while an older save is pending', async () => {
+    let resolveSave: ((value: DiagramDocument) => void) | undefined;
+    vi.spyOn(diagramClient, 'save').mockImplementation(() => new Promise(resolve => {
+      resolveSave = resolve;
+    }));
+    useDiagramStore.getState().open(structuredClone(editableDocument));
+    useDiagramStore.getState().renameComponent(editableDocument.components[0].id, 'Gateway');
+    const pendingSave = useDiagramStore.getState().save();
+    useDiagramStore.getState().updateRelationship(editableDocument.relationships[0].id, { label: 'newer label' });
+
+    resolveSave?.({ ...editableDocument, components: editableDocument.components.map(component => component.id === editableDocument.components[0].id ? { ...component, name: 'Gateway' } : component) });
+    await pendingSave;
+
+    const current = useDiagramStore.getState();
+    expect(current.status).toBe('unsaved');
+    expect(current.document?.components[0]).toMatchObject({ id: editableDocument.components[0].id, name: 'Gateway' });
+    expect(current.document?.relationships[0]).toMatchObject({ id: editableDocument.relationships[0].id, label: 'newer label' });
+  });
+
+  it('keeps the last valid artifact identity and edit available after an API error', async () => {
+    vi.spyOn(diagramClient, 'save').mockRejectedValueOnce(new Error('Conflict: diagram changed on the server.'));
+    useDiagramStore.getState().open(structuredClone(editableDocument));
+    useDiagramStore.getState().renameComponent(editableDocument.components[0].id, 'Gateway');
+    useDiagramStore.getState().updateRelationship(editableDocument.relationships[0].id, { label: 'sends events' });
+
+    await useDiagramStore.getState().save();
+
+    expect(useDiagramStore.getState()).toMatchObject({ status: 'failed', error: 'Conflict: diagram changed on the server.' });
+    expect(useDiagramStore.getState().document?.components[0]).toMatchObject({ id: editableDocument.components[0].id, name: 'Gateway' });
+    expect(useDiagramStore.getState().document?.relationships[0]).toMatchObject({ id: editableDocument.relationships[0].id, label: 'sends events' });
+  });
 });
 
 describe('diagram artifact editing', () => {
