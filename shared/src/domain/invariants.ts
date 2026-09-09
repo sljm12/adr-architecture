@@ -1,5 +1,5 @@
 import type { DiagramDocument } from './types';
-import type { ArchitectureDecisionRecord, Component } from './types';
+import type { ArchitectureDecisionRecord, Component, Relationship } from './types';
 export function assertDiagramInvariants(document: DiagramDocument): void {
   if (!document.name.trim()) throw new Error('Diagram name must not be blank');
   const ids = new Set<string>();
@@ -28,6 +28,21 @@ export function assertAdrInvariants(adr: ArchitectureDecisionRecord): void {
     assertUuid(componentId, 'Component ID');
     if (componentIds.has(componentId)) throw new Error(`Duplicate ADR component link: ${componentId}`);
     componentIds.add(componentId);
+  }
+  const relationshipIds = new Set<string>();
+  for (const relationshipId of adr.relationshipIds) {
+    assertUuid(relationshipId, 'Relationship ID');
+    if (relationshipIds.has(relationshipId)) throw new Error(`Duplicate ADR relationship link: ${relationshipId}`);
+    relationshipIds.add(relationshipId);
+  }
+}
+
+export function assertAdrRelationshipOwnership(adr: ArchitectureDecisionRecord, relationships: Array<Pick<Relationship, 'id' | 'diagramId'>>): void {
+  const byId = new Map(relationships.map(relationship => [relationship.id, relationship]));
+  for (const relationshipId of adr.relationshipIds) {
+    const relationship = byId.get(relationshipId);
+    if (!relationship) throw new Error(`ADR references missing relationship ${relationshipId}`);
+    if (relationship.diagramId !== adr.diagramId) throw new Error(`Relationship ${relationshipId} belongs to a different diagram`);
   }
 }
 

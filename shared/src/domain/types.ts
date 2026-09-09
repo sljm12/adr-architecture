@@ -21,6 +21,7 @@ export interface ArchitectureDecisionRecord {
   status: AdrStatus;
   replacementAdrId: UUID | null;
   componentIds: UUID[];
+  relationshipIds: UUID[];
   createdAt: string;
   updatedAt: string;
 }
@@ -31,15 +32,29 @@ export interface ComponentReference {
   createdAt: string;
 }
 
+export interface RelationshipReference {
+  adrId: UUID;
+  relationshipId: UUID;
+  createdAt: string;
+}
+
 export interface AdrSummary {
   id: UUID;
   title: string;
   status: AdrStatus;
   updatedAt: string;
   componentCount: number;
+  relationshipCount: number;
 }
 
 export interface ComponentAdrSummary {
+  id: UUID;
+  title: string;
+  status: AdrStatus;
+  updatedAt: string;
+}
+
+export interface RelationshipAdrSummary {
   id: UUID;
   title: string;
   status: AdrStatus;
@@ -57,6 +72,7 @@ export interface AdrWritePayload {
 }
 
 export interface AdrComponentsWritePayload { componentIds: UUID[] }
+export interface AdrRelationshipsWritePayload { relationshipIds: UUID[] }
 
 export interface AdrDependencyBlocker {
   adrId: UUID;

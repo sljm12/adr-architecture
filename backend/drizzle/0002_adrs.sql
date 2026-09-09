@@ -22,3 +22,10 @@ CREATE INDEX adrs_diagram_idx ON adrs(diagram_id);
 CREATE INDEX adrs_updated_idx ON adrs(updated_at);
 CREATE INDEX adrs_replacement_idx ON adrs(replacement_adr_id);
 CREATE INDEX adr_component_links_component_idx ON adr_component_links(component_id);
+CREATE TABLE adr_relationship_links (
+  adr_id uuid NOT NULL REFERENCES adrs(id),
+  relationship_id uuid NOT NULL REFERENCES relationships(id),
+  created_at timestamptz NOT NULL,
+  PRIMARY KEY (adr_id, relationship_id)
+);
+CREATE INDEX adr_relationship_links_relationship_idx ON adr_relationship_links(relationship_id);

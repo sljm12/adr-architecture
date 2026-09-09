@@ -38,6 +38,7 @@ export const completeAdrFixture = (overrides: Partial<ArchitectureDecisionRecord
   status: 'accepted',
   replacementAdrId: null,
   componentIds: [adrFixtureIds.componentA],
+  relationshipIds: [],
   createdAt: adrFixtureTimestamp,
   updatedAt: adrFixtureTimestamp,
   ...overrides,

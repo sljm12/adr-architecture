@@ -35,10 +35,17 @@ export const adrComponentsWriteSchema = z.object({
   }),
 });
 
+export const adrRelationshipsWriteSchema = z.object({
+  relationshipIds: z.array(uuidSchema).superRefine((ids, ctx) => {
+    if (new Set(ids).size !== ids.length) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Relationship links must be unique' });
+  }),
+});
+
 export const architectureDecisionRecordSchema = adrWriteBaseSchema.extend({
   id: uuidSchema,
   diagramId: uuidSchema,
   componentIds: adrComponentsWriteSchema.shape.componentIds,
+  relationshipIds: adrRelationshipsWriteSchema.shape.relationshipIds,
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),
 }).superRefine((value, ctx) => {
@@ -51,6 +58,7 @@ export const adrSummarySchema = z.object({
   status: adrStatusSchema,
   updatedAt: z.string().datetime({ offset: true }),
   componentCount: z.number().int().nonnegative(),
+  relationshipCount: z.number().int().nonnegative(),
 });
 
 export const adrSummaryListSchema = z.array(adrSummarySchema);
@@ -61,6 +69,8 @@ export const componentAdrSummarySchema = z.object({
   updatedAt: z.string().datetime({ offset: true }),
 });
 export const componentAdrSummaryListSchema = z.array(componentAdrSummarySchema);
+export const relationshipAdrSummarySchema = componentAdrSummarySchema;
+export const relationshipAdrSummaryListSchema = z.array(relationshipAdrSummarySchema);
 export const adrListPathSchema = z.object({ diagramId: uuidSchema });
 export const adrPathSchema = z.object({ adrId: uuidSchema });
 export const adrApiErrorSchema = z.object({ message: z.string(), fields: z.record(z.string()).optional(), blockers: z.array(z.object({ adrId: uuidSchema, title: z.string(), reason: z.string() })).optional() });
