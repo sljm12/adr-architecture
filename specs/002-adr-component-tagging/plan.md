@@ -15,6 +15,8 @@ including distinct no-linked-ADRs states. The Fastify API and PostgreSQL/Drizzle
 validate ownership and dependency rules transactionally. The React/Vite frontend will add an ADR
 list/detail workflow backed by a Zustand store with explicit undo/redo and a recoverable
 unsaved/failed save state, plus selected-component and selected-relationship ADR summaries.
+The same workflow will support editing existing component names and relationship labels and
+direction without replacing their stable identities or redirecting existing ADR links.
 
 ## Technical Context
 
@@ -31,8 +33,8 @@ repository package manifests and AGENTS.md technology stack.
 
 **Testing**: Vitest for shared types/schemas/invariants, in-memory and PostgreSQL repository rules,
 Fastify contract behavior, and frontend Zustand/client behavior; Playwright for create/edit/link/
-save/reopen/status/component-summary/relationship-summary/deletion-blocking/failure-retry and
-accessibility workflows.
+save/reopen/status/component-summary/relationship-summary/component-rename/relationship-label-and-
+direction-edit/deletion-blocking/failure-retry and accessibility workflows.
 
 **Target Platform**: Modern desktop browser, static Vite frontend, containerized Fastify API, and
 managed PostgreSQL.
@@ -46,11 +48,13 @@ feedback should be visible within the existing three-second representative workf
 and deletion dependency checks must complete as part of the API request before reporting success.
 
 **Constraints**: The domain model is authoritative and must remain independent of React Flow. All
-ADRs, component links, and relationship links use stable UUIDs. Optional artifact linking must
-support zero, one, or many component and relationship links, including mixed link sets. Superseded
-ADRs require a same-diagram replacement. Invalid links, failed saves, and destructive dependency
-conflicts must be surfaced without discarding user edits or silently cascading data loss. Component
-deletion must also account for linked relationships that would otherwise be removed.
+ADRs, components, relationships, component links, and relationship links use stable UUIDs. Editing
+a component name or relationship label/direction MUST mutate the existing artifact rather than
+creating a replacement identity. Optional artifact linking must support zero, one, or many
+component and relationship links, including mixed link sets. Superseded ADRs require a same-diagram
+replacement. Invalid names, links, failed saves, and destructive dependency conflicts must be
+surfaced without discarding user edits or silently cascading data loss. Component deletion must
+also account for linked relationships that would otherwise be removed.
 
 **Scale/Scope**: One active diagram at a time for one user; four ADR statuses; zero-to-many links
 to components and relationships; no ADR import/export, templates, bulk editing, or cross-diagram
@@ -113,6 +117,8 @@ backend/
 └── tests/                       # repository, API, migration, and contract tests
 
 frontend/
+- src/api/diagram-client.ts        # Explicit diagram save boundary for artifact edits
+- src/state/diagram-store.ts       # Component/relationship edits and history
 ├── src/api/adr-client.ts        # REST client and structured error handling
 ├── src/state/adr-store.ts       # drafts, explicit history, save/retry state
 ├── src/components/AdrList.tsx
@@ -132,11 +138,13 @@ it must use the scoped summary contracts and provide direct opening of each retu
 **Structure Decision**: Extend the existing `shared/`, `backend/`, `frontend/`, and `e2e/`
 boundaries. React Flow remains a visual adapter for diagram components and relationships; ADRs and
 artifact links are serialized from shared domain data and are never derived from display names,
-endpoints, or positions. The backend repository/service is authoritative for cross-entity checks,
-including component- and relationship-scoped ADR summaries, while the frontend store keeps an
-editable draft until a successful API response replaces it. Selected artifact views read summary
-metadata and use the stable ADR ID to open the existing ADR workflow; they do not persist duplicate
-summaries.
+endpoints, or positions. Component and relationship edits use the existing domain document and
+explicit diagram save boundary: matching artifact IDs update names, labels, endpoints, or direction
+in place, while new IDs represent new artifacts. The backend repository/service is authoritative
+for cross-entity checks, including component- and relationship-scoped ADR summaries, while the
+frontend stores an editable draft until a successful API response replaces it. Selected artifact
+views read summary metadata and use the stable ADR ID to open the existing ADR workflow; they do
+not persist duplicate summaries.
 
 ## Implementation Design
 
@@ -147,38 +155,53 @@ summaries.
    superseded/replacement rule. Keep persisted timestamps server-managed and return field-
    addressable Zod errors through the existing error shape. Define both summaries as read models
    containing the ADR UUID, title, current status, and update time; each UUID is the navigation
-   target and absence of links is represented by an explicit empty list, not an error.
+   target and absence of links is represented by an explicit empty list, not an error. Reuse the
+   diagram document schemas for component-name and relationship label/direction edits, rejecting
+   blank component names, self-referential relationships, missing endpoints, and unsupported
+   direction modes while preserving existing artifact IDs.
 2. **Persistence and service rules**: Add the ADR and separate component/relationship link tables
    and indexes without cascade deletion. The repository loads ADRs with both link sets and provides
    reverse lookups of ADR summaries by component or relationship UUID, scoped to the owning diagram.
    The service verifies diagram and artifact ownership, same-diagram replacement, missing/cross-
    diagram artifacts, duplicate links, and dependency conflicts inside transaction boundaries.
    Component deletion must query direct component links and links on dependent relationships before
-   deleting; relationship deletion must query relationship links first.
+   deleting; relationship deletion must query relationship links first. Full diagram replacement
+   must preserve `createdAt` and stable IDs for existing components and relationships while updating
+   their editable fields and `updatedAt` atomically with ADR-link integrity checks.
 3. **REST contract**: Add list/create/get/update/delete ADR routes scoped by diagram where ownership
    matters, separate replace-component-links and replace-relationship-links routes, and scoped
-   component/relationship ADR summary endpoints. Return 422 for actionable validation, 404 for
+   component/relationship ADR summary endpoints. Reuse the existing `PUT /diagrams/{diagramId}`
+   contract for explicit persistence of component-name and relationship label/direction edits;
+   document that the request identifies existing artifacts by UUID and the response returns the
+   updated document with those UUIDs unchanged. Return 422 for actionable validation, 404 for
    missing entities, and 409 dependency details including blocking ADR IDs/titles or replacement
    references. Each summary response returns an empty array for a valid artifact with no links and
    includes each linked ADR's stable ID, title, status, and updated timestamp for direct opening.
-4. **Frontend workflow**: Add a Decisions surface to the current workspace. The editor supports
+4. **Frontend workflow**: Add a Decisions surface to the current workspace. Extend the selected
+   artifact inspector so a component can be renamed and a relationship can be edited for label,
+   source/target direction, and directed/undirected mode. The canvas adapter must re-render the
+   component label and relationship marker/endpoints from domain data without changing artifact
+   IDs. The editor supports
    required fields, optional alternatives/constraints, status, replacement selection when needed,
    component and relationship search/selection, unlinking, linked-artifact navigation, confirmation
    dialogs, and visible unlinked/unsaved/error/saved states. Extend selected component and
    relationship views with labeled ADR summaries that show every linked ADR's title/status and open
    the ADR editor/list selection; show a non-error no-linked-ADRs message when either response is
    empty. Use the existing Apple-style DESIGN.md tokens and existing 44px focusable controls.
-5. **History and failure handling**: ADR edits, link changes, and status changes are draft updates
-   recorded by explicit Zustand history. A failed save leaves the draft and marks it unsaved/failed;
-   retry resubmits the unchanged draft. A stale save response must not overwrite newer local edits.
+5. **History and failure handling**: Component renames, relationship label/direction edits, ADR
+   edits, link changes, and status changes are draft updates recorded by explicit Zustand history.
+   A failed save leaves the draft and marks it unsaved/failed; retry resubmits the unchanged draft.
+   A stale save response must not overwrite newer local edits, and undo/redo must restore the prior
+   component or relationship values without changing their stable IDs or ADR links.
 
 ## Post-design Constitution Re-check
 
-**PASS**: The design preserves stable artifact identities and references, stores ADRs and separate
-component/relationship links as structured PostgreSQL records, supports reverse summaries for both
-artifact types without duplicating link data, rejects invalid/cross-diagram references, prevents
-destructive cascades, keeps superseded/rejected decisions discoverable, and verifies user-visible
-behavior at shared, persistence, API, frontend, and end-to-end boundaries. It adds no authentication,
+**PASS**: The design preserves stable component and relationship identities through name, label,
+endpoint, and direction edits; stores ADRs and separate component/relationship links as structured
+PostgreSQL records; supports reverse summaries for both artifact types without duplicating link
+data; rejects invalid/cross-diagram references and blank component names; prevents destructive
+cascades; keeps superseded/rejected decisions discoverable; and verifies user-visible behavior at
+shared, persistence, API, frontend, and end-to-end boundaries. It adds no authentication,
 collaboration, offline migration, or revision-system complexity outside the specification.
 
 ## Complexity Tracking

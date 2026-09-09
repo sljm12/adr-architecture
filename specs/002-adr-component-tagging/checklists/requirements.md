@@ -32,8 +32,10 @@
 ## Notes
 
 - The specification treats component tagging as optional while requiring stable, resolvable links
--  whenever tags are present; it also treats relationship linking as optional with the same
+- whenever tags are present; it also treats relationship linking as optional with the same
   stable-reference requirement.
+- The specification covers editing component names and relationship labels and direction while
+  preserving stable identities and existing ADR links.
 - The specification covers both directions of the relationship: ADR views show linked components,
   and component views show linked ADR titles, statuses, and direct navigation. The same reverse
   linking behavior is specified for relationships.

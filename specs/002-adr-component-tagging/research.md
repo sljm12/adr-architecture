@@ -97,3 +97,28 @@ source of truth for links and returning an empty list for a valid artifact with 
 rejected because it over-fetches data and makes artifact ownership/error handling less explicit.
 Duplicating ADR summaries inside component or relationship records was rejected because it would
 create stale, second-copy metadata and complicate link updates.
+
+## Decision: Persist component and relationship edits through the existing diagram document boundary
+
+**Rationale:** The existing diagram API already explicitly saves the complete validated document,
+including component names and relationship fields. Reusing that boundary keeps ADR link integrity
+centralized: existing component and relationship UUIDs are matched and updated in place, while
+their creation timestamps and link records remain stable. The visual editor can therefore update
+names, labels, endpoints, and direction without introducing a second edit API or duplicating
+diagram state in the ADR feature.
+
+**Alternatives considered:** Separate endpoints for renaming components and editing relationships
+were rejected for this feature because they would split the current save workflow and create extra
+concurrency and error-handling paths. Storing names, labels, or direction in ADR link records was
+rejected because those are editable properties of the diagram artifacts, not link identity.
+
+## Decision: Treat relationship direction as an in-place semantic edit
+
+**Rationale:** A relationship already has a stable UUID, a `directed`/`undirected` mode, and source
+and target component IDs. Reversing a directed relationship updates the ordered endpoints and
+visual marker while preserving the relationship UUID and every ADR relationship link. Switching
+direction mode follows the same invariant. Blank optional labels normalize to no label, while
+blank component names remain invalid.
+
+**Alternatives considered:** Creating a new relationship whenever direction or label changes was
+rejected because it would break ADR references and make ordinary diagram maintenance destructive.

@@ -82,6 +82,24 @@ through ordinary rename, relabel, endpoint, reposition, and visual edits, so ADR
 names, labels, endpoints, React Flow IDs, or positions. Relationships continue to reference
 component IDs independently of ADR links.
 
+## Edit semantics
+
+### Component
+
+The existing component record is edited in place. Its `id`, `diagramId`, and `createdAt` remain
+unchanged; `name` is trimmed and MUST contain at least one non-whitespace character. A rename
+updates the displayed name and `updatedAt` but never changes `adr_component_links` rows. Duplicate
+human-readable names are allowed because stable IDs distinguish components.
+
+### Relationship
+
+The existing relationship record is edited in place. Its `id`, `diagramId`, and `createdAt` remain
+unchanged. `label` is optional and blank input normalizes to null. `direction` remains either
+`directed` or `undirected`; reversing a directed relationship swaps its ordered
+`sourceComponentId` and `targetComponentId`, while changing the mode updates only the direction
+semantics. These edits MUST preserve `adr_relationship_links` rows. Endpoints MUST continue to
+reference two existing, different components in the same diagram.
+
 ## Reference and deletion invariants
 
 1. A draft may exist locally without a saved server record; only a validated ADR is persisted.
@@ -101,6 +119,8 @@ component IDs independently of ADR links.
 12. Component and relationship summary reads are scoped to the active diagram and artifact identity;
     they expose
     only linked ADR metadata and preserve the stable ADR ID needed to open the full record.
+13. Component-name and relationship label/direction edits update existing records rather than
+    creating replacement artifacts, and explicit save/reopen preserves those edits.
 
 ## State transitions
 

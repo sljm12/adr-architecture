@@ -20,7 +20,9 @@ npm run test:e2e
 
 Apply `backend/drizzle/0002_adrs.sql` after `0001_initial.sql` before running PostgreSQL-backed
 tests. The API contract is defined in [contracts/openapi.yaml](./contracts/openapi.yaml), and
-entities/invariants are defined in [data-model.md](./data-model.md).
+entities/invariants are defined in [data-model.md](./data-model.md). Component and relationship
+edit persistence reuses the diagram document save contract in
+[spec 001's OpenAPI contract](../001-software-architecture-diagrams/contracts/openapi.yaml).
 
 ## Acceptance scenarios
 
@@ -31,8 +33,10 @@ entities/invariants are defined in [data-model.md](./data-model.md).
 3. Link an ADR to zero, one, and multiple components and/or relationships. Verify component names
    and distinguishable relationship references are shown, links use stable UUIDs, and unlinking one
    preserves the remaining links of both types.
-4. Rename/reposition a linked component and edit a linked relationship's label or visual properties.
-   Reopen the ADR and verify the same artifacts resolve.
+4. Rename a linked component, edit a linked relationship's label, reverse its direction, and
+   switch its direction mode between directed and undirected. Save and reopen the diagram, then
+   reopen the ADR and verify the updated name, label, direction, and the same stable artifacts
+   resolve.
 5. View a component and a relationship with linked ADRs. Verify every linked ADR appears with its
    title and current status, and activate each summary to open the corresponding ADR without
    searching.

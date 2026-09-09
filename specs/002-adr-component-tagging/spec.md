@@ -87,7 +87,40 @@ references.
 
 ---
 
-### User Story 3 - Find and manage decision status (Priority: P2)
+### User Story 3 - Edit diagram components and relationships without breaking ADR links (Priority: P1)
+
+An architecture practitioner updates the name of a component or the label and direction of a
+relationship as the architecture evolves, while keeping existing ADR references attached to the
+same underlying artifacts.
+
+**Why this priority**: Architecture diagrams change over time; editing their meaning or wording
+must not invalidate the decision history connected to them.
+
+**Independent Test**: Create two named components and a directed, labeled relationship between
+them, link an ADR to both artifacts, rename one component, change the relationship label, reverse
+the relationship direction, save and reopen the diagram, and verify that the updated diagram and
+ADR references are correct.
+
+**Acceptance Scenarios**:
+
+1. **Given** a component with or without linked ADRs, **When** the user changes its name and saves,
+   **Then** the new name is shown everywhere the component is displayed, its stable identity is
+   unchanged, and all ADR links still resolve to that component.
+2. **Given** a relationship with or without linked ADRs, **When** the user changes its label and
+   saves, **Then** the new label is shown on the relationship, its endpoints and stable identity
+   are unchanged, and all ADR links still resolve to that relationship.
+3. **Given** a directed relationship, **When** the user changes its direction, **Then** the
+   relationship's source and target are reversed, the diagram shows the new direction, and its
+   stable identity, label, and ADR links are preserved.
+4. **Given** a relationship that may be directed or undirected, **When** the user changes its
+   direction mode, **Then** the relationship visibly reflects the selected mode and remains linked
+   to the same relationship artifact.
+5. **Given** edited component and relationship data, **When** the user saves and reopens the
+   diagram, **Then** the changed names, labels, directions, and ADR references are preserved.
+
+---
+
+### User Story 4 - Find and manage decision status (Priority: P2)
 
 An architecture practitioner reviews existing ADRs, identifies their lifecycle status, and edits
 or supersedes a decision without silently losing its history.
@@ -120,6 +153,15 @@ superseded, and verify that the original remains discoverable with its status an
   component identity.
 - A referenced relationship may be relabeled or have its visual representation edited; the ADR
   link MUST continue to resolve by stable relationship identity.
+- A component name MUST NOT be blank or whitespace-only; the user MUST receive an actionable
+  validation message and the previous valid name MUST remain available when such an edit is
+  attempted.
+- Two components may have the same human-readable name; they MUST remain distinguishable by
+  stable identity, and renaming one MUST NOT change the other or its ADR links.
+- Clearing an optional relationship label MUST leave a valid relationship and a resolvable ADR
+  link.
+- Reversing a relationship's direction or changing it between directed and undirected MUST update
+  the relationship semantics without creating a new relationship or breaking its ADR links.
 - Attempting to link an ADR to a component or relationship from a different diagram or to a missing
   artifact MUST be rejected with an actionable message.
 - Removing a component that would also remove relationships linked to ADRs MUST identify all
@@ -202,6 +244,18 @@ superseded, and verify that the original remains discoverable with its status an
 - **FR-026**: The system MUST identify ADR links to relationships that would be removed as a
   consequence of component deletion and MUST require those links to be repaired or explicitly
   removed before the component deletion proceeds.
+- **FR-027**: The system MUST allow a user to change a component's name and save the change without
+  changing the component's stable identity.
+- **FR-028**: The system MUST allow a user to edit a relationship's label and direction, including
+  reversing the source and target of a directed relationship and changing between directed and
+  undirected modes where those modes are supported.
+- **FR-029**: When a component name or relationship label and direction are edited, the system MUST
+  preserve the edited artifact's stable identity, endpoints where they are not intentionally
+  changed, and all ADR links to that artifact.
+- **FR-030**: The system MUST reject a blank or whitespace-only component name with an actionable
+  validation message and MUST keep the last valid name available for correction or retry.
+- **FR-031**: The system MUST preserve component-name edits and relationship label and direction
+  edits when the diagram is explicitly saved and later reopened.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -214,6 +268,9 @@ superseded, and verify that the original remains discoverable with its status an
 - **Relationship Reference**: A link from an ADR to a specific diagram relationship identified by
   the relationship's stable identity, with enough endpoint or label information to show and navigate
   to the relationship.
+- **Relationship**: A diagram connection with a stable identity, two component endpoints, a
+  direction mode and, for directed relationships, an ordered source and target, plus an optional
+  label.
 - **Component ADR Summary**: The set of linked ADR titles and statuses shown when a user views a
   diagram component, with access to open each referenced ADR.
 - **Relationship ADR Summary**: The set of linked ADR titles and statuses shown when a user views a
@@ -255,6 +312,13 @@ superseded, and verify that the original remains discoverable with its status an
 - **SC-013**: In 100% of tested relationship views, every linked ADR is shown with its title and
   current status, each displayed ADR can be opened directly, and an unlinked relationship shows a
   distinct no-linked-ADRs state.
+- **SC-014**: At least 95% of tested save-and-reopen cycles preserve component identities and
+  updated names, relationship identities and updated labels or directions, and all existing ADR
+  references remain resolvable to the same artifacts.
+- **SC-015**: In 100% of tested component rename and relationship label or direction changes, the
+  active diagram displays the requested update and no ADR link is silently removed or redirected.
+- **SC-016**: In 100% of tested blank or whitespace-only component-name edits, the edit is rejected
+  with an actionable message and the last valid name remains available.
 
 ## Assumptions
 
@@ -264,7 +328,13 @@ superseded, and verify that the original remains discoverable with its status an
   artifact linking is optional rather than a save prerequisite.
 - The existing diagram model provides stable component identities and retains them through normal
   rename and reposition operations, and provides stable relationship identities through normal
-  label, endpoint, and visual edits.
+  label, endpoint, direction, and visual edits.
+- Relationship direction consists of a directed or undirected mode; reversing a directed
+  relationship changes its ordered source and target while preserving the relationship identity.
+  Relationship labels are optional and may be cleared.
+- This feature covers editing existing component names and relationship labels or direction when
+  needed to maintain linked ADR context; broader diagram authoring behavior remains governed by
+  the diagram feature specification.
 - ADR import, export, templates, and bulk editing are out of scope unless added by a later feature.
 - Component and relationship ADR summaries are shown for the currently viewed artifact in the
   active diagram; cross-diagram search and a separate ADR reporting view are out of scope.
