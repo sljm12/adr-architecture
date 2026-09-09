@@ -40,7 +40,24 @@ export class DiagramRepository implements DiagramRepositoryLike {
   findComponent(id: string) { for (const document of this.documents.values()) { const component = document.components.find(item => item.id === id); if (component) return { id: component.id, diagramId: component.diagramId, name: component.name }; } return undefined; }
   findRelationship(id: string) { for (const document of this.documents.values()) { const relationship = document.relationships.find(item => item.id === id); if (relationship) return { id: relationship.id, diagramId: relationship.diagramId }; } return undefined; }
   create(document: DiagramDocument) { this.documents.set(document.id, clone(document)); return clone(document); }
-  replace(document: DiagramDocument) { this.documents.set(document.id, clone(document)); return clone(document); }
+  replace(document: DiagramDocument) {
+    const previous = this.documents.get(document.id);
+    const updatedAt = new Date().toISOString();
+    const updated = {
+      ...document,
+      updatedAt,
+      components: document.components.map(component => {
+        const prior = previous?.components.find(item => item.id === component.id);
+        return { ...component, createdAt: prior?.createdAt ?? component.createdAt, updatedAt };
+      }),
+      relationships: document.relationships.map(relationship => {
+        const prior = previous?.relationships.find(item => item.id === relationship.id);
+        return { ...relationship, label: relationship.label?.trim() || null, createdAt: prior?.createdAt ?? relationship.createdAt, updatedAt };
+      }),
+    };
+    this.documents.set(document.id, clone(updated));
+    return clone(updated);
+  }
 
   removeComponent(diagramId: string, componentId: string): RemoveComponentResult | undefined {
     const document = this.documents.get(diagramId);

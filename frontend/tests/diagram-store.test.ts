@@ -9,6 +9,15 @@ const document: DiagramDocument = {
   components: [], relationships: [],
 };
 
+const editableDocument: DiagramDocument = {
+  ...document,
+  components: [
+    { id: '00000000-0000-0000-0000-000000000002', diagramId: document.id, name: 'API', description: null, type: null, position: { x: 0, y: 0 }, createdAt: document.createdAt, updatedAt: document.updatedAt },
+    { id: '00000000-0000-0000-0000-000000000003', diagramId: document.id, name: 'DB', description: null, type: null, position: { x: 200, y: 0 }, createdAt: document.createdAt, updatedAt: document.updatedAt },
+  ],
+  relationships: [{ id: '00000000-0000-0000-0000-000000000004', diagramId: document.id, sourceComponentId: '00000000-0000-0000-0000-000000000002', targetComponentId: '00000000-0000-0000-0000-000000000003', direction: 'directed', label: 'queries', createdAt: document.createdAt, updatedAt: document.updatedAt }],
+};
+
 const reset = () => useDiagramStore.getState().open(structuredClone(document));
 
 afterEach(() => {
@@ -68,6 +77,35 @@ describe('explicit diagram saving', () => {
 
     await useDiagramStore.getState().save();
     expect(save).toHaveBeenCalledTimes(2);
+    expect(useDiagramStore.getState().status).toBe('saved');
+  });
+});
+
+describe('diagram artifact editing', () => {
+  it('renames components and edits relationship label/direction in place with undo/redo', () => {
+    reset();
+    useDiagramStore.getState().open(structuredClone(editableDocument));
+    useDiagramStore.getState().renameComponent(editableDocument.components[0].id, ' Gateway ');
+    useDiagramStore.getState().updateRelationship(editableDocument.relationships[0].id, { label: 'sends events' });
+    useDiagramStore.getState().reverseRelationship(editableDocument.relationships[0].id);
+    useDiagramStore.getState().setRelationshipDirection(editableDocument.relationships[0].id, 'undirected');
+
+    const edited = useDiagramStore.getState().document!;
+    expect(edited.components[0]).toMatchObject({ id: editableDocument.components[0].id, name: 'Gateway' });
+    expect(edited.relationships[0]).toMatchObject({ id: editableDocument.relationships[0].id, sourceComponentId: editableDocument.components[1].id, targetComponentId: editableDocument.components[0].id, label: 'sends events', direction: 'undirected' });
+    expect(edited.components[0].createdAt).toBe(editableDocument.components[0].createdAt);
+    expect(edited.relationships[0].createdAt).toBe(editableDocument.relationships[0].createdAt);
+
+    useDiagramStore.getState().undo();
+    expect(useDiagramStore.getState().document?.relationships[0].direction).toBe('directed');
+    useDiagramStore.getState().redo();
+    expect(useDiagramStore.getState().document?.relationships[0].direction).toBe('undirected');
+  });
+
+  it('rejects blank component names without changing the current artifact', () => {
+    useDiagramStore.getState().open(structuredClone(editableDocument));
+    useDiagramStore.getState().renameComponent(editableDocument.components[0].id, '   ');
+    expect(useDiagramStore.getState().document?.components[0].name).toBe('API');
     expect(useDiagramStore.getState().status).toBe('saved');
   });
 });

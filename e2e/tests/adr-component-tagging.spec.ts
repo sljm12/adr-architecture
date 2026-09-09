@@ -103,3 +103,34 @@ test('links a mixed component and relationship scope, opens its relationship sum
   const inspector = page.getByLabel('Diagram inspector'); await expect(inspector.getByRole('heading', { name: 'Linked ADRs' })).toBeVisible(); await expect(inspector).toContainText('API gateway → Payments database · sends');
   await inspector.getByRole('button', { name: 'Open ADR: Use a payment service boundary' }).click(); await expect(page.getByLabel('ADR workspace')).toContainText('Architecture Decision Record');
 });
+
+test('edits component names and relationship label/direction without changing artifact identities', async ({ page }) => {
+  let diagram: any = { id: '00000000-0000-0000-0000-000000000541', name: 'Payments', status: 'active', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', trashedAt: null, components: [
+    { id: '00000000-0000-0000-0000-000000000542', diagramId: '00000000-0000-0000-0000-000000000541', name: 'API', description: null, type: 'service', position: { x: 80, y: 100 }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
+    { id: '00000000-0000-0000-0000-000000000543', diagramId: '00000000-0000-0000-0000-000000000541', name: 'Database', description: null, type: 'store', position: { x: 320, y: 100 }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
+  ], relationships: [{ id: '00000000-0000-0000-0000-000000000544', diagramId: '00000000-0000-0000-0000-000000000541', sourceComponentId: '00000000-0000-0000-0000-000000000542', targetComponentId: '00000000-0000-0000-0000-000000000543', direction: 'directed', label: 'queries', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }] };
+  await page.route('**/api/diagrams', route => route.fulfill({ status: route.request().method() === 'POST' ? 201 : 200, contentType: 'application/json', body: JSON.stringify(route.request().method() === 'POST' ? diagram : [diagram]) }));
+  await page.route('**/api/diagrams/*/components/*/adrs', route => route.fulfill({ contentType: 'application/json', body: '[]' }));
+  await page.route('**/api/diagrams/*/relationships/*/adrs', route => route.fulfill({ contentType: 'application/json', body: '[]' }));
+  await page.route('**/api/diagrams/*', async route => {
+    if (route.request().method() === 'PUT') { diagram = { ...route.request().postDataJSON(), updatedAt: '2026-01-02T00:00:00.000Z' }; return route.fulfill({ contentType: 'application/json', body: JSON.stringify(diagram) }); }
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify(diagram) });
+  });
+
+  await page.goto('/');
+  await page.getByLabel('Diagram name').fill('Payments'); await page.getByRole('button', { name: 'Create diagram' }).click();
+  await page.getByRole('group', { name: 'Component API' }).click();
+  const inspector = page.getByLabel('Diagram inspector');
+  await inspector.getByLabel('Component name').fill('Gateway'); await inspector.getByRole('button', { name: 'Save component' }).click();
+  await expect(inspector).toContainText('Gateway');
+
+  await page.locator('.react-flow__edge').first().click();
+  await inspector.getByLabel('Relationship label').fill('sends events');
+  await inspector.getByRole('button', { name: 'Reverse direction' }).click();
+  await inspector.getByLabel('Relationship direction').selectOption('undirected');
+  await inspector.getByRole('button', { name: 'Save relationship' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+  expect(diagram.components.find((component: any) => component.id === '00000000-0000-0000-0000-000000000542').name).toBe('Gateway');
+  expect(diagram.relationships[0]).toMatchObject({ id: '00000000-0000-0000-0000-000000000544', sourceComponentId: '00000000-0000-0000-0000-000000000543', targetComponentId: '00000000-0000-0000-0000-000000000542', direction: 'undirected', label: 'sends events' });
+});

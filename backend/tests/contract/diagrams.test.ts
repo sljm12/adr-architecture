@@ -19,6 +19,30 @@ describe('diagram API', () => it('creates and reopens a diagram', async () => {
   await app.close();
 }));
 
+describe('diagram artifact editing API', () => {
+  it('persists component renames and relationship label/direction edits without changing IDs', async () => {
+    const app = buildApp(); await app.ready();
+    const created = await app.inject({ method: 'POST', url: '/diagrams', payload: { name: 'System' } });
+    const document = created.json();
+    const componentA = crypto.randomUUID(); const componentB = crypto.randomUUID(); const relationshipId = crypto.randomUUID();
+    document.components = [
+      { id: componentA, diagramId: document.id, name: 'API', description: null, type: null, position: { x: 0, y: 0 }, createdAt: document.createdAt, updatedAt: document.updatedAt },
+      { id: componentB, diagramId: document.id, name: 'DB', description: null, type: null, position: { x: 200, y: 0 }, createdAt: document.createdAt, updatedAt: document.updatedAt },
+    ];
+    document.relationships = [{ id: relationshipId, diagramId: document.id, sourceComponentId: componentA, targetComponentId: componentB, direction: 'directed', label: 'queries', createdAt: document.createdAt, updatedAt: document.updatedAt }];
+    const initial = await app.inject({ method: 'PUT', url: `/diagrams/${document.id}`, payload: document });
+    expect(initial.statusCode).toBe(200);
+    const edited = { ...initial.json(), components: initial.json().components.map((component: any) => component.id === componentA ? { ...component, name: 'Gateway' } : component), relationships: [{ ...initial.json().relationships[0], sourceComponentId: componentB, targetComponentId: componentA, direction: 'undirected', label: 'sends events' }] };
+    const saved = await app.inject({ method: 'PUT', url: `/diagrams/${document.id}`, payload: edited });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().components).toEqual(expect.arrayContaining([expect.objectContaining({ id: componentA, name: 'Gateway' }), expect.objectContaining({ id: componentB, name: 'DB' })]));
+    expect(saved.json().relationships).toEqual([expect.objectContaining({ id: relationshipId, sourceComponentId: componentB, targetComponentId: componentA, direction: 'undirected', label: 'sends events' })]);
+    const invalid = { ...saved.json(), components: saved.json().components.map((component: any) => component.id === componentA ? { ...component, name: '   ' } : component) };
+    expect((await app.inject({ method: 'PUT', url: `/diagrams/${document.id}`, payload: invalid })).statusCode).toBe(422);
+    await app.close();
+  });
+});
+
 describe('saved-document API', () => it('lists active summaries, excludes trashed documents, and loads by stable ID', async () => {
   const app = buildApp(); await app.ready();
   const first = await app.inject({ method: 'POST', url: '/diagrams', payload: { name: 'System' } });
