@@ -1,0 +1,311 @@
+openapi: 3.0.3
+info:
+  title: ADR Diagram API - C4 System Groups
+  version: 1.0.0
+  description: >-
+    The diagram document remains the atomic persistence boundary. This feature adds C4 artifact
+    types and durable system groups to the existing diagram read/save contract; it does not add
+    per-group CRUD endpoints.
+paths:
+  /diagrams/{diagramId}:
+    get:
+      summary: Load a diagram including C4 types and system groups
+      parameters:
+        - $ref: '#/components/parameters/DiagramId'
+      responses:
+        '200':
+          description: Complete active diagram document. `groups` is always present, including when empty.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagramDocument'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      summary: Validate and persist a complete diagram including system groups
+      description: >-
+        The request is the complete active document. Existing clients may omit `groups`, which is
+        treated as an empty array. New component creation requires a supported `type` value. Group
+        create, rename, member removal, boundary movement, and ungroup are represented by the
+        document replacement and committed transactionally.
+      parameters:
+        - $ref: '#/components/parameters/DiagramId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiagramWrite'
+      responses:
+        '200':
+          description: Persisted document with stable IDs and server-managed timestamps.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagramDocument'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /diagrams/{diagramId}/components/{componentId}:
+    delete:
+      summary: Remove a component when no relationships or group membership blocks it
+      description: >-
+        The UI confirms destructive removal. The service rejects removal when the component is a
+        member of a system group; the author must remove membership or ungroup explicitly first.
+      parameters:
+        - $ref: '#/components/parameters/DiagramId'
+        - $ref: '#/components/parameters/ComponentId'
+      responses:
+        '200':
+          description: Updated diagram after removal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComponentRemovalResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/ComponentDependencyConflict'
+  /diagrams/{diagramId}/export/mermaid:
+    get:
+      summary: Export a validated diagram with groups represented as Mermaid subgraphs
+      parameters:
+        - $ref: '#/components/parameters/DiagramId'
+      responses:
+        '200':
+          description: Mermaid source. Group names and membership are represented semantically; exact canvas positions are not.
+          content:
+            text/vnd.mermaid:
+              schema:
+                type: string
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+components:
+  parameters:
+    DiagramId:
+      name: diagramId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ComponentId:
+      name: componentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    NotFound:
+      description: Diagram or component was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ValidationError:
+      description: Actionable validation failure; no document mutation is committed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+    ComponentDependencyConflict:
+      description: Component removal is blocked by relationships or system-group membership.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [message]
+            properties:
+              message:
+                type: string
+              componentId:
+                type: string
+                format: uuid
+              relationshipCount:
+                type: integer
+                minimum: 0
+              groupIds:
+                type: array
+                uniqueItems: true
+                items:
+                  type: string
+                  format: uuid
+  schemas:
+    DiagramWrite:
+      type: object
+      required: [name, components, relationships]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        components:
+          type: array
+          items:
+            $ref: '#/components/schemas/Component'
+          uniqueItems: true
+        relationships:
+          type: array
+          items:
+            $ref: '#/components/schemas/Relationship'
+          uniqueItems: true
+        groups:
+          type: array
+          description: Optional for backwards-compatible clients; omitted means no groups. Group names are trimmed and must be unique within the diagram without regard to capitalization.
+          items:
+            $ref: '#/components/schemas/SystemGroup'
+          uniqueItems: true
+    DiagramDocument:
+      allOf:
+        - $ref: '#/components/schemas/DiagramWrite'
+        - type: object
+          required: [id, status, createdAt, updatedAt, groups]
+          properties:
+            id:
+              type: string
+              format: uuid
+            status:
+              type: string
+              enum: [active, trashed]
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+            groups:
+              type: array
+              items:
+                $ref: '#/components/schemas/SystemGroup'
+    ComponentRemovalResult:
+      type: object
+      required: [document, relationshipCount]
+      properties:
+        document:
+          $ref: '#/components/schemas/DiagramDocument'
+        relationshipCount:
+          type: integer
+          minimum: 0
+    Component:
+      type: object
+      required: [id, diagramId, name, position, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        diagramId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: string
+          nullable: true
+        type:
+          type: string
+          nullable: true
+          enum: [person, software-system]
+          description: Null is retained only for components created before the C4 type workflow.
+        position:
+          $ref: '#/components/schemas/Position'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    Relationship:
+      type: object
+      required: [id, diagramId, sourceComponentId, targetComponentId, direction, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        diagramId:
+          type: string
+          format: uuid
+        sourceComponentId:
+          type: string
+          format: uuid
+        targetComponentId:
+          type: string
+          format: uuid
+        direction:
+          type: string
+          enum: [directed, undirected]
+        label:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    SystemGroup:
+      type: object
+      required: [id, diagramId, name, memberComponentIds, position, size, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        diagramId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          description: Group label; surrounding whitespace is trimmed and uniqueness is checked case-insensitively within the diagram.
+        memberComponentIds:
+          type: array
+          minItems: 2
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        position:
+          $ref: '#/components/schemas/Position'
+        size:
+          type: object
+          required: [width, height]
+          properties:
+            width:
+              type: number
+              exclusiveMinimum: 0
+            height:
+              type: number
+              exclusiveMinimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    Position:
+      type: object
+      required: [x, y]
+      properties:
+        x:
+          type: number
+        y:
+          type: number
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+    ValidationError:
+      type: object
+      required: [message, fields]
+      properties:
+        message:
+          type: string
+        fields:
+          type: object
+          additionalProperties:
+            type: string
