@@ -22,7 +22,7 @@ relationships, ADR links, groups, and memberships throughout every task.
 
 **Purpose**: Establish the shared C4 vocabulary used by validation and UI work.
 
-- [ ] T001 [P] Add canonical `person` and `software-system` C4 artifact metadata, labels, and descriptions in `shared/src/domain/c4.ts`.
+- [X] T001 [P] Add canonical `person` and `software-system` C4 artifact metadata, labels, and descriptions in `shared/src/domain/c4.ts`.
 
 **Checkpoint**: The feature has one shared source for supported C4 values and user-facing terminology.
 
@@ -35,16 +35,16 @@ implementation begins.
 
 **Critical**: Complete this phase before implementing User Stories 1-3.
 
-- [ ] T002 Extend `C4ArtifactType`, `SystemGroup`, `GroupBoundaryLayout`, and `DiagramDocument.groups` in `shared/src/domain/types.ts`, and export the new types from `shared/src/index.ts`.
-- [ ] T003 Extend `shared/src/validation/schemas.ts` with the supported C4 type schema, group/member/layout schemas, optional `groups` defaulting to `[]`, and field-addressable validation for new component and group writes.
-- [ ] T004 Add pure group geometry helpers in `shared/src/domain/group-layout.ts` for padded bounds calculation around existing member positions, boundary containment, member-to-group relative positions, constrained member movement, and translating a group with all member components without auto-arranging them.
-- [ ] T005 Extend `shared/src/domain/invariants.ts` to validate group UUID and diagram ownership, unique names after trimming and case-insensitive comparison, at least two unique Software System members, one-group-per-component, non-nesting, positive finite layout, constrained member boundary containment, and unchanged relationship or ADR reference rules.
-- [ ] T006 [P] Add shared fixtures and domain/validation tests for supported and legacy C4 types, trimmed/case-insensitive duplicate group names, membership cardinality, missing/cross-diagram/non-system members, duplicate membership, non-nesting, position-preserving creation bounds, constrained member layout, and unchanged component/relationship/ADR IDs in `shared/tests/c4-system-groups.test.ts`.
-- [ ] T007 [P] Add `system_groups` and `system_group_members` tables, indexes, composite membership key, timestamps, and explicit non-cascading foreign keys in `backend/drizzle/0003_system_groups.sql` and `backend/src/persistence/schema.ts`.
-- [ ] T008 [P] Add initial Fastify contract assertions for `groups`, C4 component `type`, group validation errors, component-removal group conflicts, and Mermaid group export responses in `backend/tests/contract/system-groups.test.ts` using `specs/003-c4-system-groups/contracts/openapi.yaml`.
-- [ ] T009 Update the in-memory and PostgreSQL diagram repositories in `backend/src/persistence/diagram-repository.ts` to load groups deterministically, map normalized memberships, insert/replace them transactionally with the complete document, preserve existing group IDs and creation timestamps, and return `groups: []` for legacy diagrams.
-- [ ] T010 Update `backend/src/services/diagram-service.ts` to run shared group validation before mutation and report group IDs when component deletion is blocked by membership, while preserving atomic save and existing ADR/relationship dependency checks.
-- [ ] T011 Update `backend/src/api/diagram-routes.ts`, `backend/src/api/recovery-routes.ts`, and `backend/src/api/errors.ts` so GET/PUT responses include groups, omitted input groups remain backwards-compatible, invalid groups return actionable 422 fields, and grouped component deletion returns a clear 409 conflict.
+- [X] T002 Extend `C4ArtifactType`, `SystemGroup`, `GroupBoundaryLayout`, and `DiagramDocument.groups` in `shared/src/domain/types.ts`, and export the new types from `shared/src/index.ts`.
+- [X] T003 Extend `shared/src/validation/schemas.ts` with the supported C4 type schema, group/member/layout schemas, optional `groups` defaulting to `[]`, and field-addressable validation for new component and group writes.
+- [X] T004 Add pure group geometry helpers in `shared/src/domain/group-layout.ts` for padded bounds calculation around existing member positions, boundary containment, member-to-group relative positions, constrained member movement, and translating a group with all member components without auto-arranging them.
+- [X] T005 Extend `shared/src/domain/invariants.ts` to validate group UUID and diagram ownership, unique names after trimming and case-insensitive comparison, at least two unique Software System members, one-group-per-component, non-nesting, positive finite layout, constrained member boundary containment, and unchanged relationship or ADR reference rules.
+- [X] T006 [P] Add shared fixtures and domain/validation tests for supported and legacy C4 types, trimmed/case-insensitive duplicate group names, membership cardinality, missing/cross-diagram/non-system members, duplicate membership, non-nesting, position-preserving creation bounds, constrained member layout, and unchanged component/relationship/ADR IDs in `shared/tests/c4-system-groups.test.ts`.
+- [X] T007 [P] Add `system_groups` and `system_group_members` tables, indexes, composite membership key, timestamps, and explicit non-cascading foreign keys in `backend/drizzle/0003_system_groups.sql` and `backend/src/persistence/schema.ts`.
+- [X] T008 [P] Add initial Fastify contract assertions for `groups`, C4 component `type`, group validation errors, component-removal group conflicts, and Mermaid group export responses in `backend/tests/contract/system-groups.test.ts` using `specs/003-c4-system-groups/contracts/openapi.yaml`.
+- [X] T009 Update the in-memory and PostgreSQL diagram repositories in `backend/src/persistence/diagram-repository.ts` to load groups deterministically, map normalized memberships, insert/replace them transactionally with the complete document, preserve existing group IDs and creation timestamps, and return `groups: []` for legacy diagrams.
+- [X] T010 Update `backend/src/services/diagram-service.ts` to run shared group validation before mutation and report group IDs when component deletion is blocked by membership, while preserving atomic save and existing ADR/relationship dependency checks.
+- [X] T011 Update `backend/src/api/diagram-routes.ts`, `backend/src/api/recovery-routes.ts`, and `backend/src/api/errors.ts` so GET/PUT responses include groups, omitted input groups remain backwards-compatible, invalid groups return actionable 422 fields, and grouped component deletion returns a clear 409 conflict.
 
 **Checkpoint**: Shared schemas/invariants, database schema, repositories, services, and API error
 contracts can represent a valid empty or grouped document without React Flow dependencies.
@@ -61,16 +61,16 @@ distinguishable, save/reopen the diagram, and cancel a creation without adding a
 
 ### Tests for User Story 1
 
-- [ ] T012 [P] [US1] Add Zustand tests for required C4 type creation, stable component IDs, cancellation-safe draft behavior, and save/reopen serialization in `frontend/tests/c4-artifact-types.test.ts`.
-- [ ] T013 [P] [US1] Add component creation/edit/review accessibility tests for Person and Software System labels, descriptions, type visibility, validation feedback, and keyboard cancellation in `frontend/tests/c4-artifact-types.test.tsx`.
+- [X] T012 [P] [US1] Add Zustand tests for required C4 type creation, stable component IDs, cancellation-safe draft behavior, and save/reopen serialization in `frontend/tests/c4-artifact-types.test.ts`.
+- [X] T013 [P] [US1] Add component creation/edit/review accessibility tests for Person and Software System labels, descriptions, type visibility, validation feedback, and keyboard cancellation in `frontend/tests/c4-artifact-types.test.tsx`.
 
 ### Implementation for User Story 1
 
-- [ ] T014 [US1] Extend `addComponent`, component type editing, and type-label helpers in `frontend/src/state/diagram-store.ts` so new components require `person` or `software-system`, legacy null types remain readable, and type edits preserve component IDs and history.
-- [ ] T015 [US1] Render the C4 type label and a non-color-only visual distinction in `frontend/src/components/ComponentNode.tsx`, and add the corresponding node styles in `frontend/src/styles.css` using the existing canvas, surface, typography, focus, and 44px control conventions.
-- [ ] T016 [US1] Add a C4 artifact-type fieldset with Person and Software System descriptions to creation and selected-component editing/review in `frontend/src/components/WorkspaceInspector.tsx`; show actionable validation and leave the document unchanged on cancel.
-- [ ] T017 [P] [US1] Update component type display in ADR/component review choices, including the `Unclassified` legacy state, in `frontend/src/components/AdrLinkPicker.tsx`.
-- [ ] T018 [US1] Add the create-type, cancel, save, and reopen acceptance journey with mocked diagram persistence in `e2e/tests/c4-system-groups.spec.ts`.
+- [X] T014 [US1] Extend `addComponent`, component type editing, and type-label helpers in `frontend/src/state/diagram-store.ts` so new components require `person` or `software-system`, legacy null types remain readable, and type edits preserve component IDs and history.
+- [X] T015 [US1] Render the C4 type label and a non-color-only visual distinction in `frontend/src/components/ComponentNode.tsx`, and add the corresponding node styles in `frontend/src/styles.css` using the existing canvas, surface, typography, focus, and 44px control conventions.
+- [X] T016 [US1] Add a C4 artifact-type fieldset with Person and Software System descriptions to creation and selected-component editing/review in `frontend/src/components/WorkspaceInspector.tsx`; show actionable validation and leave the document unchanged on cancel.
+- [X] T017 [P] [US1] Update component type display in ADR/component review choices, including the `Unclassified` legacy state, in `frontend/src/components/AdrLinkPicker.tsx`.
+- [X] T018 [US1] Add the create-type, cancel, save, and reopen acceptance journey with mocked diagram persistence in `e2e/tests/c4-system-groups.spec.ts`.
 
 **Checkpoint**: US1 is independently usable: authors can create, identify, save, and reopen typed
 C4 components without creating incomplete artifacts or breaking existing references.

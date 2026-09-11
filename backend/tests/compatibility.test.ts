@@ -5,7 +5,7 @@ import type { DiagramDocument } from '../../shared/src/domain/types';
 
 const document: DiagramDocument = {
   id: '00000000-0000-0000-0000-000000000011', name: 'System', status: 'active', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', trashedAt: null,
-  components: [{ id: '00000000-0000-0000-0000-000000000012', diagramId: '00000000-0000-0000-0000-000000000011', name: 'API', description: null, type: null, position: { x: 10, y: 20 }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }], relationships: [],
+  components: [{ id: '00000000-0000-0000-0000-000000000012', diagramId: '00000000-0000-0000-0000-000000000011', name: 'API', description: null, type: null, position: { x: 10, y: 20 }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }], relationships: [], groups: [],
 };
 
 describe('backend ADR link compatibility', () => {

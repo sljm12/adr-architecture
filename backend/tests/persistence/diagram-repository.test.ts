@@ -24,7 +24,7 @@ const document: DiagramDocument = {
     { id: componentA, diagramId, name: 'API', description: 'Public edge', type: 'service', position: { x: 120, y: 80 }, createdAt: timestamp, updatedAt: timestamp },
     { id: componentB, diagramId, name: 'Database', description: null, type: 'store', position: { x: 420, y: 260 }, createdAt: timestamp, updatedAt: timestamp },
   ],
-  relationships: [{ id: relationshipId, diagramId, sourceComponentId: componentA, targetComponentId: componentB, direction: 'directed', label: 'queries', createdAt: timestamp, updatedAt: timestamp }],
+  relationships: [{ id: relationshipId, diagramId, sourceComponentId: componentA, targetComponentId: componentB, direction: 'directed', label: 'queries', createdAt: timestamp, updatedAt: timestamp }], groups: [],
 };
 
 describe.skipIf(!enabled)('PostgreSQL diagram repository', () => {

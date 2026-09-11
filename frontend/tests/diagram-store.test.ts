@@ -6,7 +6,7 @@ import { useDiagramStore } from '../src/state/diagram-store';
 const document: DiagramDocument = {
   id: '00000000-0000-0000-0000-000000000001', name: 'System', status: 'active',
   createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', trashedAt: null,
-  components: [], relationships: [],
+  components: [], relationships: [], groups: [],
 };
 
 const editableDocument: DiagramDocument = {

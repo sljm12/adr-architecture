@@ -1,13 +1,48 @@
 import type { DiagramDocument } from './types';
 import type { ArchitectureDecisionRecord, Component, Relationship } from './types';
+import { isMemberWithinGroup } from './group-layout';
 export function assertComponentName(name: string): void { if (!name.trim()) throw new Error('Component name must not be blank'); }
 export function assertRelationshipDirection(direction: string): void { if (direction !== 'directed' && direction !== 'undirected') throw new Error(`Unsupported relationship direction: ${direction}`); }
 export function assertDiagramInvariants(document: DiagramDocument): void {
   if (!document.name.trim()) throw new Error('Diagram name must not be blank');
   const ids = new Set<string>();
-  for (const component of document.components) { if (!component.id || ids.has(component.id)) throw new Error(`Duplicate component ID: ${component.id}`); ids.add(component.id); if (!component.name.trim() || !Number.isFinite(component.position.x) || !Number.isFinite(component.position.y)) throw new Error(`Invalid component: ${component.id}`); assertComponentName(component.name); }
+  for (const component of document.components) { if (!component.id || ids.has(component.id)) throw new Error(`Duplicate component ID: ${component.id}`); ids.add(component.id); if (component.diagramId !== document.id) throw new Error(`Component ${component.id} must belong to diagram ${document.id}`); if (!component.name.trim() || !Number.isFinite(component.position.x) || !Number.isFinite(component.position.y)) throw new Error(`Invalid component: ${component.id}`); assertComponentName(component.name); }
   const componentIds = new Set(document.components.map(c => c.id));
-  for (const relationship of document.relationships) { if (!componentIds.has(relationship.sourceComponentId) || !componentIds.has(relationship.targetComponentId)) throw new Error(`Relationship ${relationship.id} references a missing component`); if (relationship.sourceComponentId === relationship.targetComponentId) throw new Error(`Relationship ${relationship.id} cannot connect a component to itself`); assertRelationshipDirection(relationship.direction); }
+  for (const relationship of document.relationships) { if (relationship.diagramId !== document.id) throw new Error(`Relationship ${relationship.id} must belong to diagram ${document.id}`); if (!componentIds.has(relationship.sourceComponentId) || !componentIds.has(relationship.targetComponentId)) throw new Error(`Relationship ${relationship.id} references a missing component`); if (relationship.sourceComponentId === relationship.targetComponentId) throw new Error(`Relationship ${relationship.id} cannot connect a component to itself`); assertRelationshipDirection(relationship.direction); }
+
+  const groups = document.groups ?? [];
+  const groupIds = new Set(groups.map(group => group.id));
+  const seenGroupIds = new Set<string>();
+  const memberGroups = new Map<string, string>();
+  const names = new Map<string, string>();
+  for (const group of groups) {
+    assertUuid(group.id, 'Group ID');
+    if (seenGroupIds.has(group.id)) throw new Error(`Duplicate group ID: ${group.id}`);
+    seenGroupIds.add(group.id);
+    if (group.diagramId !== document.id) throw new Error(`Group ${group.id} must belong to diagram ${document.id}`);
+    const normalizedName = group.name.trim().toLocaleLowerCase();
+    if (!normalizedName) throw new Error(`Group ${group.id} name must not be blank`);
+    const priorGroupId = names.get(normalizedName);
+    if (priorGroupId) throw new Error(`Group name "${group.name.trim()}" duplicates group ${priorGroupId} after trimming and ignoring capitalization`);
+    names.set(normalizedName, group.id);
+    if (!Number.isFinite(group.position.x) || !Number.isFinite(group.position.y) || !Number.isFinite(group.size.width) || !Number.isFinite(group.size.height) || group.size.width <= 0 || group.size.height <= 0) throw new Error(`Group ${group.id} must have a positive finite layout`);
+    const members = new Set<string>();
+    if (group.memberComponentIds.length < 2) throw new Error(`Group ${group.id} must contain at least two Software System members`);
+    for (const memberId of group.memberComponentIds) {
+      assertUuid(memberId, 'Group member component ID');
+      if (members.has(memberId)) throw new Error(`Group ${group.id} contains duplicate member ${memberId}`);
+      members.add(memberId);
+      if (groupIds.has(memberId)) throw new Error(`Group ${group.id} cannot contain another group`);
+      const member = document.components.find(component => component.id === memberId);
+      if (!member) throw new Error(`Group ${group.id} references missing component ${memberId}`);
+      if (member.diagramId !== document.id) throw new Error(`Group member ${memberId} must belong to diagram ${document.id}`);
+      if (member.type !== 'software-system') throw new Error(`Group member ${memberId} must be a Software System`);
+      const priorGroup = memberGroups.get(memberId);
+      if (priorGroup) throw new Error(`Component ${memberId} cannot belong to more than one group (${priorGroup} and ${group.id})`);
+      memberGroups.set(memberId, group.id);
+      if (!isMemberWithinGroup(group, member.position)) throw new Error(`Group ${group.id} boundary does not enclose member ${memberId}`);
+    }
+  }
 }
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

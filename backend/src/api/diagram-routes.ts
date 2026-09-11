@@ -5,6 +5,7 @@ import { sendError } from './errors';
 
 export function registerDiagramRoutes(app: FastifyInstance, repository: DiagramRepositoryLike, service: DiagramService): void {
   const summary = (document: Awaited<ReturnType<DiagramRepositoryLike['list']>>[number]) => ({ id: document.id, name: document.name, status: document.status, updatedAt: document.updatedAt });
+  const completeDocument = (document: Awaited<ReturnType<DiagramRepositoryLike['get']>>) => document ? { ...document, groups: document.groups ?? [] } : document;
   app.get('/diagrams', async () => (await repository.list()).map(summary));
 
   app.post('/diagrams', async (request, reply) => {
@@ -13,7 +14,7 @@ export function registerDiagramRoutes(app: FastifyInstance, repository: DiagramR
   });
 
   app.get<{ Params: { diagramId: string } }>('/diagrams/:diagramId', async (request, reply) => {
-    try { return reply.send(await service.load(request.params.diagramId)); }
+    try { return reply.send(completeDocument(await service.load(request.params.diagramId))); }
     catch (error) { if (error instanceof DiagramNotFoundError) return reply.code(404).send({ message: error.message }); return sendError(reply, error); }
   });
 

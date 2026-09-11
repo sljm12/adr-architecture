@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { DiagramDocument, DiagramSummary, Relationship, RelationshipDirection } from '../../../shared/src/index';
+import { getC4ArtifactTypeLabel, isC4ArtifactType, type C4ArtifactType, type DiagramDocument, type DiagramSummary, type Relationship, type RelationshipDirection } from '../../../shared/src/index';
 import { diagramClient } from '../api/diagram-client';
 import { BoundedHistory } from './history';
 
@@ -22,7 +22,9 @@ type State = {
   update: (fn: (document: DiagramDocument) => DiagramDocument) => void;
   undo: () => void;
   redo: () => void;
-  addComponent: (name: string) => void;
+  addComponent: (name: string, type: C4ArtifactType, description?: string | null) => boolean;
+  setComponentType: (componentId: string, type: C4ArtifactType) => boolean;
+  updateComponentType: (componentId: string, type: C4ArtifactType) => boolean;
   addRelationship: (source: string, target: string, label: string, direction: 'directed' | 'undirected') => void;
   renameComponent: (componentId: string, name: string) => boolean;
   updateRelationship: (relationshipId: string, updates: Partial<Pick<Relationship, 'sourceComponentId' | 'targetComponentId' | 'direction' | 'label'>>) => boolean;
@@ -35,11 +37,12 @@ type State = {
 };
 
 const history = new BoundedHistory<DiagramDocument>();
-const copy = (document: DiagramDocument) => structuredClone(document);
+const copy = (document: DiagramDocument): DiagramDocument => ({ ...structuredClone(document), groups: document.groups ?? [] });
 const historyState = () => ({ canUndo: history.canUndo, canRedo: history.canRedo });
 const now = () => new Date().toISOString();
 const summary = (document: DiagramDocument): DiagramSummary => ({ id: document.id, name: document.name, status: document.status, updatedAt: document.updatedAt });
 const replaceSummary = (items: DiagramSummary[], next: DiagramSummary) => items.some(item => item.id === next.id) ? items.map(item => item.id === next.id ? next : item) : [...items, next];
+export const componentTypeLabel = getC4ArtifactTypeLabel;
 
 export const useDiagramStore = create<State>((set, get) => ({
   document: null,
@@ -72,19 +75,34 @@ export const useDiagramStore = create<State>((set, get) => ({
     const document = history.redo();
     if (document) set({ document: copy(document), status: 'unsaved', error: null, ...historyState() });
   },
-  addComponent: name => {
+  addComponent: (name, type, description = null) => {
     const document = get().document;
-    if (!document || !name.trim()) return;
+    if (!document || !name.trim() || !isC4ArtifactType(type)) return false;
     const timestamp = now();
     get().update(current => ({
       ...current,
       components: [...current.components, {
-        id: crypto.randomUUID(), diagramId: current.id, name: name.trim(), description: null, type: null,
+        id: crypto.randomUUID(), diagramId: current.id, name: name.trim(), description: description?.trim() || null, type,
         position: { x: 80 + current.components.length * 180, y: 100 + (current.components.length % 3) * 120 },
         createdAt: timestamp, updatedAt: timestamp,
       }],
     }));
+    return true;
   },
+  setComponentType: (componentId, type) => {
+    const current = get().document;
+    const component = current?.components.find(item => item.id === componentId);
+    if (!current || !component || !isC4ArtifactType(type)) return false;
+    const memberGroup = (current.groups ?? []).find(group => group.memberComponentIds.includes(componentId));
+    if (memberGroup && type !== 'software-system') return false;
+    if (component.type === type) return true;
+    get().update(document => ({
+      ...document,
+      components: document.components.map(item => item.id === componentId ? { ...item, type, updatedAt: now() } : item),
+    }));
+    return true;
+  },
+  updateComponentType: (componentId, type) => get().setComponentType(componentId, type),
   addRelationship: (sourceComponentId, targetComponentId, label, direction) => {
     const document = get().document;
     if (!document || sourceComponentId === targetComponentId) return;
@@ -158,7 +176,8 @@ export const useDiagramStore = create<State>((set, get) => ({
     try {
       const saved = await diagramClient.save(documentAtSaveStart);
       if (get().document === documentAtSaveStart) {
-        set(state => ({ document: saved, status: 'saved', error: null, savedDocuments: replaceSummary(state.savedDocuments, summary(saved)) }));
+        const normalized = copy(saved);
+        set(state => ({ document: normalized, status: 'saved', error: null, savedDocuments: replaceSummary(state.savedDocuments, summary(normalized)) }));
       } else {
         set({ status: 'unsaved', error: null });
       }

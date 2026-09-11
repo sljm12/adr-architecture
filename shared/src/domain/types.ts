@@ -1,11 +1,14 @@
 export type UUID = string;
 export type DiagramStatus = 'active' | 'trashed';
 export type RelationshipDirection = 'directed' | 'undirected';
+export type C4ArtifactType = 'person' | 'software-system';
 export interface Position { x: number; y: number }
-export interface Component { id: UUID; diagramId: UUID; name: string; description: string | null; type: string | null; position: Position; createdAt: string; updatedAt: string }
+export interface Component { id: UUID; diagramId: UUID; name: string; description: string | null; type: C4ArtifactType | string | null; position: Position; createdAt: string; updatedAt: string }
 export interface Relationship { id: UUID; diagramId: UUID; sourceComponentId: UUID; targetComponentId: UUID; direction: RelationshipDirection; label: string | null; createdAt: string; updatedAt: string }
 export interface Diagram { id: UUID; name: string; status: DiagramStatus; createdAt: string; updatedAt: string; trashedAt: string | null }
-export interface DiagramDocument extends Diagram { components: Component[]; relationships: Relationship[] }
+export interface GroupBoundaryLayout { position: Position; size: { width: number; height: number } }
+export interface SystemGroup extends GroupBoundaryLayout { id: UUID; diagramId: UUID; name: string; memberComponentIds: UUID[]; createdAt: string; updatedAt: string }
+export interface DiagramDocument extends Diagram { components: Component[]; relationships: Relationship[]; groups: SystemGroup[] }
 export interface DiagramSummary { id: UUID; name: string; status: DiagramStatus; updatedAt: string }
 
 export type AdrStatus = 'draft' | 'accepted' | 'superseded' | 'rejected';

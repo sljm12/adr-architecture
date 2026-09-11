@@ -19,3 +19,13 @@ export const adrRelationshipLinks=pgTable('adr_relationship_links',{
   adrId:uuid('adr_id').notNull().references(()=>adrs.id), relationshipId:uuid('relationship_id').notNull().references(()=>relationships.id),
   createdAt:timestamp('created_at',{withTimezone:true}).notNull(),
 }, table => ({ pk:primaryKey({ columns:[table.adrId, table.relationshipId] }), relationshipIdx:index('adr_relationship_links_relationship_idx').on(table.relationshipId) }));
+export const systemGroups=pgTable('system_groups',{
+  id:uuid('id').primaryKey(), diagramId:uuid('diagram_id').notNull().references(()=>diagrams.id),
+  name:varchar('name',{length:200}).notNull(), x:doublePrecision('x').notNull(), y:doublePrecision('y').notNull(),
+  width:doublePrecision('width').notNull(), height:doublePrecision('height').notNull(),
+  createdAt:timestamp('created_at',{withTimezone:true}).notNull(), updatedAt:timestamp('updated_at',{withTimezone:true}).notNull(),
+}, table => ({ diagramIdx:index('system_groups_diagram_idx').on(table.diagramId) }));
+export const systemGroupMembers=pgTable('system_group_members',{
+  groupId:uuid('group_id').notNull().references(()=>systemGroups.id), componentId:uuid('component_id').notNull().references(()=>components.id),
+  createdAt:timestamp('created_at',{withTimezone:true}).notNull(),
+}, table => ({ pk:primaryKey({ columns:[table.groupId, table.componentId] }), groupIdx:index('system_group_members_group_idx').on(table.groupId), componentIdx:index('system_group_members_component_idx').on(table.componentId) }));

@@ -3,7 +3,7 @@ import type { DiagramDocument, DiagramSummary } from '../../shared/src/index';
 import { diagramClient } from '../src/api/diagram-client';
 import { useDiagramStore } from '../src/state/diagram-store';
 
-const first: DiagramDocument = { id: '00000000-0000-0000-0000-000000000101', name: 'First', status: 'active', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', trashedAt: null, components: [], relationships: [] };
+const first: DiagramDocument = { id: '00000000-0000-0000-0000-000000000101', name: 'First', status: 'active', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', trashedAt: null, components: [], relationships: [], groups: [] };
 const second: DiagramDocument = { ...first, id: '00000000-0000-0000-0000-000000000102', name: 'Second', updatedAt: '2026-01-02T00:00:00.000Z' };
 const summary: DiagramSummary = { id: second.id, name: second.name, status: 'active', updatedAt: second.updatedAt };
 

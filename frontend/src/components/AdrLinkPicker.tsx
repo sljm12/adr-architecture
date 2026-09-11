@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { Component, Relationship } from '../../../shared/src/index';
+import { getC4ArtifactTypeLabel, type Component, type Relationship } from '../../../shared/src/index';
 
 type Props = {
   components: Component[];
@@ -35,12 +35,12 @@ export function AdrLinkPicker({ components, relationships = [], selectedIds, rel
   return <section className="adr-link-picker" aria-labelledby="adr-link-picker-heading">
     <div className="adr-link-picker-heading"><div><h4 id="adr-link-picker-heading">Linked artifacts</h4><p>Optional scope for this decision.</p></div><span className="adr-link-count" aria-label={`${selectedCount} linked artifacts`}>{selectedCount}</span></div>
     {selectedCount === 0 ? <p className="adr-unlinked-state">Unlinked — this ADR applies across the diagram.</p> : <ul className="adr-link-chips" aria-label="Selected components and relationships">
-      {selectedComponents.map(component => <li key={`component-${component.id}`} className="adr-link-chip"><span>{component.name}</span><button type="button" className="adr-link-chip-remove" onClick={() => toggleComponent(component.id)} aria-label={`Remove ${component.name}`}>Remove</button>{onSelectComponent && <button type="button" className="adr-link-chip-navigate" onClick={() => onSelectComponent(component.id)}>View</button>}</li>)}
+      {selectedComponents.map(component => <li key={`component-${component.id}`} className="adr-link-chip"><span>{component.name} <small>{getC4ArtifactTypeLabel(component.type)}</small></span><button type="button" className="adr-link-chip-remove" onClick={() => toggleComponent(component.id)} aria-label={`Remove ${component.name}`}>Remove</button>{onSelectComponent && <button type="button" className="adr-link-chip-navigate" onClick={() => onSelectComponent(component.id)}>View</button>}</li>)}
       {selectedRelationships.map(relationship => <li key={`relationship-${relationship.id}`} className="adr-link-chip"><span>{relationshipName(relationship)}</span><button type="button" className="adr-link-chip-remove" onClick={() => toggleRelationship(relationship.id)} aria-label={`Remove relationship ${relationshipName(relationship)}`}>Remove</button>{onSelectRelationship && <button type="button" className="adr-link-chip-navigate" onClick={() => onSelectRelationship(relationship.id)}>View</button>}</li>)}
     </ul>}
     <label className="adr-link-search" htmlFor="adr-component-search">Search components and relationships<input id="adr-component-search" type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Filter by component or relationship" /></label>
     <div className="adr-link-options" role="group" aria-label="Available components and relationships">
-      {matches.components.map(component => <label key={`component-option-${component.id}`} className="adr-link-option"><input type="checkbox" aria-label={component.name} checked={selectedIds.includes(component.id)} onChange={() => toggleComponent(component.id)} /><span>{component.name}</span><small>{component.type ?? 'Component'}</small></label>)}
+      {matches.components.map(component => <label key={`component-option-${component.id}`} className="adr-link-option"><input type="checkbox" aria-label={component.name} checked={selectedIds.includes(component.id)} onChange={() => toggleComponent(component.id)} /><span>{component.name}</span><small>{getC4ArtifactTypeLabel(component.type)}</small></label>)}
       {matches.relationships.map(relationship => <label key={`relationship-option-${relationship.id}`} className="adr-link-option"><input type="checkbox" aria-label={`Relationship ${relationshipName(relationship)}`} checked={relationshipIds.includes(relationship.id)} onChange={() => toggleRelationship(relationship.id)} /><span>{relationshipName(relationship)}</span><small>Relationship</small></label>)}
       {matches.components.length === 0 && matches.relationships.length === 0 && <p className="adr-feedback">No matching components or relationships.</p>}
     </div>
