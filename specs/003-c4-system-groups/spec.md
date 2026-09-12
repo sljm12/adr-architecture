@@ -38,7 +38,7 @@ When creating a diagram component, an architecture author can choose a C4 System
 
 ### User Story 2 - Group software systems into a larger boundary (Priority: P1)
 
-When several software systems collectively form a larger system, an architecture author can select them, give the group a name, and show them inside a labeled bounding box.
+When several software systems collectively form a larger system, an architecture author can select them, see which components are selected, give the group a name, and show them inside a labeled bounding box. If a selected component is not compatible with a system group, the author is told why before a group is created.
 
 **Why this priority**: A visible larger-system boundary is the core value of this feature: it lets readers understand ownership or scope without losing the detail of the constituent systems.
 
@@ -46,10 +46,12 @@ When several software systems collectively form a larger system, an architecture
 
 **Acceptance Scenarios**:
 
-1. **Given** a diagram contains at least two Software System components, **When** the author selects those systems and starts grouping, **Then** the author can provide a group name and create a group.
-2. **Given** a group is created, **When** the diagram is displayed, **Then** a labeled bounding box is rendered behind the member systems with enough visible spacing to distinguish the boundary from the members, without rearranging the systems’ existing positions.
-3. **Given** a group contains multiple systems, **When** the author moves the group, **Then** the member systems move with it while preserving their relative positions.
-4. **Given** a group exists, **When** the author renames the group or ungroups it, **Then** the requested change is reflected without deleting the member systems or their relationships.
+1. **Given** a diagram contains at least two Software System components, **When** the author enters grouping selection and selects those systems, **Then** every currently selected component is visibly highlighted so the author can distinguish selected components from unselected components.
+2. **Given** the grouping selection includes a Person and a Software System, **When** the author attempts to group the selection, **Then** the system prevents group creation and explains that a Person cannot be grouped with a Software System because system groups contain only Software Systems; no group or partial membership is created.
+3. **Given** a diagram contains at least two compatible Software System components, **When** the author starts grouping after selecting them, **Then** the author can provide a group name and create a group.
+4. **Given** a group is created, **When** the diagram is displayed, **Then** a labeled bounding box is rendered behind the member systems with enough visible spacing to distinguish the boundary from the members, without rearranging the systems’ existing positions.
+5. **Given** a group contains multiple systems, **When** the author moves the group, **Then** the member systems move with it while preserving their relative positions.
+6. **Given** a group exists, **When** the author renames the group or ungroups it, **Then** the requested change is reflected without deleting the member systems or their relationships.
 
 ---
 
@@ -72,7 +74,8 @@ When an architecture author saves, reopens, or edits a grouped diagram, the grou
 ### Edge Cases
 
 - The author attempts to create a group with fewer than two systems; the action is rejected with a clear explanation and no partial group is created.
-- The author selects a Person or another non-system artifact for a system group; the interface prevents the invalid selection or explains why it cannot be grouped.
+- The author selects a Person or another non-system artifact for a system group; the interface prevents group creation and explains which artifact type is incompatible and why it cannot be grouped with the current selection.
+- During multi-component grouping selection, each selected component is visibly highlighted, the highlight updates when a component is selected or deselected, and the selection feedback is cleared when grouping is canceled or completed.
 - A member system is moved or resized toward or beyond the group boundary; movement is constrained so the member remains enclosed, and the author can explicitly remove it from the group.
 - A group name is empty, whitespace-only, or duplicates another group name in the same diagram after trimming and ignoring capitalization; the author receives actionable validation and the existing group data is not changed.
 - A grouped diagram is exported to a format that cannot represent group boundaries; the author is warned about the limitation and grouping data is not silently removed from the saved diagram. Mermaid represents supported groups as labeled `subgraph` sections and explains that exact canvas positions are not preserved.
@@ -84,18 +87,20 @@ When an architecture author saves, reopens, or edits a grouped diagram, the grou
 
 - **FR-001**: The component-creation flow MUST offer the C4 System Context artifact types supported by this feature, including Person and Software System, with human-readable labels and descriptions.
 - **FR-002**: The system MUST store the selected artifact type as part of the component’s architecture data and MUST show that type wherever the component is presented for editing or review.
-- **FR-003**: The system MUST allow an author to select two or more Software System components and create a named system group from them without automatically rearranging their existing positions.
+- **FR-003**: The system MUST allow an author to enter grouping selection, select two or more compatible Software System components, and create a named system group from them without automatically rearranging their existing positions; every currently selected component MUST be visibly highlighted so its selection state is distinguishable from unselected components.
 - **FR-004**: A system group MUST have its own stable identity, human-readable name, and membership references to the stable identities of its member systems; each Software System MUST belong to at most one group.
 - **FR-005**: The system MUST render each system group as a labeled bounding box behind its member systems, with all members visually enclosed and individually readable.
 - **FR-006**: Moving a system group MUST move all member systems together while preserving their relative arrangement; it MUST NOT change the logical relationships between members or other components.
 - **FR-007**: The system MUST constrain member movement and layout changes so a group boundary continues to enclose all of its members, and MUST provide an explicit way to remove a member from the group.
 - **FR-008**: The author MUST be able to rename a group, review its members, and ungroup it without deleting the member systems, their relationships, or their ADR links.
-- **FR-009**: The system MUST reject invalid group creation or membership changes with an actionable message, including attempts to group fewer than two systems, unsupported artifact types, or group names that duplicate another name after trimming and ignoring capitalization.
+- **FR-009**: The system MUST reject invalid group creation or membership changes with an actionable, human-readable message that identifies the violated rule and, where applicable, the incompatible artifact type or types, including attempts to group fewer than two systems, unsupported artifact types, or group names that duplicate another name after trimming and ignoring capitalization. For example, it MUST explain that a Person cannot be grouped with a Software System because system groups contain only Software Systems.
 - **FR-010**: Group membership, group names, boundary layout, component artifact types, relationships, and ADR links MUST persist when the diagram is saved and reopened.
 - **FR-011**: Renaming or repositioning a component MUST NOT break its group membership, relationships, or ADR links.
 - **FR-012**: Destructive actions affecting groups MUST require clear confirmation and MUST preserve member systems and their references when a group is deleted.
 - **FR-013**: Mermaid export MUST represent supported system groups as labeled `subgraph` sections and clearly explain that exact canvas positions are not preserved. When an export format cannot represent system groups, the system MUST clearly identify the unsupported grouping information to the author and MUST NOT silently discard it from the saved diagram.
 - **FR-014**: Group creation, review, editing, and removal MUST be usable with keyboard navigation, readable labels, clear validation feedback, and sufficient visual contrast.
+- **FR-015**: During grouping selection, the system MUST update the visual highlight when a component is selected or deselected and MUST clear the selection feedback when grouping is completed, canceled, or the author exits grouping selection.
+- **FR-016**: When the author attempts to select or group a component that is ineligible or incompatible with the current grouping selection, the system MUST explain why the component cannot be grouped and MUST leave the existing diagram and group memberships unchanged.
 
 ### Key Entities
 
@@ -113,8 +118,9 @@ When an architecture author saves, reopens, or edits a grouped diagram, the grou
 - **SC-002**: Authors can create a named group containing two to twenty software systems in under 60 seconds, with the resulting boundary visibly enclosing every selected system.
 - **SC-003**: 100% of valid group memberships, group names, component types, relationships, and ADR links remain intact after a save-and-reopen cycle in validation tests.
 - **SC-004**: In usability validation, at least 90% of authors can rename or ungroup a system group without deleting a member system or its references on their first attempt.
-- **SC-005**: Every invalid grouping attempt in validation produces an actionable message and leaves the existing diagram unchanged.
+- **SC-005**: Every invalid grouping attempt in validation produces an actionable message that identifies the incompatible artifact type or violated grouping rule, including why a Person cannot be grouped with a Software System, and leaves the existing diagram unchanged.
 - **SC-006**: Authors can distinguish the group boundary from its member systems at normal diagram zoom without relying on color alone.
+- **SC-007**: In 100% of multi-component grouping validation scenarios, authors can identify every currently selected component from its visual selection state, and the selection state updates correctly after selection, deselection, cancellation, and completion.
 
 ## Assumptions
 
@@ -126,6 +132,7 @@ When an architecture author saves, reopens, or edits a grouped diagram, the grou
 - Mermaid export preserves group names and membership semantically as `subgraph` sections, but does not preserve exact canvas positions.
 - Creating a group preserves each selected system’s existing position and calculates the initial boundary around those positions.
 - Group-name uniqueness is checked after trimming whitespace and ignoring capitalization.
+- The grouping workflow provides a visible selection state for every selected component and explains incompatibility immediately or when grouping is attempted; it does not silently ignore an incompatible component.
 - Version one supports non-nested groups. A group cannot contain another group, and a group is not a new relationship endpoint.
 - Existing component relationships and ADR links continue to target individual stable component identities; grouping does not rewrite those references.
 - The author has access to the existing diagram editing and persistence workflows, and this feature does not introduce authentication, permissions, or real-time collaboration.

@@ -31,4 +31,4 @@
 
 ## Notes
 
-- Validation pass 1: all checklist items pass. The specification defines the supported C4 System Context artifact types, grouping constraints, stable-reference behavior, persistence expectations, destructive-action safeguards, accessibility expectations, and export warning behavior.
+- Validation pass 2: all checklist items pass. The specification now explicitly defines visible multi-component selection feedback, selection-state clearing, and actionable incompatibility explanations (including why a Person cannot be grouped with a Software System), while preserving the existing grouping constraints, stable-reference behavior, persistence expectations, destructive-action safeguards, accessibility expectations, and export warning behavior.

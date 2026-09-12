@@ -79,13 +79,18 @@ C4 components without creating incomplete artifacts or breaking existing referen
 
 ## Phase 4: User Story 2 - Group Software Systems into a Larger Boundary (Priority: P1)
 
-**Goal**: Let an author select two or more Software System components, create and name a labeled
-bounding group, move it with its members, review membership, remove a member explicitly, rename it,
-and ungroup without deleting components or relationships.
+**Goal**: Let an author select two or more Software System components, clearly see which components
+are selected, create and name a labeled bounding group, move it with its members, review membership,
+remove a member explicitly, rename it, and ungroup without deleting components or relationships. When
+selection contains an incompatible artifact, explain the artifact types and grouping rule without
+mutating the document.
 
-**Independent Test**: Seed or create at least two Software System components, group them, verify the
-boundary encloses them behind readable member nodes, move the group while comparing relative positions,
-then rename, remove membership, and ungroup.
+**Independent Test**: Seed or create at least two Software System components, select them, verify every
+selected component is visibly highlighted and that the highlight updates when selection changes,
+group them, verify the boundary encloses them behind readable member nodes, move the group while
+comparing relative positions, then rename, remove membership, and ungroup. Also attempt a mixed Person
+and Software System selection and verify the author is told why it cannot be grouped and the document
+is unchanged.
 
 ### Tests for User Story 2
 
@@ -104,8 +109,16 @@ then rename, remove membership, and ungroup.
 - [X] T028 [US2] Add group boundary, type-label, responsive, focus, and contrast styles to `frontend/src/styles.css` using flat labeled boundaries, existing hairlines, Action Blue controls, Focus Blue rings, spacing tokens, and no gradients or decorative group shadows.
 - [X] T029 [US2] Add the multi-select, position-preserving create, boundary rendering, group drag, constrained member movement, invalid selection/name variants, rename, explicit member removal, and confirmed ungroup acceptance journeys in `e2e/tests/c4-system-groups.spec.ts`.
 
+### Follow-up tests and implementation for updated selection feedback
+
+- [ ] T030 [P] [US2] Add UI contract tests for non-color-only selected-component highlighting, per-component deselection updates, selection clearing on cancel/completion, and a mixed Person/Software System error that names the incompatible types and grouping rule in `frontend/tests/system-group-ui.test.tsx`.
+- [ ] T031 [P] [US2] Add end-to-end acceptance coverage for identifying every selected component, clearing selection feedback after cancellation and successful grouping, and rejecting mixed Person/Software System selections with an explanatory message and unchanged document in `e2e/tests/c4-system-groups.spec.ts`.
+- [ ] T032 [US2] Update `frontend/src/components/DiagramCanvas.tsx` and `frontend/src/components/DiagramWorkspace.tsx` to keep grouping selections visibly highlighted without relying on color alone, update highlights after select/deselect, and clear transient selection state on deselection, cancellation, completion, or exit from grouping selection.
+- [ ] T033 [US2] Update `frontend/src/components/DiagramToolbar.tsx` and `frontend/src/components/WorkspaceInspector.tsx` to explain why an ineligible or incompatible component cannot be grouped, including the Person/Software System rule, while preventing partial group creation and leaving the document unchanged.
+
 **Checkpoint**: US2 is independently demonstrable with seeded or newly typed systems, and all group
-operations preserve member artifacts, relationships, and ADR references in the local document.
+operations preserve member artifacts, relationships, and ADR references in the local document. The
+selection state is clear and accessible, and incompatible selections provide an actionable reason.
 
 ---
 
@@ -120,18 +133,18 @@ members, and verify Mermaid output or an actionable unsupported-format error.
 
 ### Tests for User Story 3
 
-- [ ] T030 [P] [US3] Add PostgreSQL/in-memory persistence tests for group round trips, legacy empty-group compatibility, normalized membership, trimmed/case-insensitive name uniqueness, position-preserving group creation data, group ID/createdAt preservation, transactional invalid-save immutability, and component deletion conflicts in `backend/tests/persistence/system-groups.test.ts`.
-- [ ] T031 [P] [US3] Add Mermaid tests for Person and Software System shapes, labeled stable-ID subgraphs, complete relationship emission, escaped group names, invalid group errors, and no silent omission in `shared/tests/c4-system-groups-export.test.ts`.
-- [ ] T032 [P] [US3] Add frontend recovery/history tests for failed group saves, retry, stale save responses, save/reopen replacement, undo/redo, group deletion confirmation, and preservation of component/ADR identities in `frontend/tests/system-group-recovery.test.tsx`.
-- [ ] T033 [P] [US3] Add the save/reopen, member rename/reposition, ADR-link integrity, group deletion confirmation, grouped-component deletion conflict, and Mermaid export journey in `e2e/tests/c4-system-groups-persistence.spec.ts`.
+- [ ] T034 [P] [US3] Add PostgreSQL/in-memory persistence tests for group round trips, legacy empty-group compatibility, normalized membership, trimmed/case-insensitive name uniqueness, position-preserving group creation data, group ID/createdAt preservation, transactional invalid-save immutability, and component deletion conflicts in `backend/tests/persistence/system-groups.test.ts`.
+- [ ] T035 [P] [US3] Add Mermaid tests for Person and Software System shapes, labeled stable-ID subgraphs, complete relationship emission, escaped group names, invalid group errors, and no silent omission in `shared/tests/c4-system-groups-export.test.ts`.
+- [ ] T036 [P] [US3] Add frontend recovery/history tests for failed group saves, retry, stale save responses, save/reopen replacement, undo/redo, group deletion confirmation, and preservation of component/ADR identities in `frontend/tests/system-group-recovery.test.tsx`.
+- [ ] T037 [P] [US3] Add the save/reopen, member rename/reposition, ADR-link integrity, group deletion confirmation, grouped-component deletion conflict, and Mermaid export journey in `e2e/tests/c4-system-groups-persistence.spec.ts`.
 
 ### Implementation for User Story 3
 
-- [ ] T034 [US3] Complete transactional group reconciliation, server timestamp handling, legacy document defaults, stable group/member ID preservation, and grouped-component deletion blockers in `backend/src/persistence/diagram-repository.ts` and `backend/src/services/diagram-service.ts`.
-- [ ] T035 [US3] Extend `shared/src/export/mermaid-export.ts` to validate group data, escape group names, render typed component shapes, emit each group as a labeled `subgraph`, retain all relationships, and raise actionable group-specific errors for unsupported content.
-- [ ] T036 [US3] Update `frontend/src/components/ExportButton.tsx` and `frontend/src/api/export-client.ts` to expose Mermaid group semantics, explain that exact canvas positions are not exported, and surface group-specific validation failures without clearing saved data.
-- [ ] T037 [US3] Update `frontend/src/components/RecoveryControls.tsx` and `frontend/src/api/diagram-client.ts` to display group-membership deletion conflicts, preserve confirmation semantics, and keep existing relationship/ADR dependency messaging intact.
-- [ ] T038 [US3] Harden save/load response handling in `frontend/src/state/diagram-store.ts` so grouped drafts remain visible on failure, retries submit unchanged data, stale responses cannot overwrite newer group edits, and successful reopen resets history only after replacement succeeds.
+- [ ] T038 [US3] Complete transactional group reconciliation, server timestamp handling, legacy document defaults, stable group/member ID preservation, and grouped-component deletion blockers in `backend/src/persistence/diagram-repository.ts` and `backend/src/services/diagram-service.ts`.
+- [ ] T039 [US3] Extend `shared/src/export/mermaid-export.ts` to validate group data, escape group names, render typed component shapes, emit each group as a labeled `subgraph`, retain all relationships, and raise actionable group-specific errors for unsupported content.
+- [ ] T040 [US3] Update `frontend/src/components/ExportButton.tsx` and `frontend/src/api/export-client.ts` to expose Mermaid group semantics, explain that exact canvas positions are not exported, and surface group-specific validation failures without clearing saved data.
+- [ ] T041 [US3] Update `frontend/src/components/RecoveryControls.tsx` and `frontend/src/api/diagram-client.ts` to display group-membership deletion conflicts, preserve confirmation semantics, and keep existing relationship/ADR dependency messaging intact.
+- [ ] T042 [US3] Harden save/load response handling in `frontend/src/state/diagram-store.ts` so grouped drafts remain visible on failure, retries submit unchanged data, stale responses cannot overwrite newer group edits, and successful reopen resets history only after replacement succeeds.
 
 **Checkpoint**: US3 proves durable reference integrity and recoverable group behavior across the
 shared, persistence, API, frontend, and export boundaries.
@@ -143,10 +156,10 @@ shared, persistence, API, frontend, and export boundaries.
 **Purpose**: Finish documentation, accessibility, compatibility, and release validation across all
 stories.
 
-- [ ] T039 [P] Document C4 component types, group behavior, migration `0003_system_groups.sql`, Mermaid limitations, and stable-reference guarantees in `README.md`.
-- [ ] T040 [P] Add responsive and accessibility regression coverage for group labels, focus order, 44px targets, contrast, keyboard multi-selection, and confirmation dialogs in `frontend/tests/accessibility.test.tsx` and `frontend/src/styles.css`.
-- [ ] T041 [P] Reconcile the implementation-facing contract, data model, and validation scenarios in `specs/003-c4-system-groups/contracts/openapi.yaml`, `specs/003-c4-system-groups/data-model.md`, and `specs/003-c4-system-groups/quickstart.md` after implementation details stabilize.
-- [ ] T042 Run every command and acceptance scenario in `specs/003-c4-system-groups/quickstart.md`, including `npm test`, `npm run build`, and `npm run test:e2e`, and resolve any regression before marking the feature complete.
+- [ ] T043 [P] Document C4 component types, group behavior, migration `0003_system_groups.sql`, Mermaid limitations, and stable-reference guarantees in `README.md`.
+- [ ] T044 [P] Add responsive and accessibility regression coverage for group labels, focus order, 44px targets, contrast, keyboard multi-selection, selected-state highlighting, incompatibility explanations, and confirmation dialogs in `frontend/tests/accessibility.test.tsx` and `frontend/src/styles.css`.
+- [ ] T045 [P] Reconcile the implementation-facing contract, data model, and validation scenarios in `specs/003-c4-system-groups/contracts/openapi.yaml`, `specs/003-c4-system-groups/data-model.md`, and `specs/003-c4-system-groups/quickstart.md` after implementation details stabilize.
+- [ ] T046 Run every command and acceptance scenario in `specs/003-c4-system-groups/quickstart.md`, including `npm test`, `npm run build`, and `npm run test:e2e`, and resolve any regression before marking the feature complete.
 
 ---
 
@@ -157,9 +170,9 @@ stories.
 - **Phase 1 (Setup)**: T001 has no dependencies.
 - **Phase 2 (Foundational)**: T002-T011 depend on T001 where they use the shared C4 vocabulary; this phase blocks all story implementation.
 - **Phase 3 (US1)**: T012-T018 depend on Phase 2. US1 is the recommended first vertical slice and MVP.
-- **Phase 4 (US2)**: T019-T029 depend on Phase 2 and the typed component behavior from US1 for the end-to-end creation path. Adapter/store work can use seeded typed fixtures before US1 UI completion.
-- **Phase 5 (US3)**: T030-T038 depend on Phase 2; the full browser persistence journey depends on the completed US1/US2 UI, while backend/export work can proceed in parallel after the foundation.
-- **Phase 6 (Polish)**: T039-T042 depend on the desired story checkpoints, with documentation and accessibility work able to start as soon as their target behavior exists.
+- **Phase 4 (US2)**: T019-T033 depend on Phase 2 and the typed component behavior from US1 for the end-to-end creation path. Adapter/store work can use seeded typed fixtures before US1 UI completion; T030-T033 are the follow-up selection-feedback slice after the original US2 implementation tasks.
+- **Phase 5 (US3)**: T034-T042 depend on Phase 2; the full browser persistence journey depends on the completed US1/US2 UI, while backend/export work can proceed in parallel after the foundation.
+- **Phase 6 (Polish)**: T043-T046 depend on the desired story checkpoints, with documentation and accessibility work able to start as soon as their target behavior exists.
 
 ### User Story Completion Order
 
@@ -175,9 +188,9 @@ round-trip and Mermaid work can proceed alongside US2; its end-to-end workflow f
 
 - After T005, run T006 shared tests and T007 database/schema work in parallel; T008 contract tests can run independently against the checked-in OpenAPI artifact.
 - Within US1, T012 and T013 are parallel test work; T015 and T017 touch separate UI files after shared type behavior is available.
-- Within US2, T019, T020, and T021 are parallel test work; T024, T026, and T028 touch separate UI files after the store/adapter contracts are established.
-- Within US3, T030, T031, T032, and T033 are parallel test work; T035 and T037 touch separate export/recovery boundaries after the foundational persistence contract exists.
-- In Polish, T039, T040, and T041 are parallel documentation/test work before T042's full validation run.
+- Within US2, T019, T020, and T021 are parallel baseline test work; T024, T026, and T028 touch separate UI files after the store/adapter contracts are established. T030 and T031 are parallel follow-up tests, followed by T032 and T033 for the canvas/workspace and toolbar/inspector updates.
+- Within US3, T034, T035, T036, and T037 are parallel test work; T039 and T041 touch separate export/recovery boundaries after the foundational persistence contract exists.
+- In Polish, T043, T044, and T045 are parallel documentation/test work before T046's full validation run.
 
 ## Parallel Example: User Story 1
 
@@ -195,21 +208,24 @@ separate, and finish with T018 for the browser journey.
 Task T019: Add group store tests in frontend/tests/system-group-store.test.ts
 Task T020: Add React Flow group adapter tests in frontend/tests/react-flow-groups.test.ts
 Task T021: Add group inspector/canvas tests in frontend/tests/system-group-ui.test.tsx
+Task T030: Add selection-feedback UI tests in frontend/tests/system-group-ui.test.tsx
+Task T031: Add mixed-type grouping acceptance tests in e2e/tests/c4-system-groups.spec.ts
 ```
 
 Then implement T022-T025 in dependency order; T026-T028 can be split by toolbar, inspector, node,
-and stylesheet ownership before T029 runs the integrated journey.
+and stylesheet ownership before T029 runs the integrated journey. Complete T032-T033 for the updated
+selection feedback and incompatibility explanation behavior before re-running T031.
 
 ## Parallel Example: User Story 3
 
 ```text
-Task T030: Add repository round-trip tests in backend/tests/persistence/system-groups.test.ts
-Task T031: Add Mermaid group export tests in shared/tests/c4-system-groups-export.test.ts
-Task T032: Add frontend recovery tests in frontend/tests/system-group-recovery.test.tsx
-Task T033: Add persistence/reference Playwright tests in e2e/tests/c4-system-groups-persistence.spec.ts
+Task T034: Add repository round-trip tests in backend/tests/persistence/system-groups.test.ts
+Task T035: Add Mermaid group export tests in shared/tests/c4-system-groups-export.test.ts
+Task T036: Add frontend recovery tests in frontend/tests/system-group-recovery.test.tsx
+Task T037: Add persistence/reference Playwright tests in e2e/tests/c4-system-groups-persistence.spec.ts
 ```
 
-Implement T034-T038 after the boundary tests expose the missing behavior, keeping backend, export,
+Implement T038-T042 after the boundary tests expose the missing behavior, keeping backend, export,
 recovery UI, and store work in separate files where possible.
 
 ## Implementation Strategy

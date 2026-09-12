@@ -140,3 +140,24 @@ toolbar, focus behavior, and confirmation dialog keeps the feature accessible an
 **Alternatives considered:** Adding a second accent color or a card-shadow hierarchy was rejected by
 the design guidance. A color-only distinction for Person, Software System, and group boundaries was
 rejected because it fails the accessibility requirement.
+
+## Decision: Keep grouping selection transient with explicit compatibility feedback
+
+**Decision:** Track the active grouping selection only in the editor interaction state, not in the
+saved diagram document or API payload. Every selected component receives a visible selection cue that
+does not rely on color alone and updates when the author selects or deselects it. If the selection
+contains an ineligible or incompatible artifact, block group creation and explain the artifact types
+and violated rule in the selection or grouping feedback; for example, explain that a Person cannot be
+grouped with a Software System because system groups contain only Software Systems. Clear the
+selection cue when the author deselects, cancels, completes grouping, or exits grouping selection.
+
+**Rationale:** Selection is temporary interaction state and should not become architecture data, but
+unclear selection or silently filtered components can cause authors to create the wrong boundary.
+Explicit, non-color-only feedback satisfies the accessibility requirement while making the grouping
+constraint understandable at the point of action. Rejecting the group before domain mutation also
+preserves the existing document and prevents partial membership.
+
+**Alternatives considered:** Persisting selection was rejected because it adds non-architectural state
+to saved documents. Silently dropping incompatible components was rejected because it hides why the
+requested group was not created. Color-only highlighting was rejected because it is not sufficiently
+accessible or reliable at the canvas scale.

@@ -107,7 +107,10 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
     ValidationError:
-      description: Actionable validation failure; no document mutation is committed.
+      description: >-
+        Actionable validation failure; no document mutation is committed. For incompatible group
+        selections, the message or field detail identifies the artifact type or types and explains
+        why the requested grouping is not allowed.
       content:
         application/json:
           schema:
@@ -305,7 +308,9 @@ components:
       properties:
         message:
           type: string
+          description: Human-readable summary of the violated validation or grouping rule.
         fields:
           type: object
           additionalProperties:
             type: string
+          description: Field-specific details, including incompatible artifact types and grouping reasons when applicable.

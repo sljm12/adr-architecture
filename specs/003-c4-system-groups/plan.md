@@ -1,6 +1,6 @@
 # Implementation Plan: C4 System Groups
 
-**Branch**: `003-c4-system-groups` | **Date**: 2026-09-11 | **Spec**: [spec.md](./spec.md)
+**Branch**: `003-c4-system-groups` | **Date**: 2026-09-12 | **Spec**: [spec.md](./spec.md)
 
 **Input**: Feature specification from `/specs/003-c4-system-groups/spec.md`
 
@@ -17,11 +17,13 @@ REST boundary.
 
 The frontend will extend the current Zustand history and inspector workflow with C4 type selection,
 multi-selection, group creation, group movement, member review/removal, rename, and confirmed
-ungrouping. React Flow will render each group as a parent subflow node behind its children, but the
-shared domain remains authoritative and stores absolute component positions. Relationships and ADR
-links continue to target component UUIDs unchanged. Mermaid export will represent groups as semantic
-`subgraph` sections and will reject any future unsupported group representation with an actionable
-group-specific error.
+ungrouping. During grouping selection, every selected component will have a visible, non-color-only
+selection state; incompatible selections will be blocked from group creation with a human-readable
+explanation naming the artifact types and violated rule. React Flow will render each group as a
+parent subflow node behind its children, but the shared domain remains authoritative and stores
+absolute component positions. Relationships and ADR links continue to target component UUIDs
+unchanged. Mermaid export will represent groups as semantic `subgraph` sections and will reject any
+future unsupported group representation with an actionable group-specific error.
 
 ## Technical Context
 
@@ -38,7 +40,8 @@ Persist groups, members, boundary layout, and timestamps as normalized structure
 **Testing**: Vitest for shared C4 type/group schemas and invariants, Mermaid group export, in-memory
 and PostgreSQL group persistence, service validation, API/OpenAPI contract behavior, Zustand group
 history, and React Flow adapter geometry. Playwright for create/type-display/group/create-move-
-rename-member-removal/ungroup/save-reopen/export/error/accessibility workflows.
+rename-member-removal/ungroup/save-reopen/export/error/accessibility workflows, including selected-
+state highlighting and explanations for incompatible Person/Software System selections.
 
 **Target Platform**: Modern desktop browser for the React frontend; static Vite hosting;
 containerized Fastify API; managed PostgreSQL.
@@ -58,8 +61,10 @@ members. Group creation fits the boundary around selected systems without rearra
 positions. Member movement is constrained inside the boundary; membership changes happen through an
 explicit removal action. Group deletion/ungrouping must preserve members, relationships, and ADR
 links. Existing component, relationship, and ADR IDs must not change during type, name, position,
-group, or layout edits. Invalid groups and unsupported C4 values must produce actionable validation
-without partial mutation or silent export loss.
+group, or layout edits. Grouping selection is transient UI state: every selected component must be
+visibly distinguishable, and an ineligible or incompatible selection must be explained rather than
+silently ignored. Invalid groups and unsupported C4 values must produce actionable validation without
+partial mutation or silent export loss.
 
 **Scale/Scope**: One active diagram at a time for one user; two supported C4 system-context types;
 groups of two or more systems, with the success scenario covering two to twenty members; no nested
@@ -85,7 +90,8 @@ search/bulk editing.
   Playwright workflows are all included in the design.
 - **V. Simplicity and accessibility - PASS**: The feature extends the existing inspector, toolbar,
   confirmation dialog, Zustand history, and design tokens. It uses keyboard-selectable controls,
-  text labels, visible error/status feedback, focus treatment, and non-color-only group/type cues.
+  text labels, visible selection and error/status feedback, focus treatment, and non-color-only
+  group/type/selection cues.
 - **Delivery and quality gates - PASS**: Affected artifact types, migration/reference implications,
   API behavior, design-system constraints, and validation scenarios are specified in the Phase 0/1
   artifacts below.
@@ -167,22 +173,27 @@ React Flow remains a visual parent/child adapter. No new top-level package or su
 3. **REST contract**: Expand the existing complete-document GET/PUT contract with `groups`, canonical
    C4 `type` values, `SystemGroup`, positions, sizes, and `minItems: 2` member lists. Keep omitted
    input groups backwards-compatible as an empty list and always return the field. Reuse the existing
-   422 validation error with paths such as `groups[0].memberComponentIds` and the existing save
-   boundary rather than adding group CRUD endpoints. Extend component-removal conflicts with the
-   blocking group IDs. Document Mermaid export as emitting semantic subgraphs rather than exact
-   canvas geometry.
+   422 validation error with paths such as `groups[0].memberComponentIds`; validation messages and
+   field details identify incompatible artifact types and explain the grouping rule. Keep the
+   existing save boundary rather than adding group CRUD endpoints. Extend component-removal conflicts
+   with the blocking group IDs. Document Mermaid export as emitting semantic subgraphs rather than
+   exact canvas geometry.
 
 4. **State and editing workflow**: Extend `frontend/src/state/diagram-store.ts` so `addComponent`
    requires a C4 type and group actions (`createGroup`, `renameGroup`, `moveGroup`, `removeGroupMember`,
-   `ungroup`) use the existing `update`/bounded history path. Group creation validates selection,
-   member types, minimum count, and a name unique after trimming and case-insensitive comparison
-   before adding a UUID and calculating a padded boundary around the members' current positions.
-   Creation must not auto-arrange selected systems. Moving a group translates member absolute
-   positions by the same delta. Member movement is clamped so its rendered box remains inside the
-   boundary; membership changes happen only through the explicit removal action. Member removal
-   preserves its position; ungroup removes only group state. Type/name/layout/group edits set the
-   document unsaved and retain the same component, relationship, and ADR IDs. Failed saves leave the
-   draft and history unchanged, while a successful save replaces it with the server response.
+   `ungroup`) use the existing `update`/bounded history path. Keep grouping selection IDs transient
+   to the editor rather than in the document. Group creation validates selection, member types,
+   minimum count, and a name unique after trimming and case-insensitive comparison before adding a
+   UUID and calculating a padded boundary around the members' current positions. Every selected
+   component receives visible selection feedback; an ineligible or incompatible selection is not
+   silently filtered and the group action reports the artifact types and violated rule without
+   mutating the document. Creation must not auto-arrange selected systems. Moving a group translates
+   member absolute positions by the same delta. Member movement is clamped so its rendered box
+   remains inside the boundary; membership changes happen only through the explicit removal action.
+   Member removal preserves its position; ungroup removes only group state. Type/name/layout/group
+   edits set the document unsaved and retain the same component, relationship, and ADR IDs. Failed
+   saves leave the draft and history unchanged, while a successful save replaces it with the server
+   response.
 
 5. **React Flow adapter and canvas**: Extend `toReactFlow` to calculate group nodes first, with a
    custom `systemGroup` node, persisted absolute group position/size, stable group ID, no connection
@@ -190,7 +201,7 @@ React Flow remains a visual parent/child adapter. No new top-level package or su
    relative positions, `extent: 'parent'`, and type data. Extend the reverse adapter/drag handling to
    convert child absolute positions and group drag deltas back to domain positions; clamp child
    movement to the group extent without silently removing membership. Update `DiagramCanvas` to
-   support keyboard-usable multi-selection, group selection, group drag, member drag, and
+   support keyboard-usable multi-selection with an explicit selected-state highlight, group selection, group drag, member drag, and
    group-vs-relationship selection
    without changing edge endpoints. Add `SystemGroupNode` as a flat labeled boundary that is
    selectable but not connectable; add visible C4 type labels/shapes to `ComponentNode`.
@@ -200,8 +211,10 @@ React Flow remains a visual parent/child adapter. No new top-level package or su
    Show the same type field in selected-component review/edit and update the existing component in
    place; a grouped component cannot change from Software System until it is explicitly removed from
    the group. Add an `Unclassified` compatibility state for legacy null values.
-   Add a `Group selected systems` action that reports why a selection is invalid, then a group form
-   showing selected members and name validation. Add group details with member list, type labels,
+   Add a `Group selected systems` action that keeps selected components visibly identified, reports
+   why a selection is invalid (including the Person/Software System incompatibility), and then opens
+   a group form showing selected members and name validation. Selection feedback is cleared on
+   deselection, cancellation, and successful grouping. Add group details with member list, type labels,
    rename, `Remove from group`, and confirmed `Ungroup` actions. Reuse `ConfirmDialog`, status
    announcements, and selected-item conventions. Apply `DESIGN.md`: `#272729` canvas, white node
    surfaces, `#0066cc` Action Blue for controls, `#0071e3` focus rings, `#e0e0e0` hairlines,
@@ -222,11 +235,12 @@ React Flow remains a visual parent/child adapter. No new top-level package or su
    preservation, and Mermaid subgraphs. Add repository/service/API tests for migration round-trip,
    transactional replacement, empty groups compatibility, invalid-save immutability, and deletion
    conflicts. Add frontend tests for type display, group history/undo/redo, group drag delta,
-   parent-before-child adapter output, bounded member movement, group selection, confirmation, and
-   accessible error/status labels. Add Playwright coverage for creating Person and Software System
-   components, grouping two-to-twenty systems, moving/renaming/reviewing/removing/ungrouping,
-   save/reopen identity and ADR preservation, Mermaid export, invalid actions, and keyboard/focus
-   behavior.
+   parent-before-child adapter output, bounded member movement, group selection highlighting,
+   incompatible-selection explanations, confirmation, and accessible error/status labels. Add
+   Playwright coverage for creating Person and Software System components, grouping two-to-twenty
+   systems, identifying selected components, rejecting mixed Person/Software System selections with
+   an explanation, moving/renaming/reviewing/removing/ungrouping, save/reopen identity and ADR
+   preservation, Mermaid export, invalid actions, and keyboard/focus behavior.
 
 ## Post-design Constitution Re-check
 
@@ -234,10 +248,11 @@ React Flow remains a visual parent/child adapter. No new top-level package or su
 keeps all relationships and ADR links attached to component UUIDs; validates group ownership,
 eligibility, uniqueness, layout, and non-nesting before persistence; uses an additive relational
 migration and an atomic complete-document save; confirms ungrouping and blocks unsafe component
-deletion; renders and exports group meaning without silent omission; and verifies behavior at shared,
-persistence, API, adapter, UI, accessibility, and end-to-end boundaries. It reuses the existing
-three-boundary architecture and design system without adding authentication, collaboration, offline
-storage, or a second save protocol.
+deletion; renders and exports group meaning without silent omission; provides non-color-only
+selection feedback and explains incompatible artifact types before mutation; and verifies behavior
+at shared, persistence, API, adapter, UI, accessibility, and end-to-end boundaries. It reuses the
+existing three-boundary architecture and design system without adding authentication, collaboration,
+offline storage, or a second save protocol.
 
 ## Complexity Tracking
 

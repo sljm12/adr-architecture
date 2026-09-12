@@ -14,6 +14,19 @@ before this feature. A null value is presented as `Unclassified`, is not a valid
 selection, and cannot be added to a system group until the component is edited to a supported C4
 type. New component creation and saved feature documents use only the two supported values.
 
+## Transient grouping selection
+
+The active grouping selection is editor interaction state, not part of `DiagramDocument` and not
+persisted through the API. It tracks the component identities currently selected for a possible
+group. Every selected component has a visible selection cue that is distinguishable from unselected
+components without relying on color alone. Selecting or deselecting a component updates that cue;
+cancellation, successful grouping, or leaving grouping selection clears it.
+
+If the selection includes an ineligible or incompatible component, group creation is blocked and the
+feedback identifies the relevant artifact type or types and explains the rule. For example, a mixed
+Person and Software System selection is rejected with an explanation that system groups contain only
+Software Systems. No group or membership mutation is made while the selection is invalid.
+
 ## SystemGroup (`system_groups`)
 
 | Field | Type | Rules |
@@ -99,7 +112,8 @@ The API returns the existing actionable validation shape with paths such as:
 - `components[2].type` — unsupported or missing C4 type for a new component.
 - `groups[0].name` — blank or duplicate group name.
 - `groups[0].memberComponentIds` — fewer than two members, duplicate IDs, missing component, or a
-  non-Software-System member.
+  non-Software-System member; the message identifies the incompatible artifact type and explains why
+  it cannot be grouped.
 - `groups[0].size` — non-positive or non-finite boundary dimensions.
 
 No group mutation is committed when any validation rule fails.

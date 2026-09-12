@@ -35,12 +35,17 @@ persistence API.
    C4 type. Verify a legacy component with a null type loads as Unclassified and cannot be grouped
    until it is edited to Software System.
 3. **Create a valid group**: Select two or more Software System components with keyboard/multi-select,
-   choose `Group selected systems`, enter a non-blank unique name, and verify the labeled boundary is
-   behind and visibly encloses every member. Confirm each selected system keeps its existing position
-   while the boundary is fitted around them. Repeat with two-to-twenty systems.
-4. **Reject invalid groups**: Try fewer than two members, a Person member, an unclassified member,
-   blank/whitespace-only name, and a duplicate group name using capitalization or surrounding-space
-   differences. Verify each action gives an actionable message and leaves the document unchanged.
+   verify every selected component is visibly highlighted and remains distinguishable from unselected
+   components, then choose `Group selected systems`, enter a non-blank unique name, and verify the
+   labeled boundary is behind and visibly encloses every member. Confirm each selected system keeps
+   its existing position while the boundary is fitted around them. Verify the selection feedback is
+   cleared after completion. Repeat with two-to-twenty systems.
+4. **Reject invalid groups**: Try fewer than two members, a mixed Person and Software System
+   selection, an unclassified member, a blank/whitespace-only name, and a duplicate group name using
+   capitalization or surrounding-space differences. For the mixed selection, verify the message names
+   the incompatible artifact types and explains that a Person cannot be grouped with a Software
+   System. Verify each action gives an actionable message, creates no partial group, and leaves the
+   document unchanged.
 5. **Move and contain members**: Move a group and verify every member moves by the same delta with
    relative positions and relationship endpoints unchanged. Drag or resize a member toward the
    boundary and verify the member remains enclosed because movement is constrained; verify the
@@ -64,6 +69,7 @@ persistence API.
     unchanged draft. Undo/redo group creation, rename, member removal, and movement without changing
     stable component, relationship, or ADR IDs.
 11. **Accessibility and responsive behavior**: Complete creation, selection, rename, member removal,
-    ungroup confirmation, validation, and save/reopen with keyboard navigation. Verify labels,
-    focus order, Escape/Tab dialog behavior, 44px targets, visible focus, sufficient contrast, and
-    text/shape cues that do not rely on color alone. Repeat with the responsive inspector layout.
+    ungroup confirmation, validation, and save/reopen with keyboard navigation. Verify selected-state
+    highlighting, incompatibility explanations, labels, focus order, Escape/Tab dialog behavior,
+    44px targets, visible focus, sufficient contrast, and text/shape cues that do not rely on color
+    alone. Repeat with the responsive inspector layout.
