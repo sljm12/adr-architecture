@@ -111,10 +111,10 @@ is unchanged.
 
 ### Follow-up tests and implementation for updated selection feedback
 
-- [ ] T030 [P] [US2] Add UI contract tests for non-color-only selected-component highlighting, per-component deselection updates, selection clearing on cancel/completion, and a mixed Person/Software System error that names the incompatible types and grouping rule in `frontend/tests/system-group-ui.test.tsx`.
-- [ ] T031 [P] [US2] Add end-to-end acceptance coverage for identifying every selected component, clearing selection feedback after cancellation and successful grouping, and rejecting mixed Person/Software System selections with an explanatory message and unchanged document in `e2e/tests/c4-system-groups.spec.ts`.
-- [ ] T032 [US2] Update `frontend/src/components/DiagramCanvas.tsx` and `frontend/src/components/DiagramWorkspace.tsx` to keep grouping selections visibly highlighted without relying on color alone, update highlights after select/deselect, and clear transient selection state on deselection, cancellation, completion, or exit from grouping selection.
-- [ ] T033 [US2] Update `frontend/src/components/DiagramToolbar.tsx` and `frontend/src/components/WorkspaceInspector.tsx` to explain why an ineligible or incompatible component cannot be grouped, including the Person/Software System rule, while preventing partial group creation and leaving the document unchanged.
+- [X] T030 [P] [US2] Add UI contract tests for non-color-only selected-component highlighting, per-component deselection updates, selection clearing on cancel/completion, and a mixed Person/Software System error that names the incompatible types and grouping rule in `frontend/tests/system-group-ui.test.tsx`.
+- [X] T031 [P] [US2] Add end-to-end acceptance coverage for identifying every selected component, clearing selection feedback after cancellation and successful grouping, and rejecting mixed Person/Software System selections with an explanatory message and unchanged document in `e2e/tests/c4-system-groups.spec.ts`.
+- [X] T032 [US2] Update `frontend/src/components/DiagramCanvas.tsx` and `frontend/src/components/DiagramWorkspace.tsx` to keep grouping selections visibly highlighted without relying on color alone, update highlights after select/deselect, and clear transient selection state on deselection, cancellation, completion, or exit from grouping selection.
+- [X] T033 [US2] Update `frontend/src/components/DiagramToolbar.tsx` and `frontend/src/components/WorkspaceInspector.tsx` to explain why an ineligible or incompatible component cannot be grouped, including the Person/Software System rule, while preventing partial group creation and leaving the document unchanged.
 
 **Checkpoint**: US2 is independently demonstrable with seeded or newly typed systems, and all group
 operations preserve member artifacts, relationships, and ADR references in the local document. The

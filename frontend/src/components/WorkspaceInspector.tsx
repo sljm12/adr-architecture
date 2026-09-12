@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useDiagramStore } from '../state/diagram-store';
+import { describeGroupSelection, useDiagramStore } from '../state/diagram-store';
 import { RecoveryControls } from './RecoveryControls';
 import type { InspectorMode } from './DiagramToolbar';
 import { AdrList } from './AdrList';
@@ -117,13 +117,7 @@ export function WorkspaceInspector({ mode, selection, selectedComponentIds = [],
   const selectedComponents = selectedComponentIds
     .map(componentId => document.components.find(component => component.id === componentId))
     .filter((component): component is NonNullable<typeof component> => Boolean(component));
-  const groupSelectionError = selectedComponentIds.length < 2
-    ? 'Select at least two Software System components.'
-    : selectedComponents.some(component => component.type !== 'software-system')
-      ? 'Only Software System components can be grouped.'
-      : selectedComponents.some(component => document.groups.some(group => group.memberComponentIds.includes(component.id)))
-        ? 'A selected Software System already belongs to a group.'
-        : '';
+  const groupSelectionError = describeGroupSelection(document, selectedComponentIds) ?? '';
 
   const saveComponentEdit = (event: FormEvent) => {
     event.preventDefault();

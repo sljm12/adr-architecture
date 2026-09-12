@@ -50,15 +50,31 @@ const now = () => new Date().toISOString();
 const summary = (document: DiagramDocument): DiagramSummary => ({ id: document.id, name: document.name, status: document.status, updatedAt: document.updatedAt });
 const replaceSummary = (items: DiagramSummary[], next: DiagramSummary) => items.some(item => item.id === next.id) ? items.map(item => item.id === next.id ? next : item) : [...items, next];
 const normalizedGroupName = (name: string) => name.trim().toLocaleLowerCase();
+export const describeGroupSelection = (document: DiagramDocument, memberComponentIds: string[], excludedGroupId?: string): string | null => {
+  if (memberComponentIds.length < 2) return 'Select at least two Software System components before grouping.';
+  if (new Set(memberComponentIds).size !== memberComponentIds.length) return 'Group members must be unique; remove duplicate component selections.';
+  const members = memberComponentIds.map(id => document.components.find(component => component.id === id));
+  if (members.some(component => !component)) return 'The grouping selection contains a component that is no longer in this diagram.';
+  const existingMembers = members.filter((component): component is NonNullable<typeof component> => Boolean(component));
+  const incompatible = existingMembers.filter(component => component.type !== 'software-system');
+  if (incompatible.length > 0) {
+    const incompatibleTypes = [...new Set(incompatible.map(component => getC4ArtifactTypeLabel(component.type)))].join(' and ');
+    const selectedTypes = [...new Set(existingMembers.map(component => getC4ArtifactTypeLabel(component.type)))].join(' and ');
+    if (selectedTypes.includes('Person') && selectedTypes.includes('Software System')) {
+      return `Cannot group ${selectedTypes}. Person cannot be grouped with a Software System because system groups contain only Software Systems.`;
+    }
+    return `Cannot group ${incompatibleTypes}. System groups contain only Software System components.`;
+  }
+  if (memberComponentIds.some(componentId => document.groups.some(group => group.id !== excludedGroupId && group.memberComponentIds.includes(componentId)))) {
+    return 'A selected Software System already belongs to a group. Remove it from that group before creating another.';
+  }
+  return null;
+};
 const groupCreationError = (document: DiagramDocument, name: string, memberComponentIds: string[], editingGroupId?: string): string | null => {
   const trimmedName = name.trim();
   if (!trimmedName) return 'Group name is required.';
-  if (memberComponentIds.length < 2) return 'Select at least two Software System components.';
-  if (new Set(memberComponentIds).size !== memberComponentIds.length) return 'Group members must be unique.';
-  const members = memberComponentIds.map(id => document.components.find(component => component.id === id));
-  if (members.some(component => !component)) return 'Every selected group member must belong to this diagram.';
-  if (members.some(component => component?.type !== 'software-system')) return 'Only Software System components can be grouped.';
-  if (memberComponentIds.some(componentId => document.groups.some(group => group.id !== editingGroupId && group.memberComponentIds.includes(componentId)))) return 'A Software System can belong to only one group. Remove it from its current group first.';
+  const selectionError = describeGroupSelection(document, memberComponentIds, editingGroupId);
+  if (selectionError) return selectionError;
   const nameKey = normalizedGroupName(trimmedName);
   if (document.groups.some(group => group.id !== editingGroupId && normalizedGroupName(group.name) === nameKey)) return 'A group with this name already exists.';
   return null;

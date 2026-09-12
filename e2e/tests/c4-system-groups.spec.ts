@@ -24,13 +24,13 @@ test('creates typed C4 components, supports cancellation, and reopens their type
   await page.getByLabel('Diagram name').fill('System context');
   await page.getByRole('button', { name: 'Create diagram' }).click();
 
-  await page.getByRole('button', { name: 'Add component' }).click();
+  await page.locator('.command-bar').getByRole('button', { name: 'Add component' }).click();
   const inspector = page.getByLabel('Diagram inspector');
   await inspector.getByLabel('Component name').fill('Operator');
   await inspector.getByRole('radio', { name: /Person/ }).check();
   await inspector.getByRole('button', { name: 'Add component' }).click();
 
-  await page.getByRole('button', { name: 'Add component' }).click();
+  await page.locator('.command-bar').getByRole('button', { name: 'Add component' }).click();
   await inspector.getByLabel('Component name').fill('Billing');
   await inspector.getByRole('radio', { name: /Software System/ }).check();
   await inspector.getByRole('button', { name: 'Add component' }).click();
@@ -38,7 +38,7 @@ test('creates typed C4 components, supports cancellation, and reopens their type
   await expect(page.locator('.component-node-person')).toContainText('Person');
   await expect(page.locator('.component-node-software-system')).toContainText('Software System');
 
-  await page.getByRole('button', { name: 'Add component' }).click();
+  await page.locator('.command-bar').getByRole('button', { name: 'Add component' }).click();
   await inspector.getByLabel('Component name').fill('Cancelled');
   await inspector.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.locator('.component-node')).toHaveCount(2);
@@ -59,7 +59,7 @@ test('groups selected systems, reviews and renames the boundary, removes a membe
 
   const inspector = page.getByLabel('Diagram inspector');
   for (const name of ['Billing', 'Ledger', 'Notifications']) {
-    await page.getByRole('button', { name: 'Add component' }).click();
+    await page.locator('.command-bar').getByRole('button', { name: 'Add component' }).click();
     await inspector.getByLabel('Component name').fill(name);
     await inspector.getByRole('radio', { name: /Software System/ }).check();
     await inspector.getByRole('button', { name: 'Add component' }).click();
@@ -89,7 +89,7 @@ test('groups selected systems, reviews and renames the boundary, removes a membe
     expect(memberBox.y + memberBox.height).toBeLessThanOrEqual(groupBox.y + groupBox.height + 1);
   }
 
-  await page.getByLabel(/System group Finance, 3 Software System members/).click();
+  await page.getByLabel(/System group Finance, 3 Software System members/).locator('.group-boundary-label').click();
   await inspector.getByLabel('Group name').fill(' Core Finance ');
   await inspector.getByRole('button', { name: 'Rename group' }).click();
   await expect(page.getByLabel(/System group Core Finance, 3 Software System members/)).toBeVisible();
@@ -101,5 +101,77 @@ test('groups selected systems, reviews and renames the boundary, removes a membe
 
   await expect(page.locator('.system-group-node')).toHaveCount(0);
   await expect(page.locator('.component-node')).toHaveCount(3);
+});
+
+async function createTypedComponent(page: Page, name: string, type: 'Person' | 'Software System') {
+  const inspector = page.getByLabel('Diagram inspector');
+  await page.locator('.command-bar').getByRole('button', { name: 'Add component' }).click();
+  await inspector.getByLabel('Component name').fill(name);
+  await inspector.getByRole('radio', { name: new RegExp(type) }).check();
+  await inspector.getByRole('button', { name: 'Add component' }).click();
+}
+
+async function createMockDiagram(page: Page) {
+  await mockDiagramApi(page);
+  await page.goto('/');
+  await page.getByLabel('Diagram name').fill('System context');
+  await page.getByRole('button', { name: 'Create diagram' }).click();
+}
+
+test('identifies each selected component and clears feedback after deselection, cancellation, and grouping', async ({ page }) => {
+  await createMockDiagram(page);
+  await createTypedComponent(page, 'Billing', 'Software System');
+  await createTypedComponent(page, 'Ledger', 'Software System');
+
+  const billing = page.getByLabel('Component Billing, Software System');
+  const ledger = page.getByLabel('Component Ledger, Software System');
+  await billing.click();
+  await ledger.click({ modifiers: ['Shift'] });
+  await expect(page.locator('.selection-feedback')).toContainText('Billing (Software System)');
+  await expect(page.locator('.selection-feedback')).toContainText('Ledger (Software System)');
+  await expect(billing).toHaveClass(/is-selected/);
+  await expect(ledger).toHaveClass(/is-selected/);
+  await expect(billing.locator('.component-selection-state')).toHaveText('Selected');
+  await expect(ledger.locator('.component-selection-state')).toHaveText('Selected');
+
+  await ledger.click({ modifiers: ['Shift'] });
+  await expect(page.locator('.selection-feedback')).toContainText('Billing (Software System)');
+  await expect(page.locator('.selection-feedback')).not.toContainText('Ledger (Software System)');
+  await expect(ledger).not.toHaveClass(/is-selected/);
+  await expect(ledger.locator('.component-selection-state')).toHaveCount(0);
+
+  await ledger.click({ modifiers: ['Shift'] });
+  await page.getByRole('button', { name: 'Group selected systems', exact: true }).click();
+  await page.getByLabel('Group name').fill('Finance');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.locator('.selection-feedback')).toHaveCount(0);
+  await expect(billing.locator('.component-selection-state')).toHaveCount(0);
+  await expect(ledger.locator('.component-selection-state')).toHaveCount(0);
+
+  await billing.click();
+  await ledger.click({ modifiers: ['Shift'] });
+  await page.getByRole('button', { name: 'Group selected systems', exact: true }).click();
+  await page.getByLabel('Group name').fill('Finance');
+  await page.getByLabel('Diagram inspector').getByRole('button', { name: 'Group selected systems', exact: true }).click();
+  await expect(page.locator('[aria-label^="System group"]')).toHaveCount(1);
+  await expect(page.locator('.selection-feedback')).toHaveCount(0);
+});
+
+test('rejects mixed Person and Software System selections with an explanation and no mutation', async ({ page }) => {
+  await createMockDiagram(page);
+  await createTypedComponent(page, 'Operator', 'Person');
+  await createTypedComponent(page, 'Billing', 'Software System');
+
+  await page.getByLabel('Component Operator, Person').click();
+  await page.getByLabel('Component Billing, Software System').click({ modifiers: ['Shift'] });
+  await expect(page.locator('.selection-feedback-error')).toContainText('Operator (Person)');
+  await expect(page.locator('.selection-feedback-error')).toContainText('Software System');
+  await expect(page.locator('.selection-feedback-error')).toContainText('Person cannot be grouped with a Software System');
+  await expect(page.getByRole('button', { name: /Person cannot be grouped with a Software System/ })).toBeDisabled();
+  await expect(page.locator('.system-group-node')).toHaveCount(0);
+  await expect(page.locator('.component-node')).toHaveCount(2);
+
+  await page.locator('.react-flow__pane').click({ position: { x: 20, y: 20 } });
+  await expect(page.locator('.selection-feedback')).toHaveCount(0);
 });
 
