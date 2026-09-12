@@ -1,4 +1,4 @@
-import type { DiagramDocument, Position } from '../../../shared/src/index'; import type { Edge, Node } from '@xyflow/react';
+import { constrainMemberPosition, DEFAULT_COMPONENT_SIZE, getAbsoluteMemberPosition, getRelativeMemberPosition, type DiagramDocument, type Position } from '../../../../shared/src/index'; import type { Edge, Node } from '@xyflow/react';
 export type HandleSide='top'|'right'|'bottom'|'left';
 export type RelationshipRouting={pairOffset:number;sourceFanOffset:number;targetFanOffset:number};
 type Relationship=DiagramDocument['relationships'][number];
@@ -48,7 +48,42 @@ export function toReactFlow(document:DiagramDocument):{nodes:Node[];edges:Edge[]
   const components=new Map(document.components.map(c=>[c.id,c]));
   const routed=document.relationships.map(relationship=>{const source=components.get(relationship.sourceComponentId);const target=components.get(relationship.targetComponentId);const handles=source&&target?nearestHandle(source.position,target.position):{source:'right' as HandleSide,target:'left' as HandleSide};return {relationship,...handles};});
   const routing=assignRouting(routed);
-  const nodes=document.components.map(c=>{const node:Node={id:c.id,position:c.position,data:{label:c.name},type:'component'};node.data={...node.data,type:c.type};return node;});
+  const groups=[...(document.groups??[])].sort((a,b)=>a.id.localeCompare(b.id));
+  const membership=new Map<string,string>();
+  for(const group of groups)for(const componentId of group.memberComponentIds)membership.set(componentId,group.id);
+  const groupNodes:Node[]=groups.map(group=>({
+    id:group.id,
+    position:group.position,
+    data:{label:group.name,groupId:group.id,memberCount:group.memberComponentIds.length},
+    type:'systemGroup',
+    className:'system-group-node',
+    style:{width:group.size.width,height:group.size.height},
+    zIndex:-1,
+    selectable:true,
+    draggable:true,
+    connectable:false,
+    deletable:false,
+  }));
+  const componentNodes:Node[]=document.components.map(c=>{
+    const groupId=membership.get(c.id); const group=groupId?groups.find(item=>item.id===groupId):undefined;
+    const node:Node={id:c.id,position:group?getRelativeMemberPosition(c.position,group.position):c.position,data:{label:c.name},type:'component',style:{width:DEFAULT_COMPONENT_SIZE.width,height:DEFAULT_COMPONENT_SIZE.height}};
+    node.data={...node.data,type:c.type,groupId};
+    if(group){node.parentId=group.id;node.extent='parent';node.expandParent=false;}
+    return node;
+  });
+  const nodes=[...groupNodes,...componentNodes];
   return {nodes,edges:routed.map(({relationship,source,target})=>({id:relationship.id,type:'relationship',source:relationship.sourceComponentId,target:relationship.targetComponentId,sourceHandle:`source-${source}`,targetHandle:`target-${target}`,label:relationship.label??undefined,data:routing.get(relationship.id),markerEnd:relationship.direction==='directed'?{type:'arrowclosed'}:undefined}))};
 }
-export function fromReactFlow(document:DiagramDocument,nodes:Node[]):DiagramDocument{return {...document,components:document.components.map(c=>{const n=nodes.find(x=>x.id===c.id);return n?{...c,position:n.position}:c;})};}
+export function fromReactFlow(document:DiagramDocument,nodes:Node[]):DiagramDocument{
+  const nodeById=new Map(nodes.map(node=>[node.id,node]));
+  const groups=(document.groups??[]).map(group=>{const node=nodeById.get(group.id);return node?{...group,position:{x:node.position.x,y:node.position.y}}:group;});
+  const groupByMember=new Map<string,typeof groups[number]>();
+  for(const group of groups)for(const componentId of group.memberComponentIds)groupByMember.set(componentId,group);
+  return {...document,groups,components:document.components.map(component=>{
+    const node=nodeById.get(component.id); if(!node)return component;
+    const group=groupByMember.get(component.id);
+    const absolute=group?getAbsoluteMemberPosition(node.position,group.position):node.position;
+    const position=group?constrainMemberPosition(group,absolute):absolute;
+    return {...component,position};
+  })};
+}

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { getC4ArtifactTypeLabel, isC4ArtifactType, type C4ArtifactType, type DiagramDocument, type DiagramSummary, type Relationship, type RelationshipDirection } from '../../../shared/src/index';
+import { calculateGroupBounds, constrainMemberPosition, getC4ArtifactTypeLabel, isC4ArtifactType, translateGroupWithMembers, type C4ArtifactType, type DiagramDocument, type DiagramSummary, type Position, type Relationship, type RelationshipDirection } from '../../../shared/src/index';
 import { diagramClient } from '../api/diagram-client';
 import { BoundedHistory } from './history';
 
@@ -10,6 +10,7 @@ type State = {
   document: DiagramDocument | null;
   status: SaveStatus;
   error: string | null;
+  groupError: string | null;
   savedDocuments: DiagramSummary[];
   savedDocumentsStatus: SavedDocumentsStatus;
   savedDocumentsError: string | null;
@@ -25,6 +26,12 @@ type State = {
   addComponent: (name: string, type: C4ArtifactType, description?: string | null) => boolean;
   setComponentType: (componentId: string, type: C4ArtifactType) => boolean;
   updateComponentType: (componentId: string, type: C4ArtifactType) => boolean;
+  createGroup: (name: string, memberComponentIds: string[]) => boolean;
+  renameGroup: (groupId: string, name: string) => boolean;
+  moveGroup: (groupId: string, position: Position) => boolean;
+  moveComponent: (componentId: string, position: Position) => boolean;
+  removeGroupMember: (groupId: string, componentId: string) => boolean;
+  ungroup: (groupId: string) => boolean;
   addRelationship: (source: string, target: string, label: string, direction: 'directed' | 'undirected') => void;
   renameComponent: (componentId: string, name: string) => boolean;
   updateRelationship: (relationshipId: string, updates: Partial<Pick<Relationship, 'sourceComponentId' | 'targetComponentId' | 'direction' | 'label'>>) => boolean;
@@ -42,20 +49,35 @@ const historyState = () => ({ canUndo: history.canUndo, canRedo: history.canRedo
 const now = () => new Date().toISOString();
 const summary = (document: DiagramDocument): DiagramSummary => ({ id: document.id, name: document.name, status: document.status, updatedAt: document.updatedAt });
 const replaceSummary = (items: DiagramSummary[], next: DiagramSummary) => items.some(item => item.id === next.id) ? items.map(item => item.id === next.id ? next : item) : [...items, next];
+const normalizedGroupName = (name: string) => name.trim().toLocaleLowerCase();
+const groupCreationError = (document: DiagramDocument, name: string, memberComponentIds: string[], editingGroupId?: string): string | null => {
+  const trimmedName = name.trim();
+  if (!trimmedName) return 'Group name is required.';
+  if (memberComponentIds.length < 2) return 'Select at least two Software System components.';
+  if (new Set(memberComponentIds).size !== memberComponentIds.length) return 'Group members must be unique.';
+  const members = memberComponentIds.map(id => document.components.find(component => component.id === id));
+  if (members.some(component => !component)) return 'Every selected group member must belong to this diagram.';
+  if (members.some(component => component?.type !== 'software-system')) return 'Only Software System components can be grouped.';
+  if (memberComponentIds.some(componentId => document.groups.some(group => group.id !== editingGroupId && group.memberComponentIds.includes(componentId)))) return 'A Software System can belong to only one group. Remove it from its current group first.';
+  const nameKey = normalizedGroupName(trimmedName);
+  if (document.groups.some(group => group.id !== editingGroupId && normalizedGroupName(group.name) === nameKey)) return 'A group with this name already exists.';
+  return null;
+};
 export const componentTypeLabel = getC4ArtifactTypeLabel;
 
 export const useDiagramStore = create<State>((set, get) => ({
   document: null,
   status: 'idle',
   error: null,
+  groupError: null,
   savedDocuments: [], savedDocumentsStatus: 'idle', savedDocumentsError: null, loadError: null,
   canUndo: false,
   canRedo: false,
   open: input => {
     const document = history.reset(copy(input));
-    set({ document, status: 'saved', error: null, loadError: null, ...historyState() });
+    set({ document, status: 'saved', error: null, groupError: null, loadError: null, ...historyState() });
   },
-  startNew: () => set({ document: null, status: 'idle', error: null, canUndo: false, canRedo: false }),
+  startNew: () => set({ document: null, status: 'idle', error: null, groupError: null, canUndo: false, canRedo: false }),
   create: async name => {
     const created = await diagramClient.create(name);
     const document = history.reset(copy(created));
@@ -65,15 +87,15 @@ export const useDiagramStore = create<State>((set, get) => ({
     const current = get().document;
     if (!current) return;
     const document = history.push(copy(fn(copy(current))));
-    set({ document, status: 'unsaved', error: null, ...historyState() });
+    set({ document, status: 'unsaved', error: null, groupError: null, ...historyState() });
   },
   undo: () => {
     const document = history.undo();
-    if (document) set({ document: copy(document), status: 'unsaved', error: null, ...historyState() });
+    if (document) set({ document: copy(document), status: 'unsaved', error: null, groupError: null, ...historyState() });
   },
   redo: () => {
     const document = history.redo();
-    if (document) set({ document: copy(document), status: 'unsaved', error: null, ...historyState() });
+    if (document) set({ document: copy(document), status: 'unsaved', error: null, groupError: null, ...historyState() });
   },
   addComponent: (name, type, description = null) => {
     const document = get().document;
@@ -103,6 +125,104 @@ export const useDiagramStore = create<State>((set, get) => ({
     return true;
   },
   updateComponentType: (componentId, type) => get().setComponentType(componentId, type),
+  createGroup: (name, memberComponentIds) => {
+    const document = get().document;
+    const validationError = document ? groupCreationError(document, name, memberComponentIds) : 'Create a diagram before grouping systems.';
+    if (!document || validationError) {
+      set({ groupError: validationError });
+      return false;
+    }
+    const timestamp = now();
+    const members = document.components.filter(component => memberComponentIds.includes(component.id));
+    const layout = calculateGroupBounds(members);
+    get().update(current => ({
+      ...current,
+      groups: [...current.groups, {
+        id: crypto.randomUUID(),
+        diagramId: current.id,
+        name: name.trim(),
+        memberComponentIds: [...memberComponentIds],
+        ...layout,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }],
+    }));
+    return true;
+  },
+  renameGroup: (groupId, name) => {
+    const document = get().document;
+    const group = document?.groups.find(item => item.id === groupId);
+    const validationError = document ? groupCreationError(document, name, group?.memberComponentIds ?? [], groupId) : 'Create a diagram before editing a group.';
+    if (!document || !group || validationError) {
+      set({ groupError: !group && document ? 'The selected group no longer exists.' : validationError });
+      return false;
+    }
+    if (group.name === name.trim()) return true;
+    get().update(current => ({
+      ...current,
+      groups: current.groups.map(item => item.id === groupId ? { ...item, name: name.trim(), updatedAt: now() } : item),
+    }));
+    return true;
+  },
+  moveGroup: (groupId, position) => {
+    const document = get().document;
+    const group = document?.groups.find(item => item.id === groupId);
+    if (!document || !group || !Number.isFinite(position.x) || !Number.isFinite(position.y)) return false;
+    const delta = { x: position.x - group.position.x, y: position.y - group.position.y };
+    if (delta.x === 0 && delta.y === 0) return true;
+    const members = group.memberComponentIds
+      .map(componentId => document.components.find(component => component.id === componentId))
+      .filter((component): component is NonNullable<typeof component> => Boolean(component));
+    const translated = translateGroupWithMembers(group, members, delta);
+    const positions = new Map(group.memberComponentIds.map((componentId, index) => [componentId, translated.memberPositions[index]]));
+    get().update(current => ({
+      ...current,
+      groups: current.groups.map(item => item.id === groupId ? { ...item, position: translated.groupPosition, updatedAt: now() } : item),
+      components: current.components.map(component => {
+        const nextPosition = positions.get(component.id);
+        return nextPosition ? { ...component, position: nextPosition, updatedAt: now() } : component;
+      }),
+    }));
+    return true;
+  },
+  moveComponent: (componentId, position) => {
+    const document = get().document;
+    const component = document?.components.find(item => item.id === componentId);
+    if (!document || !component || !Number.isFinite(position.x) || !Number.isFinite(position.y)) return false;
+    const group = document.groups.find(item => item.memberComponentIds.includes(componentId));
+    const nextPosition = group ? constrainMemberPosition(group, position) : position;
+    get().update(current => ({
+      ...current,
+      components: current.components.map(item => item.id === componentId ? { ...item, position: nextPosition, updatedAt: now() } : item),
+    }));
+    return true;
+  },
+  removeGroupMember: (groupId, componentId) => {
+    const document = get().document;
+    const group = document?.groups.find(item => item.id === groupId);
+    if (!document || !group || !group.memberComponentIds.includes(componentId)) {
+      set({ groupError: 'The selected component is not a member of this group.' });
+      return false;
+    }
+    if (group.memberComponentIds.length <= 2) {
+      set({ groupError: 'A group must keep at least two Software System members. Ungroup it to remove the boundary.' });
+      return false;
+    }
+    get().update(current => ({
+      ...current,
+      groups: current.groups.map(item => item.id === groupId ? { ...item, memberComponentIds: item.memberComponentIds.filter(id => id !== componentId), updatedAt: now() } : item),
+    }));
+    return true;
+  },
+  ungroup: groupId => {
+    const document = get().document;
+    if (!document?.groups.some(group => group.id === groupId)) {
+      set({ groupError: 'The selected group no longer exists.' });
+      return false;
+    }
+    get().update(current => ({ ...current, groups: current.groups.filter(group => group.id !== groupId) }));
+    return true;
+  },
   addRelationship: (sourceComponentId, targetComponentId, label, direction) => {
     const document = get().document;
     if (!document || sourceComponentId === targetComponentId) return;
