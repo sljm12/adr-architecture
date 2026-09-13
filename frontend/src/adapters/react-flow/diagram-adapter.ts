@@ -1,4 +1,4 @@
-import { constrainMemberPosition, DEFAULT_COMPONENT_SIZE, getAbsoluteMemberPosition, getRelativeMemberPosition, type DiagramDocument, type Position } from '../../../../shared/src/index'; import type { Edge, Node } from '@xyflow/react';
+import { DEFAULT_COMPONENT_SIZE, fitGroupBoundsAfterLayout, getAbsoluteMemberPosition, getRelativeMemberPosition, type DiagramDocument, type Position } from '../../../../shared/src/index'; import type { Edge, Node } from '@xyflow/react';
 export type HandleSide='top'|'right'|'bottom'|'left';
 export type RelationshipRouting={pairOffset:number;sourceFanOffset:number;targetFanOffset:number};
 type Relationship=DiagramDocument['relationships'][number];
@@ -6,6 +6,8 @@ type RoutedRelationship={relationship:Relationship;source:HandleSide;target:Hand
 type Endpoint={relationshipId:string;componentId:string;peerId:string;side:HandleSide;role:'source'|'target'};
 const PAIR_LANE_GAP=56;
 const FAN_LANE_GAP=28;
+export type ComponentSize={width:number;height:number};
+export type ComponentSizeMap=ReadonlyMap<string,ComponentSize>;
 export function nearestHandle(source:Position,target:Position):{source:HandleSide;target:HandleSide}{const dx=target.x-source.x;const dy=target.y-source.y;if(Math.abs(dx)>=Math.abs(dy))return dx>=0?{source:'right',target:'left'}:{source:'left',target:'right'};return dy>=0?{source:'bottom',target:'top'}:{source:'top',target:'bottom'};}
 const compareRelationships=(a:Relationship,b:Relationship)=>a.sourceComponentId.localeCompare(b.sourceComponentId)||a.targetComponentId.localeCompare(b.targetComponentId)||a.id.localeCompare(b.id);
 const pairKey=(relationship:Relationship)=>[relationship.sourceComponentId,relationship.targetComponentId].sort().join(':');
@@ -44,7 +46,14 @@ function assignRouting(relationships:RoutedRelationship[]):Map<string,Relationsh
   return routing;
 }
 
-export function toReactFlow(document:DiagramDocument):{nodes:Node[];edges:Edge[]}{
+const positiveDimension=(value:unknown,fallback:number)=>typeof value==='number'&&Number.isFinite(value)&&value>0?value:fallback;
+export function getReactFlowNodeSize(node:Pick<Node,'measured'|'width'|'height'|'style'>,fallback=DEFAULT_COMPONENT_SIZE):ComponentSize{
+  const style=node.style??{};
+  const styleWidth=typeof style.width==='number'?style.width:undefined;
+  const styleHeight=typeof style.height==='number'?style.height:undefined;
+  return {width:positiveDimension(node.measured?.width??node.width??styleWidth,fallback.width),height:positiveDimension(node.measured?.height??node.height??styleHeight,fallback.height)};
+}
+export function toReactFlow(document:DiagramDocument,sizes?:ComponentSizeMap):{nodes:Node[];edges:Edge[]}{
   const components=new Map(document.components.map(c=>[c.id,c]));
   const routed=document.relationships.map(relationship=>{const source=components.get(relationship.sourceComponentId);const target=components.get(relationship.targetComponentId);const handles=source&&target?nearestHandle(source.position,target.position):{source:'right' as HandleSide,target:'left' as HandleSide};return {relationship,...handles};});
   const routing=assignRouting(routed);
@@ -66,9 +75,10 @@ export function toReactFlow(document:DiagramDocument):{nodes:Node[];edges:Edge[]
   }));
   const componentNodes:Node[]=document.components.map(c=>{
     const groupId=membership.get(c.id); const group=groupId?groups.find(item=>item.id===groupId):undefined;
-    const node:Node={id:c.id,position:group?getRelativeMemberPosition(c.position,group.position):c.position,data:{label:c.name},type:'component',style:{width:DEFAULT_COMPONENT_SIZE.width,height:DEFAULT_COMPONENT_SIZE.height}};
+    const size=sizes?.get(c.id)??DEFAULT_COMPONENT_SIZE;
+    const node:Node={id:c.id,position:group?getRelativeMemberPosition(c.position,group.position):c.position,data:{label:c.name},type:'component',style:{width:size.width,height:size.height}};
     node.data={...node.data,type:c.type,groupId};
-    if(group){node.parentId=group.id;node.extent='parent';node.expandParent=false;}
+    if(group){node.parentId=group.id;node.extent='parent';node.expandParent=true;}
     return node;
   });
   const nodes=[...groupNodes,...componentNodes];
@@ -76,14 +86,23 @@ export function toReactFlow(document:DiagramDocument):{nodes:Node[];edges:Edge[]
 }
 export function fromReactFlow(document:DiagramDocument,nodes:Node[]):DiagramDocument{
   const nodeById=new Map(nodes.map(node=>[node.id,node]));
-  const groups=(document.groups??[]).map(group=>{const node=nodeById.get(group.id);return node?{...group,position:{x:node.position.x,y:node.position.y}}:group;});
-  const groupByMember=new Map<string,typeof groups[number]>();
-  for(const group of groups)for(const componentId of group.memberComponentIds)groupByMember.set(componentId,group);
-  return {...document,groups,components:document.components.map(component=>{
+  const groupsWithPositions=(document.groups??[]).map(group=>{const node=nodeById.get(group.id);return node?{...group,position:{x:node.position.x,y:node.position.y}}:group;});
+  const groupByMember=new Map<string,typeof groupsWithPositions[number]>();
+  for(const group of groupsWithPositions)for(const componentId of group.memberComponentIds)groupByMember.set(componentId,group);
+  const components=document.components.map(component=>{
     const node=nodeById.get(component.id); if(!node)return component;
     const group=groupByMember.get(component.id);
     const absolute=group?getAbsoluteMemberPosition(node.position,group.position):node.position;
-    const position=group?constrainMemberPosition(group,absolute):absolute;
-    return {...component,position};
-  })};
+    return {...component,position:absolute};
+  });
+  const groups=groupsWithPositions.map(group=>{
+    if(!nodeById.has(group.id))return group;
+    const members=group.memberComponentIds.flatMap(componentId=>{
+      const component=components.find(item=>item.id===componentId);
+      if(!component)return [];
+      return [{position:component.position,size:getReactFlowNodeSize(nodeById.get(componentId)??{})}];
+    });
+    return {...group,...fitGroupBoundsAfterLayout(members)};
+  });
+  return {...document,groups,components};
 }

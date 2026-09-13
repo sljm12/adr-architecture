@@ -31,6 +31,16 @@ export function calculateGroupBounds(
 
 export const getGroupBounds = calculateGroupBounds;
 
+/** Recomputes a persisted boundary from the current rendered member boxes. */
+export function fitGroupBoundsAfterLayout(
+  members: MemberGeometry[],
+  padding = DEFAULT_GROUP_PADDING,
+): GroupBoundaryLayout {
+  return calculateGroupBounds(members, padding);
+}
+
+export const fitGroupBounds = fitGroupBoundsAfterLayout;
+
 export function getRelativeMemberPosition(position: Position, groupPosition: Position): Position {
   return { x: position.x - groupPosition.x, y: position.y - groupPosition.y };
 }

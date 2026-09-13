@@ -175,3 +175,79 @@ test('rejects mixed Person and Software System selections with an explanation an
   await expect(page.locator('.selection-feedback')).toHaveCount(0);
 });
 
+test('refits the boundary when members cross every edge and persists the fitted layout', async ({ page }) => {
+  await createMockDiagram(page);
+  await createTypedComponent(page, 'Billing', 'Software System');
+  await createTypedComponent(page, 'Ledger', 'Software System');
+
+  const billing = page.getByLabel('Component Billing, Software System');
+  const ledger = page.getByLabel('Component Ledger, Software System');
+  await billing.click();
+  await ledger.click({ modifiers: ['Shift'] });
+  await page.getByRole('button', { name: 'Group selected systems', exact: true }).click();
+  await page.getByLabel('Group name').fill('Finance');
+  await page.getByLabel('Diagram inspector').getByRole('button', { name: 'Group selected systems', exact: true }).click();
+
+  const boundary = page.getByLabel('System group Finance, 2 Software System members');
+  const assertEnclosesMembers = async () => {
+    const groupBox = await boundary.boundingBox();
+    expect(groupBox).not.toBeNull();
+    if (!groupBox) throw new Error('The Finance group boundary has no bounding box');
+    for (const member of [billing, ledger]) {
+      const memberBox = await member.boundingBox();
+      expect(memberBox).not.toBeNull();
+      if (!memberBox) throw new Error('A group member has no bounding box');
+      expect(memberBox.x).toBeGreaterThanOrEqual(groupBox.x - 1);
+      expect(memberBox.y).toBeGreaterThanOrEqual(groupBox.y - 1);
+      expect(memberBox.x + memberBox.width).toBeLessThanOrEqual(groupBox.x + groupBox.width + 1);
+      expect(memberBox.y + memberBox.height).toBeLessThanOrEqual(groupBox.y + groupBox.height + 1);
+    }
+  };
+  const dragMember = async (member: typeof billing, dx: number, dy: number) => {
+    const box = await member.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) throw new Error('The member has no bounding box');
+    const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x + dx, start.y + dy, { steps: 12 });
+    await page.mouse.up();
+    await page.waitForTimeout(100);
+  };
+
+  const initialBox = await boundary.boundingBox();
+  expect(initialBox).not.toBeNull();
+  if (!initialBox) throw new Error('The initial Finance boundary has no bounding box');
+  await assertEnclosesMembers();
+  await dragMember(billing, 420, 0);
+  await assertEnclosesMembers();
+  await dragMember(billing, -720, 0);
+  await assertEnclosesMembers();
+  await dragMember(billing, 0, 420);
+  await assertEnclosesMembers();
+  await dragMember(billing, 0, -720);
+  await assertEnclosesMembers();
+  const expandedBox = await boundary.boundingBox();
+  expect(expandedBox).not.toBeNull();
+  if (!expandedBox) throw new Error('The expanded Finance boundary has no bounding box');
+  expect(expandedBox.width).toBeGreaterThanOrEqual(initialBox.width);
+  const currentLedgerBox = await ledger.boundingBox();
+  const currentBillingBox = await billing.boundingBox();
+  expect(currentLedgerBox).not.toBeNull();
+  expect(currentBillingBox).not.toBeNull();
+  if (!currentLedgerBox || !currentBillingBox) throw new Error('A member has no bounding box before shrink-to-fit');
+  await dragMember(ledger, currentBillingBox.x - currentLedgerBox.x, currentBillingBox.y - currentLedgerBox.y);
+  await assertEnclosesMembers();
+  const shrunkBox = await boundary.boundingBox();
+  expect(shrunkBox).not.toBeNull();
+  if (!shrunkBox) throw new Error('The shrunk Finance boundary has no bounding box');
+  expect(shrunkBox.width).toBeLessThan(expandedBox.width);
+  expect(shrunkBox.height).toBeLessThan(expandedBox.height);
+
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('.save-status')).toHaveText('Saved');
+  await page.getByRole('button', { name: /System context, last saved/ }).click();
+  await expect(boundary).toBeVisible();
+  await assertEnclosesMembers();
+});
+

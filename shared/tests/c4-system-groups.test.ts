@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assertDiagramInvariants,
   calculateGroupBounds,
+  fitGroupBoundsAfterLayout,
   componentWriteSchema,
   constrainMemberPosition,
   diagramDocumentSchema,
@@ -64,5 +65,43 @@ describe('C4 artifact and system group boundaries', () => {
     expect(() => assertDiagramInvariants({ ...base, groups: [{ ...group, size: { width: 0, height: group.size.height } }] })).toThrow(/positive finite/i);
     expect(() => assertDiagramInvariants({ ...base, components: base.components.map(item => item.id === ids.first ? { ...item, diagramId: ids.otherGroup } : item), groups: [group] })).toThrow(/belong to diagram/i);
     expect(base.relationships[0].id).toBe(ids.relationship);
+  });
+
+  it('fits every rendered member box after movement or resize without changing absolute positions', () => {
+    const original = grouped();
+    const members = [
+      { position: { x: -180, y: 100 }, size: { width: 260, height: 96 } },
+      { position: { x: 340, y: 180 }, size: { width: 180, height: 72 } },
+    ];
+    const fitted = fitGroupBoundsAfterLayout(members);
+
+    expect(fitted.position).toEqual({ x: -212, y: 44 });
+    expect(fitted.size).toEqual({ width: 764, height: 240 });
+    expect(fitted.position.x).toBeLessThan(original.position.x);
+    expect(fitted.size.width).toBeGreaterThan(original.size.width);
+    expect(members[0].position).toEqual({ x: -180, y: 100 });
+    expect(members[1].position).toEqual({ x: 340, y: 180 });
+
+    const edgeCases = [
+      [{ position: { x: 760, y: 100 }, size: { width: 180, height: 72 } }, { position: { x: 340, y: 180 }, size: { width: 180, height: 72 } }],
+      [{ position: { x: -180, y: 100 }, size: { width: 180, height: 72 } }, { position: { x: 340, y: 180 }, size: { width: 180, height: 72 } }],
+      [{ position: { x: 100, y: 760 }, size: { width: 180, height: 72 } }, { position: { x: 340, y: 180 }, size: { width: 180, height: 72 } }],
+      [{ position: { x: 100, y: -300 }, size: { width: 180, height: 72 } }, { position: { x: 340, y: 180 }, size: { width: 180, height: 72 } }],
+    ] as const;
+    for (const edgeMembers of edgeCases) {
+      const edgeFit = fitGroupBoundsAfterLayout(edgeMembers);
+      for (const member of edgeMembers) {
+        expect(member.position.x).toBeGreaterThanOrEqual(edgeFit.position.x + 32);
+        expect(member.position.y).toBeGreaterThanOrEqual(edgeFit.position.y + 56);
+        expect(member.position.x + member.size.width).toBeLessThanOrEqual(edgeFit.position.x + edgeFit.size.width - 32);
+        expect(member.position.y + member.size.height).toBeLessThanOrEqual(edgeFit.position.y + edgeFit.size.height - 32);
+      }
+    }
+
+    const shrunk = fitGroupBoundsAfterLayout([
+      { position: { x: 110, y: 110 }, size: { width: 180, height: 72 } },
+      { position: { x: 300, y: 150 }, size: { width: 180, height: 72 } },
+    ]);
+    expect(shrunk).toEqual({ position: { x: 78, y: 54 }, size: { width: 434, height: 200 } });
   });
 });
