@@ -76,7 +76,7 @@ describe('system group diagram store', () => {
     expect(useDiagramStore.getState().document!.groups).toHaveLength(1);
   });
 
-  it('moves groups by a shared delta, constrains members, removes membership explicitly, and preserves references', () => {
+  it('moves groups by a shared delta, refits members beyond the boundary, resizes, removes membership explicitly, and preserves references', () => {
     useDiagramStore.getState().open(structuredClone(document));
     expect(useDiagramStore.getState().createGroup('Platform', [ids.first, ids.second, ids.third])).toBe(true);
     const created = useDiagramStore.getState().document!;
@@ -92,11 +92,26 @@ describe('system group diagram store', () => {
     expect(moved.relationships[0]).toEqual(originalRelationship);
 
     expect(useDiagramStore.getState().moveComponent(ids.first, { x: -1000, y: -1000 })).toBe(true);
-    const constrained = useDiagramStore.getState().document!.components.find(item => item.id === ids.first)!;
-    expect(constrained.position.x).toBeGreaterThanOrEqual(moved.groups[0].position.x + 32);
-    expect(constrained.position.y).toBeGreaterThanOrEqual(moved.groups[0].position.y + 56);
+    const movedBeyondBoundary = useDiagramStore.getState().document!;
+    const movedMember = movedBeyondBoundary.components.find(item => item.id === ids.first)!;
+    expect(movedMember.position).toEqual({ x: -1000, y: -1000 });
+    expect(movedBeyondBoundary.groups[0].position).toEqual({ x: -1032, y: -1056 });
+    expect(movedBeyondBoundary.groups[0].size).toEqual({ width: 1904, height: 1405 });
+    expect(movedBeyondBoundary.relationships[0]).toEqual(originalRelationship);
 
-    const memberPosition = structuredClone(constrained.position);
+    const memberPosition = structuredClone(movedMember.position);
+    expect(useDiagramStore.getState().resizeComponent(ids.first, { width: 2000, height: 120 })).toBe(true);
+    const resized = useDiagramStore.getState().document!;
+    expect(resized.groups[0].position).toEqual({ x: -1032, y: -1056 });
+    expect(resized.groups[0].size).toEqual({ width: 2064, height: 1405 });
+    expect(resized.components.find(item => item.id === ids.first)?.position).toEqual(memberPosition);
+    expect(resized.groups[0].memberComponentIds).toEqual(group.memberComponentIds);
+    expect(resized.relationships[0]).toEqual(originalRelationship);
+    useDiagramStore.getState().undo();
+    expect(useDiagramStore.getState().document!.groups[0].size).toEqual({ width: 1904, height: 1405 });
+    useDiagramStore.getState().redo();
+    expect(useDiagramStore.getState().document!.groups[0].size).toEqual({ width: 2064, height: 1405 });
+
     expect(useDiagramStore.getState().removeGroupMember(group.id, ids.first)).toBe(true);
     expect(useDiagramStore.getState().document!.groups[0].memberComponentIds).not.toContain(ids.first);
     expect(useDiagramStore.getState().document!.components.find(item => item.id === ids.first)?.position).toEqual(memberPosition);

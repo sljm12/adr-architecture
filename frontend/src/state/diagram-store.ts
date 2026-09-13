@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { calculateGroupBounds, constrainMemberPosition, getC4ArtifactTypeLabel, isC4ArtifactType, translateGroupWithMembers, type C4ArtifactType, type DiagramDocument, type DiagramSummary, type Position, type Relationship, type RelationshipDirection } from '../../../shared/src/index';
+import { calculateGroupBounds, fitGroupBoundsAfterLayout, getC4ArtifactTypeLabel, isC4ArtifactType, translateGroupWithMembers, type C4ArtifactType, type DiagramDocument, type DiagramSummary, type Position, type Relationship, type RelationshipDirection } from '../../../shared/src/index';
 import { diagramClient } from '../api/diagram-client';
 import { BoundedHistory } from './history';
 
@@ -30,6 +30,7 @@ type State = {
   renameGroup: (groupId: string, name: string) => boolean;
   moveGroup: (groupId: string, position: Position) => boolean;
   moveComponent: (componentId: string, position: Position) => boolean;
+  resizeComponent: (componentId: string, size: { width: number; height: number }) => boolean;
   removeGroupMember: (groupId: string, componentId: string) => boolean;
   ungroup: (groupId: string) => boolean;
   addRelationship: (source: string, target: string, label: string, direction: 'directed' | 'undirected') => void;
@@ -205,11 +206,37 @@ export const useDiagramStore = create<State>((set, get) => ({
     const document = get().document;
     const component = document?.components.find(item => item.id === componentId);
     if (!document || !component || !Number.isFinite(position.x) || !Number.isFinite(position.y)) return false;
-    const group = document.groups.find(item => item.memberComponentIds.includes(componentId));
-    const nextPosition = group ? constrainMemberPosition(group, position) : position;
     get().update(current => ({
       ...current,
-      components: current.components.map(item => item.id === componentId ? { ...item, position: nextPosition, updatedAt: now() } : item),
+      components: current.components.map(item => item.id === componentId ? { ...item, position, updatedAt: now() } : item),
+      groups: current.groups.map(group => {
+        if (!group.memberComponentIds.includes(componentId)) return group;
+        const members=group.memberComponentIds.flatMap(memberId=>{
+          const member=current.components.find(item=>item.id===memberId);
+          if(!member)return [];
+          return [{ position: memberId===componentId ? position : member.position }];
+        });
+        return { ...group, ...fitGroupBoundsAfterLayout(members), updatedAt: now() };
+      }),
+    }));
+    return true;
+  },
+  resizeComponent: (componentId, size) => {
+    const document = get().document;
+    const component = document?.components.find(item => item.id === componentId);
+    const group = document?.groups.find(item => item.memberComponentIds.includes(componentId));
+    if (!document || !component || !group || !Number.isFinite(size.width) || !Number.isFinite(size.height) || size.width <= 0 || size.height <= 0) return false;
+    get().update(current => ({
+      ...current,
+      groups: current.groups.map(item => {
+        if (item.id !== group.id) return item;
+        const members=item.memberComponentIds.flatMap(memberId=>{
+          const member=current.components.find(candidate=>candidate.id===memberId);
+          if(!member)return [];
+          return [{ position: member.position, size: memberId===componentId ? size : undefined }];
+        });
+        return { ...item, ...fitGroupBoundsAfterLayout(members), updatedAt: now() };
+      }),
     }));
     return true;
   },
@@ -226,7 +253,15 @@ export const useDiagramStore = create<State>((set, get) => ({
     }
     get().update(current => ({
       ...current,
-      groups: current.groups.map(item => item.id === groupId ? { ...item, memberComponentIds: item.memberComponentIds.filter(id => id !== componentId), updatedAt: now() } : item),
+      groups: current.groups.map(item => {
+        if (item.id !== groupId) return item;
+        const memberComponentIds=item.memberComponentIds.filter(id => id !== componentId);
+        const members=memberComponentIds.flatMap(memberId=>{
+          const member=current.components.find(candidate=>candidate.id===memberId);
+          return member ? [{ position: member.position }] : [];
+        });
+        return { ...item, memberComponentIds, ...fitGroupBoundsAfterLayout(members), updatedAt: now() };
+      }),
     }));
     return true;
   },

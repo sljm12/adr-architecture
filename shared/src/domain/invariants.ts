@@ -1,6 +1,6 @@
 import type { DiagramDocument } from './types';
 import type { ArchitectureDecisionRecord, Component, Relationship } from './types';
-import { isMemberWithinGroup } from './group-layout';
+import { fitGroupBoundsAfterLayout, isMemberWithinGroup } from './group-layout';
 export function assertComponentName(name: string): void { if (!name.trim()) throw new Error('Component name must not be blank'); }
 export function assertRelationshipDirection(direction: string): void { if (direction !== 'directed' && direction !== 'undirected') throw new Error(`Unsupported relationship direction: ${direction}`); }
 export function assertDiagramInvariants(document: DiagramDocument): void {
@@ -27,6 +27,7 @@ export function assertDiagramInvariants(document: DiagramDocument): void {
     names.set(normalizedName, group.id);
     if (!Number.isFinite(group.position.x) || !Number.isFinite(group.position.y) || !Number.isFinite(group.size.width) || !Number.isFinite(group.size.height) || group.size.width <= 0 || group.size.height <= 0) throw new Error(`Group ${group.id} must have a positive finite layout`);
     const members = new Set<string>();
+    const memberGeometry: Array<{ position: Component['position'] }> = [];
     if (group.memberComponentIds.length < 2) throw new Error(`Group ${group.id} must contain at least two Software System members`);
     for (const memberId of group.memberComponentIds) {
       assertUuid(memberId, 'Group member component ID');
@@ -40,7 +41,16 @@ export function assertDiagramInvariants(document: DiagramDocument): void {
       const priorGroup = memberGroups.get(memberId);
       if (priorGroup) throw new Error(`Component ${memberId} cannot belong to more than one group (${priorGroup} and ${group.id})`);
       memberGroups.set(memberId, group.id);
+      memberGeometry.push({ position: member.position });
       if (!isMemberWithinGroup(group, member.position)) throw new Error(`Group ${group.id} boundary does not enclose member ${memberId}`);
+    }
+    const fitted = fitGroupBoundsAfterLayout(memberGeometry);
+    const groupRight = group.position.x + group.size.width;
+    const groupBottom = group.position.y + group.size.height;
+    const fittedRight = fitted.position.x + fitted.size.width;
+    const fittedBottom = fitted.position.y + fitted.size.height;
+    if (group.position.x > fitted.position.x || group.position.y > fitted.position.y || groupRight < fittedRight || groupBottom < fittedBottom) {
+      throw new Error(`Group ${group.id} boundary does not enclose every rendered member box with its label and padding`);
     }
   }
 }

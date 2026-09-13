@@ -33,6 +33,7 @@ describe('React Flow system group adapter', () => {
     expect(firstNode.parentId).toBe(ids.group);
     expect(firstNode.position).toEqual({ x: 32, y: 56 });
     expect(firstNode.extent).toBe('parent');
+    expect(firstNode.expandParent).toBe(true);
     expect(firstNode.data).toMatchObject({ type: 'software-system', groupId: ids.group });
   });
 
@@ -46,11 +47,13 @@ describe('React Flow system group adapter', () => {
     expect(roundTrip.relationships[0]).toMatchObject({ id: ids.relationship, sourceComponentId: ids.first, targetComponentId: ids.second });
   });
 
-  it('clamps a dragged child to the group boundary without removing its parent', () => {
+  it('fits a dragged or resized child beyond the prior boundary without removing its parent', () => {
     const visual = toReactFlow(base);
-    const child = { ...visual.nodes[1], position: { x: -1000, y: -1000 } };
+    const child = { ...visual.nodes[1], position: { x: -1000, y: -1000 }, measured: { width: 260, height: 120 } };
     const roundTrip = fromReactFlow(base, [visual.nodes[0], child, visual.nodes[2]]);
     expect(roundTrip.groups[0].memberComponentIds).toContain(ids.first);
-    expect(roundTrip.components[0].position).toEqual({ x: base.groups[0].position.x + 32, y: base.groups[0].position.y + 56 });
+    expect(roundTrip.components[0].position).toEqual({ x: base.groups[0].position.x - 1000, y: base.groups[0].position.y - 1000 });
+    expect(roundTrip.groups[0].position).toEqual({ x: -944, y: -982 });
+    expect(roundTrip.groups[0].size).toEqual({ width: 1516, height: 1306 });
   });
 });

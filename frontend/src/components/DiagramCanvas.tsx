@@ -1,12 +1,11 @@
-import { useCallback, useRef } from 'react';
-import { ReactFlow, Background, Controls, type EdgeMouseHandler, type NodeMouseHandler, type Node, type OnSelectionChangeFunc } from '@xyflow/react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { applyNodeChanges, ReactFlow, Background, Controls, type EdgeMouseHandler, type NodeMouseHandler, type Node, type NodeChange, type OnSelectionChangeFunc } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { fromReactFlow, toReactFlow } from '../adapters/react-flow/diagram-adapter';
 import { useDiagramStore } from '../state/diagram-store';
 import { ComponentNode } from './ComponentNode';
 import { RelationshipEdge } from './RelationshipEdge';
 import { SystemGroupNode } from './SystemGroupNode';
-import { constrainMemberPosition } from '../../../shared/src/index';
 import type { CanvasSelection } from './WorkspaceInspector';
 
 const nodeTypes = { component: ComponentNode, systemGroup: SystemGroupNode };
@@ -25,11 +24,15 @@ type DiagramCanvasProps = {
 
 export function DiagramCanvas({ onSelection, selectedComponentIds = [], selectedComponentId = null, selectedGroupId = null, selectedRelationshipId = null, onMultiSelectionChange, groupingSelectionActive = false, canvasEpoch = 0 }: DiagramCanvasProps) {
   const document = useDiagramStore(state => state.document);
-  const moveGroup = useDiagramStore(state => state.moveGroup);
-  const moveComponent = useDiagramStore(state => state.moveComponent);
-  const visual = document ? toReactFlow(document) : { nodes: [], edges: [] };
+  const update = useDiagramStore(state => state.update);
+  const [memberSizes, setMemberSizes] = useState<Record<string, { width: number; height: number }>>({});
+  const sizeMap = useMemo(() => new Map(Object.entries(memberSizes)), [memberSizes]);
+  const visual = useMemo(() => document ? toReactFlow(document, sizeMap) : { nodes: [], edges: [] }, [document, sizeMap]);
+  const [interactiveNodes, setInteractiveNodes] = useState<Node[]>([]);
+  useEffect(() => setInteractiveNodes(visual.nodes), [visual]);
   const selectedIds = new Set(selectedComponentIds.length ? selectedComponentIds : selectedComponentId ? [selectedComponentId] : []);
-  const nodes = visual.nodes.map(node => ({ ...node, data: { ...node.data, isSelected: node.type === 'systemGroup' ? node.id === selectedGroupId : selectedIds.has(node.id) } }));
+  const renderedNodes = interactiveNodes.length || visual.nodes.length === 0 ? interactiveNodes : visual.nodes;
+  const nodes = renderedNodes.map(node => ({ ...node, data: { ...node.data, isSelected: node.type === 'systemGroup' ? node.id === selectedGroupId : selectedIds.has(node.id) } }));
   const edges = visual.edges.map(edge => ({ ...edge, data: { ...edge.data, isSelected: edge.id === selectedRelationshipId } }));
   const selectionSignature = useRef('');
   const suppressNextSelectionChange = useRef(false);
@@ -45,18 +48,45 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
 
   const onNodeDragStop = useCallback((_: unknown, node: Node) => {
     if (!document) return;
-    const nextDocument = fromReactFlow(document, visual.nodes.map(item => item.id === node.id ? { ...item, position: node.position } : item));
+    // Grouped members intentionally bypass constrainMemberPosition: the adapter fits the boundary
+    // around their new absolute position instead of trapping them at the old edge.
+    const nextDocument = fromReactFlow(document, interactiveNodes.map(item => item.id === node.id ? { ...item, position: node.position } : item));
     if (node.type === 'systemGroup') {
       const group = nextDocument.groups.find(item => item.id === node.id);
-      if (group) moveGroup(group.id, group.position);
+      if (group) update(() => nextDocument);
       return;
     }
     const component = nextDocument.components.find(item => item.id === node.id);
     if (component) {
       const group = nextDocument.groups.find(item => item.memberComponentIds.includes(component.id));
-      moveComponent(component.id, group ? constrainMemberPosition(group, component.position) : component.position);
+      update(() => nextDocument);
     }
-  }, [document, moveComponent, moveGroup, visual.nodes]);
+  }, [document, interactiveNodes, update]);
+
+  const onNodesChange = useCallback((changes: NodeChange[]) => {
+    if (!document) return;
+    const currentNodes = interactiveNodes.length ? interactiveNodes : visual.nodes;
+    const layoutChanges = changes.filter(change => change.type === 'position' || change.type === 'dimensions');
+    const nextNodes = applyNodeChanges(layoutChanges, currentNodes);
+    const dimensionChanges = changes.filter(change => change.type === 'dimensions' && change.resizing !== undefined && change.dimensions && currentNodes.some(node => node.id === change.id && node.type === 'component'));
+    setInteractiveNodes(nextNodes);
+    if (!dimensionChanges.length) return;
+    setMemberSizes(current => {
+      const next = { ...current };
+      for (const change of dimensionChanges) {
+        if (change.type === 'dimensions' && change.dimensions) next[change.id] = { width: change.dimensions.width, height: change.dimensions.height };
+      }
+      return next;
+    });
+    if (dimensionChanges.some(change => change.type === 'dimensions' && change.resizing !== false)) return;
+    const resizedNodes = nextNodes.map(node => {
+      const change = dimensionChanges.find(item => item.id === node.id);
+      if (!change || change.type !== 'dimensions' || !change.dimensions) return node;
+      return { ...node, measured: change.dimensions, width: change.dimensions.width, height: change.dimensions.height, style: { ...node.style, width: change.dimensions.width, height: change.dimensions.height } };
+    });
+    const nextDocument = fromReactFlow(document, resizedNodes);
+    update(() => nextDocument);
+  }, [document, interactiveNodes, update, visual.nodes]);
 
   const handleSelectionChange = useCallback<OnSelectionChangeFunc>(({ nodes: selectedNodes, edges: selectedEdges }) => {
     if (groupingSelectionActive) return;
@@ -109,5 +139,5 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
     emitSelection({ kind: 'relationship', id: edge.id }, `relationship:${edge.id}`);
   }, [emitSelection, groupingSelectionActive, onMultiSelectionChange]);
 
-  return <main id="diagram-canvas" tabIndex={-1} aria-label="Architecture diagram canvas"><ReactFlow key={`${document?.id ?? 'empty'}:${visual.nodes.length}:${canvasEpoch}`} nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={() => undefined} onEdgesChange={() => undefined} onNodeDragStop={onNodeDragStop} onNodeClick={onNodeClick} onEdgeClick={onEdgeClick} onSelectionChange={handleSelectionChange} onPaneClick={() => { selectionSignature.current = ''; onMultiSelectionChange?.([]); onSelection(null); }} selectionOnDrag selectionKeyCode={null} multiSelectionKeyCode="Shift" selectionMode="full" fitView><Background aria-hidden="true" /><Controls aria-label="Canvas zoom controls" /></ReactFlow></main>;
+  return <main id="diagram-canvas" tabIndex={-1} aria-label="Architecture diagram canvas"><ReactFlow key={`${document?.id ?? 'empty'}:${visual.nodes.length}:${canvasEpoch}`} nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={onNodesChange} onEdgesChange={() => undefined} onNodeDragStop={onNodeDragStop} onNodeClick={onNodeClick} onEdgeClick={onEdgeClick} onSelectionChange={handleSelectionChange} onPaneClick={() => { selectionSignature.current = ''; onMultiSelectionChange?.([]); onSelection(null); }} selectionOnDrag selectionKeyCode={null} multiSelectionKeyCode="Shift" selectionMode="full" fitView><Background aria-hidden="true" /><Controls aria-label="Canvas zoom controls" /></ReactFlow></main>;
 }
