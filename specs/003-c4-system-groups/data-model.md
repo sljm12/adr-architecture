@@ -83,8 +83,9 @@ Existing entities remain unchanged:
    never relationship endpoints.
 6. The group boundary has positive finite dimensions and encloses every member's rendered node box,
    including the label/header and configured padding. Group creation calculates this boundary around
-   existing member positions without rearranging them. Later member movement or resizing is clamped
-   to the boundary; no layout operation silently removes a member.
+   existing member positions without rearranging them. Later member movement or resizing recomputes
+   the boundary around all current member boxes, allowing the boundary to expand, reposition, or
+   shrink to fit; no layout operation silently removes a member.
 7. Group creation, rename, member removal, layout movement, and ungroup are document edits recorded
    in the existing active-diagram history. Ungroup removes only the group and membership records.
 8. Moving a group applies the same delta to every member's domain position, preserving their relative
@@ -140,7 +141,7 @@ no group
   -> create (2+ Software Systems, unique trimmed/case-insensitive name, boundary fitted around current positions)
   -> active group
 active group
-  -> rename / move / constrained member layout
+  -> rename / move / member layout with boundary refit
   -> remove one member (only if 2+ remain after the operation)
   -> ungroup (group and memberships removed; components remain)
 ```

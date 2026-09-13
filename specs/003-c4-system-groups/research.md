@@ -56,39 +56,46 @@ layout, deletion, and validation rules.
 ## Decision: Keep the domain model authoritative and adapt groups into React Flow subflows
 
 **Decision:** The React Flow adapter will emit one custom group node before its child component
-nodes. Each child uses `parentId`, a position relative to the group, and `extent: 'parent'`; the
-group node is non-connectable and rendered behind its children. The domain still stores absolute
-component positions and the persisted group boundary. Drag handlers translate visual parent/child
-positions back into domain coordinates at the end of a drag.
+nodes. Each child uses `parentId`, a position relative to the group, and `expandParent: true` so a
+member can move beyond the current boundary while the parent grows. The group node is
+non-connectable and rendered behind its children. The domain still stores absolute component
+positions and the persisted group boundary. Drag handlers translate visual parent/child positions
+back into domain coordinates and recompute the padded group bounds after member movement or resize.
 
 **Rationale:** Current React Flow documentation describes `parentId` for parent-child subflows,
-relative child positions, `extent: 'parent'` for constraining child movement, and a parent-before-
-children ordering requirement. It also exposes an absolute position for adapting child movement.
-Using those facilities gives the UI natural group dragging while keeping React Flow out of the
-serialized artifact model. See the [React Flow subflow documentation](https://github.com/xyflow/xyflow/blob/main/_autodocs/system-core.md).
+`expandParent: true` for growing a parent when a child reaches beyond its bounds, the measured node
+dimensions needed for geometry, and a parent-before-children ordering requirement. The adapter can
+therefore provide natural group dragging while a domain-owned fit operation handles expansion,
+repositioning, and shrink-to-fit behavior without making React Flow the serialized artifact model.
+See the [React Flow subflow documentation](https://github.com/xyflow/xyflow/blob/main/_autodocs/system-core.md).
 
 **Alternatives considered:** Persisting raw React Flow nodes was rejected because it would couple
 architecture data to a visual library and weaken stable-reference guarantees. A purely decorative
 rectangle overlay was rejected because it would not provide parent movement, bounded member drag,
 or durable membership semantics.
 
-## Decision: Preserve positions, constrain members, and make removal explicit
+## Decision: Preserve positions, auto-fit the boundary, and make removal explicit
 
 **Decision:** Group creation computes a padded boundary around the selected systems without changing
-their existing positions. Subsequent member movement or resizing is constrained so the rendered member
-remains inside the persisted boundary; the system never auto-arranges a member or silently changes its
-membership. The group inspector provides an explicit `Remove from group` action that preserves the
-component's absolute position and all references. Group layout validation never permits a persisted
-boundary smaller than its member geometry plus the label/padding insets.
+their existing positions. Subsequent member movement or resizing may extend beyond the current
+boundary; after each change, the system recomputes the boundary around every rendered member box with
+the label and padding insets. The fit operation may expand or reposition the boundary and may shrink
+unused space, but never auto-arranges a member or silently changes its membership. The group inspector
+provides an explicit `Remove from group` action that preserves the component's absolute position and
+all references. Group layout validation never permits a persisted boundary smaller than its member
+geometry plus the label/padding insets.
 
-**Rationale:** This satisfies the requirement that a member remain enclosed while avoiding accidental
-membership deletion or surprising creation-time movement. Persisting the resulting boundary makes
-reopen deterministic and allows a group to move as one unit while preserving relative positions.
+**Rationale:** This satisfies the requirement that a moved member remain enclosed without making the
+existing boundary a movement barrier. Persisting the resulting boundary makes reopen deterministic
+and allows a group to move as one unit while preserving relative positions. Keeping removal explicit
+avoids accidental membership deletion.
 
 **Alternatives considered:** Automatically removing a member that crosses the edge was rejected as
 silent data loss. Automatically deleting a group when it falls below two members was rejected because
-it would make a layout edit destructive. Allowing unrestricted child movement was rejected because it
-would produce a boundary that no longer communicates the intended system scope.
+it would make a layout edit destructive. Permanently clamping a child to the old boundary was rejected
+because it prevents the author from placing a member at a new outer edge. Allowing movement without
+recomputing the boundary was rejected because it would produce a boundary that no longer communicates
+the intended system scope.
 
 ## Decision: Reuse the complete diagram save contract rather than add group CRUD endpoints
 

@@ -46,10 +46,12 @@ persistence API.
    the incompatible artifact types and explains that a Person cannot be grouped with a Software
    System. Verify each action gives an actionable message, creates no partial group, and leaves the
    document unchanged.
-5. **Move and contain members**: Move a group and verify every member moves by the same delta with
-   relative positions and relationship endpoints unchanged. Drag or resize a member toward the
-   boundary and verify the member remains enclosed because movement is constrained; verify the
-   explicit `Remove from group` action removes membership without moving or deleting the component.
+5. **Move and fit members**: Move a group and verify every member moves by the same delta with
+   relative positions and relationship endpoints unchanged. Drag or resize a member beyond each
+   edge of the current boundary and verify the group automatically expands or repositions to enclose
+   every member with visible spacing, without rearranging members. Move the member back toward the
+   other systems and verify unused boundary space is readjusted. Verify the explicit `Remove from
+   group` action removes membership without moving or deleting the component.
 6. **Review and ungroup**: Select a group, review its name and complete member list, rename it, and
    confirm ungrouping. Verify the boundary and membership disappear while all member components,
    relationships, ADR links, IDs, and positions remain.

@@ -1,6 +1,6 @@
 # Implementation Plan: C4 System Groups
 
-**Branch**: `003-c4-system-groups` | **Date**: 2026-09-12 | **Spec**: [spec.md](./spec.md)
+**Branch**: `003-c4-system-groups` | **Date**: 2026-09-13 | **Spec**: [spec.md](./spec.md)
 
 **Input**: Feature specification from `/specs/003-c4-system-groups/spec.md`
 
@@ -58,9 +58,10 @@ the existing three-second representative workflow target.
 **Constraints**: The domain model is authoritative and independent of React Flow. Groups are
 non-nested and each component belongs to at most one group. Only Software System components may be
 members. Group creation fits the boundary around selected systems without rearranging their existing
-positions. Member movement is constrained inside the boundary; membership changes happen through an
-explicit removal action. Group deletion/ungrouping must preserve members, relationships, and ADR
-links. Existing component, relationship, and ADR IDs must not change during type, name, position,
+positions. Member movement may extend beyond the current boundary; the boundary automatically
+resizes or repositions to fit all members with visible spacing, while membership changes happen
+through an explicit removal action. Group deletion/ungrouping must preserve members, relationships,
+and ADR links. Existing component, relationship, and ADR IDs must not change during type, name, position,
 group, or layout edits. Grouping selection is transient UI state: every selected component must be
 visibly distinguishable, and an ineligible or incompatible selection must be explained rather than
 silently ignored. Invalid groups and unsupported C4 values must produce actionable validation without
@@ -157,7 +158,8 @@ React Flow remains a visual parent/child adapter. No new top-level package or su
    `diagramDocumentSchema` with optional `groups` defaulting to `[]`; add group shape validation and
    field-addressable errors. Extend `assertDiagramInvariants` to enforce diagram ownership, stable
    UUIDs, unique group names after trimming and case-insensitive comparison, at least two unique
-   Software System members, one-group-per-component, positive finite layout, and boundary containment.
+   Software System members, one-group-per-component, positive finite layout, and boundary containment
+   after each group or member layout change.
    Keep relationships and ADR links component-based and unchanged.
 
 2. **Persistence and service rules**: Add `systemGroups` and `systemGroupMembers` to
@@ -188,8 +190,10 @@ React Flow remains a visual parent/child adapter. No new top-level package or su
    component receives visible selection feedback; an ineligible or incompatible selection is not
    silently filtered and the group action reports the artifact types and violated rule without
    mutating the document. Creation must not auto-arrange selected systems. Moving a group translates
-   member absolute positions by the same delta. Member movement is clamped so its rendered box
-   remains inside the boundary; membership changes happen only through the explicit removal action.
+   member absolute positions by the same delta. Member movement is reconciled by recomputing a padded
+   group boundary around all rendered member boxes, allowing the boundary to expand or shift rather
+   than clamping the member to the prior boundary; membership changes happen only through the explicit
+   removal action.
    Member removal preserves its position; ungroup removes only group state. Type/name/layout/group
    edits set the document unsaved and retain the same component, relationship, and ADR IDs. Failed
    saves leave the draft and history unchanged, while a successful save replaces it with the server
@@ -198,9 +202,11 @@ React Flow remains a visual parent/child adapter. No new top-level package or su
 5. **React Flow adapter and canvas**: Extend `toReactFlow` to calculate group nodes first, with a
    custom `systemGroup` node, persisted absolute group position/size, stable group ID, no connection
    handles, and a lower visual layer. Emit group children after their parent using `parentId`,
-   relative positions, `extent: 'parent'`, and type data. Extend the reverse adapter/drag handling to
-   convert child absolute positions and group drag deltas back to domain positions; clamp child
-   movement to the group extent without silently removing membership. Update `DiagramCanvas` to
+   relative positions, `expandParent: true`, and type data. Do not use a permanent hard child clamp
+   that prevents the member from crossing the current boundary. Extend the reverse adapter/drag
+   handling to convert child absolute positions and group drag deltas back to domain positions, fit
+   the group around all current member boxes after member drag/resize, and persist the resulting
+   group position and size without silently removing membership. Update `DiagramCanvas` to
    support keyboard-usable multi-selection with an explicit selected-state highlight, group selection, group drag, member drag, and
    group-vs-relationship selection
    without changing edge endpoints. Add `SystemGroupNode` as a flat labeled boundary that is
@@ -235,7 +241,8 @@ React Flow remains a visual parent/child adapter. No new top-level package or su
    preservation, and Mermaid subgraphs. Add repository/service/API tests for migration round-trip,
    transactional replacement, empty groups compatibility, invalid-save immutability, and deletion
    conflicts. Add frontend tests for type display, group history/undo/redo, group drag delta,
-   parent-before-child adapter output, bounded member movement, group selection highlighting,
+   parent-before-child adapter output, automatic boundary expansion/repositioning after member
+   movement, group selection highlighting,
    incompatible-selection explanations, confirmation, and accessible error/status labels. Add
    Playwright coverage for creating Person and Software System components, grouping two-to-twenty
    systems, identifying selected components, rejecting mixed Person/Software System selections with

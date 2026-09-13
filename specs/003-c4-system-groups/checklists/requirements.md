@@ -31,4 +31,4 @@
 
 ## Notes
 
-- Validation pass 2: all checklist items pass. The specification now explicitly defines visible multi-component selection feedback, selection-state clearing, and actionable incompatibility explanations (including why a Person cannot be grouped with a Software System), while preserving the existing grouping constraints, stable-reference behavior, persistence expectations, destructive-action safeguards, accessibility expectations, and export warning behavior.
+- Validation pass 3: all checklist items pass. The specification now explicitly defines automatic group-boundary resizing or repositioning when a member is moved or resized beyond the prior boundary, while preserving member positions, stable identities, membership, relationships, ADR links, persistence, destructive-action safeguards, accessibility expectations, and export warning behavior.
