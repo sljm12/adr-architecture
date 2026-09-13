@@ -37,9 +37,9 @@ implementation begins.
 
 - [X] T002 Extend `C4ArtifactType`, `SystemGroup`, `GroupBoundaryLayout`, and `DiagramDocument.groups` in `shared/src/domain/types.ts`, and export the new types from `shared/src/index.ts`.
 - [X] T003 Extend `shared/src/validation/schemas.ts` with the supported C4 type schema, group/member/layout schemas, optional `groups` defaulting to `[]`, and field-addressable validation for new component and group writes.
-- [X] T004 Add pure group geometry helpers in `shared/src/domain/group-layout.ts` for padded bounds calculation around existing member positions, boundary containment, member-to-group relative positions, constrained member movement, and translating a group with all member components without auto-arranging them.
-- [X] T005 Extend `shared/src/domain/invariants.ts` to validate group UUID and diagram ownership, unique names after trimming and case-insensitive comparison, at least two unique Software System members, one-group-per-component, non-nesting, positive finite layout, constrained member boundary containment, and unchanged relationship or ADR reference rules.
-- [X] T006 [P] Add shared fixtures and domain/validation tests for supported and legacy C4 types, trimmed/case-insensitive duplicate group names, membership cardinality, missing/cross-diagram/non-system members, duplicate membership, non-nesting, position-preserving creation bounds, constrained member layout, and unchanged component/relationship/ADR IDs in `shared/tests/c4-system-groups.test.ts`.
+- [X] T004 Add pure group geometry helpers in `shared/src/domain/group-layout.ts` for padded bounds calculation around existing member positions, boundary containment, member-to-group relative positions, automatic boundary fitting after member movement or resize, and translating a group with all member components without auto-arranging them.
+- [X] T005 Extend `shared/src/domain/invariants.ts` to validate group UUID and diagram ownership, unique names after trimming and case-insensitive comparison, at least two unique Software System members, one-group-per-component, non-nesting, positive finite layout, boundary containment after layout changes, and unchanged relationship or ADR reference rules.
+- [X] T006 [P] Add shared fixtures and domain/validation tests for supported and legacy C4 types, trimmed/case-insensitive duplicate group names, membership cardinality, missing/cross-diagram/non-system members, duplicate membership, non-nesting, position-preserving creation bounds, expanding/repositioning/shrinking member layout, and unchanged component/relationship/ADR IDs in `shared/tests/c4-system-groups.test.ts`.
 - [X] T007 [P] Add `system_groups` and `system_group_members` tables, indexes, composite membership key, timestamps, and explicit non-cascading foreign keys in `backend/drizzle/0003_system_groups.sql` and `backend/src/persistence/schema.ts`.
 - [X] T008 [P] Add initial Fastify contract assertions for `groups`, C4 component `type`, group validation errors, component-removal group conflicts, and Mermaid group export responses in `backend/tests/contract/system-groups.test.ts` using `specs/003-c4-system-groups/contracts/openapi.yaml`.
 - [X] T009 Update the in-memory and PostgreSQL diagram repositories in `backend/src/persistence/diagram-repository.ts` to load groups deterministically, map normalized memberships, insert/replace them transactionally with the complete document, preserve existing group IDs and creation timestamps, and return `groups: []` for legacy diagrams.
@@ -94,20 +94,20 @@ is unchanged.
 
 ### Tests for User Story 2
 
-- [X] T019 [P] [US2] Add store tests for valid/invalid group creation, trimmed/case-insensitive name uniqueness, preserved member positions, constrained member movement, explicit member removal, rename, ungroup, group translation deltas, and undo/redo in `frontend/tests/system-group-store.test.ts`.
-- [X] T020 [P] [US2] Add adapter tests for parent-before-child ordering, `parentId`, relative child positions, `extent: 'parent'`, non-connectable group nodes, position-preserving initial bounds, constrained member movement, stable edge endpoints, and group drag round trips in `frontend/tests/react-flow-groups.test.ts`.
-- [X] T021 [P] [US2] Add inspector and canvas accessibility tests for multi-selection, invalid Person selection, trimmed/case-insensitive group-name validation, member review/removal, constrained movement feedback, rename, ungroup confirmation, focus, and status feedback in `frontend/tests/system-group-ui.test.tsx`.
+- [X] T019 [P] [US2] Add store tests for valid/invalid group creation, trimmed/case-insensitive name uniqueness, preserved member positions, automatic boundary fitting after member movement or resize, explicit member removal, rename, ungroup, group translation deltas, and undo/redo in `frontend/tests/system-group-store.test.ts`.
+- [X] T020 [P] [US2] Add adapter tests for parent-before-child ordering, `parentId`, relative child positions, `expandParent: true`, non-connectable group nodes, position-preserving initial bounds, automatic boundary fitting after member movement, stable edge endpoints, and group drag round trips in `frontend/tests/react-flow-groups.test.ts`.
+- [X] T021 [P] [US2] Add inspector and canvas accessibility tests for multi-selection, invalid Person selection, trimmed/case-insensitive group-name validation, member review/removal, boundary-fitting feedback, rename, ungroup confirmation, focus, and status feedback in `frontend/tests/system-group-ui.test.tsx`.
 
 ### Implementation for User Story 2
 
-- [X] T022 [US2] Implement `createGroup`, `renameGroup`, `moveGroup`, `removeGroupMember`, and `ungroup` in `frontend/src/state/diagram-store.ts` using shared geometry helpers, explicit bounded history, trimmed/case-insensitive name validation, a boundary fitted around existing member positions without auto-arranging them, constrained member movement, stable member IDs, and no relationship/ADR mutations.
-- [X] T023 [US2] Extend `toReactFlow` and the reverse drag conversion in `frontend/src/adapters/react-flow/diagram-adapter.ts` to emit parent group nodes before children, convert absolute domain positions to relative positions, apply `extent: 'parent'`, clamp member geometry inside the boundary, and preserve membership until an explicit removal action.
+- [X] T022 [US2] Implement `createGroup`, `renameGroup`, `moveGroup`, `removeGroupMember`, and `ungroup` in `frontend/src/state/diagram-store.ts` using shared geometry helpers, explicit bounded history, trimmed/case-insensitive name validation, a boundary fitted around existing member positions without auto-arranging them, automatic refitting after member movement or resize, stable member IDs, and no relationship/ADR mutations.
+- [X] T023 [US2] Extend `toReactFlow` and the reverse drag conversion in `frontend/src/adapters/react-flow/diagram-adapter.ts` to emit parent group nodes before children, convert absolute domain positions to relative positions, use `expandParent: true`, refit the group after member movement or resize, and preserve membership until an explicit removal action.
 - [X] T024 [US2] Create the selectable, non-connectable labeled boundary node in `frontend/src/components/SystemGroupNode.tsx`, including a keyboard-readable group name and member context without using color as the sole cue.
-- [X] T025 [US2] Update `frontend/src/components/DiagramCanvas.tsx` to register group nodes, track keyboard-usable multi-selection, select groups separately from components/relationships, move groups with member deltas, constrain member dragging, and preserve relationship endpoints.
+- [X] T025 [US2] Update `frontend/src/components/DiagramCanvas.tsx` to register group nodes, track keyboard-usable multi-selection, select groups separately from components/relationships, move groups with member deltas, reconcile member dragging with automatic boundary fitting, and preserve relationship endpoints.
 - [X] T026 [US2] Add the `Group selected systems` command and selection feedback to `frontend/src/components/DiagramToolbar.tsx`, including disabled/invalid states for fewer than two or non-Software-System selections.
 - [X] T027 [US2] Add group creation, member review, rename, explicit `Remove from group`, and confirmed `Ungroup` workflows to `frontend/src/components/WorkspaceInspector.tsx`, with actionable duplicate/blank/minimum-member errors, capitalization/whitespace duplicate detection, and feedback that creation preserves existing member positions.
 - [X] T028 [US2] Add group boundary, type-label, responsive, focus, and contrast styles to `frontend/src/styles.css` using flat labeled boundaries, existing hairlines, Action Blue controls, Focus Blue rings, spacing tokens, and no gradients or decorative group shadows.
-- [X] T029 [US2] Add the multi-select, position-preserving create, boundary rendering, group drag, constrained member movement, invalid selection/name variants, rename, explicit member removal, and confirmed ungroup acceptance journeys in `e2e/tests/c4-system-groups.spec.ts`.
+- [X] T029 [US2] Add the multi-select, position-preserving create, boundary rendering, group drag, member movement with boundary expansion/repositioning/shrink-to-fit, invalid selection/name variants, rename, explicit member removal, and confirmed ungroup acceptance journeys in `e2e/tests/c4-system-groups.spec.ts`.
 
 ### Follow-up tests and implementation for updated selection feedback
 
@@ -119,6 +119,19 @@ is unchanged.
 **Checkpoint**: US2 is independently demonstrable with seeded or newly typed systems, and all group
 operations preserve member artifacts, relationships, and ADR references in the local document. The
 selection state is clear and accessible, and incompatible selections provide an actionable reason.
+
+### Follow-up for automatic boundary fitting after member movement
+
+- [ ] T034 [P] [US2] Extend geometry tests for moving or resizing a member beyond each group edge, fitting the boundary around all member boxes with padding, repositioning the boundary for new left/top extremes, shrinking unused space, and preserving absolute member positions in `shared/tests/c4-system-groups.test.ts`.
+- [ ] T035 [P] [US2] Add store tests for member movement and resize history that verify automatic boundary expansion, repositioning, and shrink-to-fit while preserving group membership, component IDs, and relationship/ADR references in `frontend/tests/system-group-store.test.ts`.
+- [ ] T036 [P] [US2] Add React Flow adapter tests for `expandParent: true`, measured member bounds, parent-before-child output, member positions outside the prior boundary during drag, and round-trip persistence of the refitted group layout in `frontend/tests/react-flow-groups.test.ts`.
+- [ ] T037 [US2] Update `shared/src/domain/group-layout.ts` and `shared/src/domain/invariants.ts` with deterministic fit-after-layout rules that enclose every rendered member box with label and padding insets while allowing group expansion, repositioning, and shrink-to-fit without changing membership.
+- [ ] T038 [US2] Update `frontend/src/state/diagram-store.ts`, `frontend/src/adapters/react-flow/diagram-adapter.ts`, and `frontend/src/components/DiagramCanvas.tsx` to allow a member to cross the prior boundary, recompute and persist the fitted group position/size after member drag or resize, and keep domain-owned absolute positions and stable membership authoritative.
+- [ ] T039 [US2] Extend the member-movement acceptance journey in `e2e/tests/c4-system-groups.spec.ts` to move members beyond right, left, bottom, and top edges, verify expansion or repositioning and later shrink-to-fit, then save/reopen and confirm the fitted boundary still encloses every member.
+
+**Checkpoint**: US2 also proves that member movement never becomes trapped by the previous boundary:
+the group refits around all members in every direction, persists the resulting layout, and retains
+stable membership and references.
 
 ---
 
@@ -133,18 +146,18 @@ members, and verify Mermaid output or an actionable unsupported-format error.
 
 ### Tests for User Story 3
 
-- [ ] T034 [P] [US3] Add PostgreSQL/in-memory persistence tests for group round trips, legacy empty-group compatibility, normalized membership, trimmed/case-insensitive name uniqueness, position-preserving group creation data, group ID/createdAt preservation, transactional invalid-save immutability, and component deletion conflicts in `backend/tests/persistence/system-groups.test.ts`.
-- [ ] T035 [P] [US3] Add Mermaid tests for Person and Software System shapes, labeled stable-ID subgraphs, complete relationship emission, escaped group names, invalid group errors, and no silent omission in `shared/tests/c4-system-groups-export.test.ts`.
-- [ ] T036 [P] [US3] Add frontend recovery/history tests for failed group saves, retry, stale save responses, save/reopen replacement, undo/redo, group deletion confirmation, and preservation of component/ADR identities in `frontend/tests/system-group-recovery.test.tsx`.
-- [ ] T037 [P] [US3] Add the save/reopen, member rename/reposition, ADR-link integrity, group deletion confirmation, grouped-component deletion conflict, and Mermaid export journey in `e2e/tests/c4-system-groups-persistence.spec.ts`.
+- [ ] T040 [P] [US3] Add PostgreSQL/in-memory persistence tests for group round trips, legacy empty-group compatibility, normalized membership, trimmed/case-insensitive name uniqueness, position-preserving group creation data, group ID/createdAt preservation, transactional invalid-save immutability, and component deletion conflicts in `backend/tests/persistence/system-groups.test.ts`.
+- [ ] T041 [P] [US3] Add Mermaid tests for Person and Software System shapes, labeled stable-ID subgraphs, complete relationship emission, escaped group names, invalid group errors, and no silent omission in `shared/tests/c4-system-groups-export.test.ts`.
+- [ ] T042 [P] [US3] Add frontend recovery/history tests for failed group saves, retry, stale save responses, save/reopen replacement, undo/redo, group deletion confirmation, and preservation of component/ADR identities in `frontend/tests/system-group-recovery.test.tsx`.
+- [ ] T043 [P] [US3] Add the save/reopen, member rename/reposition, ADR-link integrity, group deletion confirmation, grouped-component deletion conflict, and Mermaid export journey in `e2e/tests/c4-system-groups-persistence.spec.ts`.
 
 ### Implementation for User Story 3
 
-- [ ] T038 [US3] Complete transactional group reconciliation, server timestamp handling, legacy document defaults, stable group/member ID preservation, and grouped-component deletion blockers in `backend/src/persistence/diagram-repository.ts` and `backend/src/services/diagram-service.ts`.
-- [ ] T039 [US3] Extend `shared/src/export/mermaid-export.ts` to validate group data, escape group names, render typed component shapes, emit each group as a labeled `subgraph`, retain all relationships, and raise actionable group-specific errors for unsupported content.
-- [ ] T040 [US3] Update `frontend/src/components/ExportButton.tsx` and `frontend/src/api/export-client.ts` to expose Mermaid group semantics, explain that exact canvas positions are not exported, and surface group-specific validation failures without clearing saved data.
-- [ ] T041 [US3] Update `frontend/src/components/RecoveryControls.tsx` and `frontend/src/api/diagram-client.ts` to display group-membership deletion conflicts, preserve confirmation semantics, and keep existing relationship/ADR dependency messaging intact.
-- [ ] T042 [US3] Harden save/load response handling in `frontend/src/state/diagram-store.ts` so grouped drafts remain visible on failure, retries submit unchanged data, stale responses cannot overwrite newer group edits, and successful reopen resets history only after replacement succeeds.
+- [ ] T044 [US3] Complete transactional group reconciliation, server timestamp handling, legacy document defaults, stable group/member ID preservation, and grouped-component deletion blockers in `backend/src/persistence/diagram-repository.ts` and `backend/src/services/diagram-service.ts`.
+- [ ] T045 [US3] Extend `shared/src/export/mermaid-export.ts` to validate group data, escape group names, render typed component shapes, emit each group as a labeled `subgraph`, retain all relationships, and raise actionable group-specific errors for unsupported content.
+- [ ] T046 [US3] Update `frontend/src/components/ExportButton.tsx` and `frontend/src/api/export-client.ts` to expose Mermaid group semantics, explain that exact canvas positions are not exported, and surface group-specific validation failures without clearing saved data.
+- [ ] T047 [US3] Update `frontend/src/components/RecoveryControls.tsx` and `frontend/src/api/diagram-client.ts` to display group-membership deletion conflicts, preserve confirmation semantics, and keep existing relationship/ADR dependency messaging intact.
+- [ ] T048 [US3] Harden save/load response handling in `frontend/src/state/diagram-store.ts` so grouped drafts remain visible on failure, retries submit unchanged data, stale responses cannot overwrite newer group edits, and successful reopen resets history only after replacement succeeds.
 
 **Checkpoint**: US3 proves durable reference integrity and recoverable group behavior across the
 shared, persistence, API, frontend, and export boundaries.
@@ -156,10 +169,10 @@ shared, persistence, API, frontend, and export boundaries.
 **Purpose**: Finish documentation, accessibility, compatibility, and release validation across all
 stories.
 
-- [ ] T043 [P] Document C4 component types, group behavior, migration `0003_system_groups.sql`, Mermaid limitations, and stable-reference guarantees in `README.md`.
-- [ ] T044 [P] Add responsive and accessibility regression coverage for group labels, focus order, 44px targets, contrast, keyboard multi-selection, selected-state highlighting, incompatibility explanations, and confirmation dialogs in `frontend/tests/accessibility.test.tsx` and `frontend/src/styles.css`.
-- [ ] T045 [P] Reconcile the implementation-facing contract, data model, and validation scenarios in `specs/003-c4-system-groups/contracts/openapi.yaml`, `specs/003-c4-system-groups/data-model.md`, and `specs/003-c4-system-groups/quickstart.md` after implementation details stabilize.
-- [ ] T046 Run every command and acceptance scenario in `specs/003-c4-system-groups/quickstart.md`, including `npm test`, `npm run build`, and `npm run test:e2e`, and resolve any regression before marking the feature complete.
+- [ ] T049 [P] Document C4 component types, group behavior, migration `0003_system_groups.sql`, Mermaid limitations, and stable-reference guarantees in `README.md`.
+- [ ] T050 [P] Add responsive and accessibility regression coverage for group labels, focus order, 44px targets, contrast, keyboard multi-selection, selected-state highlighting, incompatibility explanations, and confirmation dialogs in `frontend/tests/accessibility.test.tsx` and `frontend/src/styles.css`.
+- [ ] T051 [P] Reconcile the implementation-facing contract, data model, and validation scenarios in `specs/003-c4-system-groups/contracts/openapi.yaml`, `specs/003-c4-system-groups/data-model.md`, and `specs/003-c4-system-groups/quickstart.md` after implementation details stabilize.
+- [ ] T052 Run every command and acceptance scenario in `specs/003-c4-system-groups/quickstart.md`, including `npm test`, `npm run build`, and `npm run test:e2e`, and resolve any regression before marking the feature complete.
 
 ---
 
@@ -170,9 +183,9 @@ stories.
 - **Phase 1 (Setup)**: T001 has no dependencies.
 - **Phase 2 (Foundational)**: T002-T011 depend on T001 where they use the shared C4 vocabulary; this phase blocks all story implementation.
 - **Phase 3 (US1)**: T012-T018 depend on Phase 2. US1 is the recommended first vertical slice and MVP.
-- **Phase 4 (US2)**: T019-T033 depend on Phase 2 and the typed component behavior from US1 for the end-to-end creation path. Adapter/store work can use seeded typed fixtures before US1 UI completion; T030-T033 are the follow-up selection-feedback slice after the original US2 implementation tasks.
-- **Phase 5 (US3)**: T034-T042 depend on Phase 2; the full browser persistence journey depends on the completed US1/US2 UI, while backend/export work can proceed in parallel after the foundation.
-- **Phase 6 (Polish)**: T043-T046 depend on the desired story checkpoints, with documentation and accessibility work able to start as soon as their target behavior exists.
+- **Phase 4 (US2)**: T019-T039 depend on Phase 2 and the typed component behavior from US1 for the end-to-end creation path. Adapter/store work can use seeded typed fixtures before US1 UI completion; T030-T033 are the follow-up selection-feedback slice, and T034-T039 are the follow-up automatic-boundary-fitting slice after the original US2 implementation tasks.
+- **Phase 5 (US3)**: T040-T048 depend on Phase 2; the full browser persistence journey depends on the completed US1/US2 UI, while backend/export work can proceed in parallel after the foundation.
+- **Phase 6 (Polish)**: T049-T052 depend on the desired story checkpoints, with documentation and accessibility work able to start as soon as their target behavior exists.
 
 ### User Story Completion Order
 
@@ -188,9 +201,9 @@ round-trip and Mermaid work can proceed alongside US2; its end-to-end workflow f
 
 - After T005, run T006 shared tests and T007 database/schema work in parallel; T008 contract tests can run independently against the checked-in OpenAPI artifact.
 - Within US1, T012 and T013 are parallel test work; T015 and T017 touch separate UI files after shared type behavior is available.
-- Within US2, T019, T020, and T021 are parallel baseline test work; T024, T026, and T028 touch separate UI files after the store/adapter contracts are established. T030 and T031 are parallel follow-up tests, followed by T032 and T033 for the canvas/workspace and toolbar/inspector updates.
-- Within US3, T034, T035, T036, and T037 are parallel test work; T039 and T041 touch separate export/recovery boundaries after the foundational persistence contract exists.
-- In Polish, T043, T044, and T045 are parallel documentation/test work before T046's full validation run.
+- Within US2, T019, T020, and T021 are parallel baseline test work; T024, T026, and T028 touch separate UI files after the store/adapter contracts are established. T030 and T031 are parallel selection-feedback tests, followed by T032 and T033 for the canvas/workspace and toolbar/inspector updates. T034-T036 are parallel boundary-fitting tests, followed by T037-T038 for shared geometry and editor integration, then T039 for the browser journey.
+- Within US3, T040, T041, T042, and T043 are parallel test work; T045 and T047 touch separate export/recovery boundaries after the foundational persistence contract exists.
+- In Polish, T049, T050, and T051 are parallel documentation/test work before T052's full validation run.
 
 ## Parallel Example: User Story 1
 
@@ -210,22 +223,26 @@ Task T020: Add React Flow group adapter tests in frontend/tests/react-flow-group
 Task T021: Add group inspector/canvas tests in frontend/tests/system-group-ui.test.tsx
 Task T030: Add selection-feedback UI tests in frontend/tests/system-group-ui.test.tsx
 Task T031: Add mixed-type grouping acceptance tests in e2e/tests/c4-system-groups.spec.ts
+Task T034: Add shared boundary-fitting geometry tests in shared/tests/c4-system-groups.test.ts
+Task T035: Add store boundary-fitting tests in frontend/tests/system-group-store.test.ts
+Task T036: Add React Flow boundary-fitting tests in frontend/tests/react-flow-groups.test.ts
 ```
 
 Then implement T022-T025 in dependency order; T026-T028 can be split by toolbar, inspector, node,
 and stylesheet ownership before T029 runs the integrated journey. Complete T032-T033 for the updated
-selection feedback and incompatibility explanation behavior before re-running T031.
+selection feedback and incompatibility explanation behavior before re-running T031. Complete T037,
+then T038, and finish with T039 for automatic boundary expansion, repositioning, and shrink-to-fit.
 
 ## Parallel Example: User Story 3
 
 ```text
-Task T034: Add repository round-trip tests in backend/tests/persistence/system-groups.test.ts
-Task T035: Add Mermaid group export tests in shared/tests/c4-system-groups-export.test.ts
-Task T036: Add frontend recovery tests in frontend/tests/system-group-recovery.test.tsx
-Task T037: Add persistence/reference Playwright tests in e2e/tests/c4-system-groups-persistence.spec.ts
+Task T040: Add repository round-trip tests in backend/tests/persistence/system-groups.test.ts
+Task T041: Add Mermaid group export tests in shared/tests/c4-system-groups-export.test.ts
+Task T042: Add frontend recovery tests in frontend/tests/system-group-recovery.test.tsx
+Task T043: Add persistence/reference Playwright tests in e2e/tests/c4-system-groups-persistence.spec.ts
 ```
 
-Implement T038-T042 after the boundary tests expose the missing behavior, keeping backend, export,
+Implement T044-T048 after the boundary tests expose the missing behavior, keeping backend, export,
 recovery UI, and store work in separate files where possible.
 
 ## Implementation Strategy
@@ -241,9 +258,11 @@ recovery UI, and store work in separate files where possible.
 
 1. Foundation + US1: typed Person and Software System components.
 2. Add US2: selectable, movable, reviewable, and removable system groups.
-3. Add US3: durable group persistence, ADR/reference preservation, deletion protection, recovery,
+3. Complete T034-T039 to add automatic boundary fitting when members move or resize beyond the prior
+   boundary.
+4. Add US3: durable group persistence, ADR/reference preservation, deletion protection, recovery,
    and Mermaid export.
-4. Complete Phase 6 and run the full quickstart validation.
+5. Complete Phase 6 and run the full quickstart validation.
 
 ### Notes
 

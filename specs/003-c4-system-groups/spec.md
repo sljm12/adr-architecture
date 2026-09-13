@@ -13,7 +13,7 @@
 ### Session 2026-09-11
 
 - Q: Can a Software System belong to more than one system group in the same diagram? → A: Each Software System belongs to at most one group.
-- Q: When a grouped system is moved or resized toward or beyond the group boundary, how should the application behave? → A: Constrain the member inside the boundary and use an explicit removal action.
+- Q: When a grouped system is moved or resized toward or beyond the group boundary, how should the application behave? → A: Allow the member to move and automatically resize or reposition the group boundary to fit all members with visible spacing; membership changes still require an explicit removal action. (Updated 2026-09-13.)
 - Q: How should Mermaid export handle a diagram that contains system groups? → A: Export groups as labeled Mermaid `subgraph` sections and explain that exact canvas positions are not preserved.
 - Q: When a new group is created, should its selected systems keep their existing positions or be automatically arranged inside the boundary? → A: Keep the existing positions and fit the boundary around the systems.
 - Q: Should group names that differ only by capitalization or surrounding whitespace be treated as duplicates within the same diagram? → A: Treat names as duplicates after trimming and ignoring capitalization.
@@ -51,7 +51,8 @@ When several software systems collectively form a larger system, an architecture
 3. **Given** a diagram contains at least two compatible Software System components, **When** the author starts grouping after selecting them, **Then** the author can provide a group name and create a group.
 4. **Given** a group is created, **When** the diagram is displayed, **Then** a labeled bounding box is rendered behind the member systems with enough visible spacing to distinguish the boundary from the members, without rearranging the systems’ existing positions.
 5. **Given** a group contains multiple systems, **When** the author moves the group, **Then** the member systems move with it while preserving their relative positions.
-6. **Given** a group exists, **When** the author renames the group or ungroups it, **Then** the requested change is reflected without deleting the member systems or their relationships.
+6. **Given** a group contains multiple systems, **When** the author moves a member system so that its new bounds extend beyond the current group boundary, **Then** the group automatically resizes or repositions to enclose every member with visible spacing, without rearranging the member systems or changing their membership.
+7. **Given** a group exists, **When** the author renames the group or ungroups it, **Then** the requested change is reflected without deleting the member systems or their relationships.
 
 ---
 
@@ -76,7 +77,8 @@ When an architecture author saves, reopens, or edits a grouped diagram, the grou
 - The author attempts to create a group with fewer than two systems; the action is rejected with a clear explanation and no partial group is created.
 - The author selects a Person or another non-system artifact for a system group; the interface prevents group creation and explains which artifact type is incompatible and why it cannot be grouped with the current selection.
 - During multi-component grouping selection, each selected component is visibly highlighted, the highlight updates when a component is selected or deselected, and the selection feedback is cleared when grouping is canceled or completed.
-- A member system is moved or resized toward or beyond the group boundary; movement is constrained so the member remains enclosed, and the author can explicitly remove it from the group.
+- A member system is moved or resized so that it reaches or exceeds any edge of the current group boundary; the group automatically resizes or repositions to fit the updated bounds of all members with consistent visible spacing, and the author can explicitly remove the member from the group.
+- A member system is moved back toward the other members; the group boundary readjusts to the current combined member bounds without leaving any member outside the boundary.
 - A group name is empty, whitespace-only, or duplicates another group name in the same diagram after trimming and ignoring capitalization; the author receives actionable validation and the existing group data is not changed.
 - A grouped diagram is exported to a format that cannot represent group boundaries; the author is warned about the limitation and grouping data is not silently removed from the saved diagram. Mermaid represents supported groups as labeled `subgraph` sections and explains that exact canvas positions are not preserved.
 - A group contains a member whose name changes; the boundary and membership remain tied to the stable member identity rather than the old name or screen position.
@@ -91,7 +93,7 @@ When an architecture author saves, reopens, or edits a grouped diagram, the grou
 - **FR-004**: A system group MUST have its own stable identity, human-readable name, and membership references to the stable identities of its member systems; each Software System MUST belong to at most one group.
 - **FR-005**: The system MUST render each system group as a labeled bounding box behind its member systems, with all members visually enclosed and individually readable.
 - **FR-006**: Moving a system group MUST move all member systems together while preserving their relative arrangement; it MUST NOT change the logical relationships between members or other components.
-- **FR-007**: The system MUST constrain member movement and layout changes so a group boundary continues to enclose all of its members, and MUST provide an explicit way to remove a member from the group.
+- **FR-007**: The system MUST allow an author to move or resize a member system within a group, automatically resizing or repositioning the group boundary after the change so that it encloses every member with consistent visible spacing; it MUST provide an explicit way to remove a member from the group.
 - **FR-008**: The author MUST be able to rename a group, review its members, and ungroup it without deleting the member systems, their relationships, or their ADR links.
 - **FR-009**: The system MUST reject invalid group creation or membership changes with an actionable, human-readable message that identifies the violated rule and, where applicable, the incompatible artifact type or types, including attempts to group fewer than two systems, unsupported artifact types, or group names that duplicate another name after trimming and ignoring capitalization. For example, it MUST explain that a Person cannot be grouped with a Software System because system groups contain only Software Systems.
 - **FR-010**: Group membership, group names, boundary layout, component artifact types, relationships, and ADR links MUST persist when the diagram is saved and reopened.
@@ -121,6 +123,7 @@ When an architecture author saves, reopens, or edits a grouped diagram, the grou
 - **SC-005**: Every invalid grouping attempt in validation produces an actionable message that identifies the incompatible artifact type or violated grouping rule, including why a Person cannot be grouped with a Software System, and leaves the existing diagram unchanged.
 - **SC-006**: Authors can distinguish the group boundary from its member systems at normal diagram zoom without relying on color alone.
 - **SC-007**: In 100% of multi-component grouping validation scenarios, authors can identify every currently selected component from its visual selection state, and the selection state updates correctly after selection, deselection, cancellation, and completion.
+- **SC-008**: In 100% of member-movement validation scenarios, the group boundary readjusts to enclose every member after a member is moved or resized beyond a prior edge, while preserving each member’s position, identity, and group membership.
 
 ## Assumptions
 
@@ -128,7 +131,7 @@ When an architecture author saves, reopens, or edits a grouped diagram, the grou
 - A system group represents a named larger-system boundary for organization and communication; member systems remain independently addressable architecture elements.
 - Only Software System components can be members of a system group. Person components remain outside the group boundary in version one.
 - A Software System can belong to at most one system group in version one; group boundaries do not overlap through shared membership.
-- Member movement is constrained within the current group boundary; membership changes happen only through an explicit removal action.
+- Member movement is not blocked by the current group boundary; after a member is moved or resized, the boundary automatically fits all current members with consistent visible spacing. Membership changes happen only through an explicit removal action.
 - Mermaid export preserves group names and membership semantically as `subgraph` sections, but does not preserve exact canvas positions.
 - Creating a group preserves each selected system’s existing position and calculates the initial boundary around those positions.
 - Group-name uniqueness is checked after trimming whitespace and ignoring capitalization.
