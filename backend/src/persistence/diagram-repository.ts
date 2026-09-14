@@ -30,6 +30,11 @@ export type RemoveRelationshipResult =
 
 const clone = (document: DiagramDocument) => structuredClone(document);
 const groupsOf = (document: DiagramDocument) => document.groups ?? [];
+const normalizedGroups = (document: DiagramDocument) => groupsOf(document).map(group => ({
+  ...group,
+  name: group.name.trim(),
+  memberComponentIds: [...group.memberComponentIds],
+}));
 
 /** Isolated repository used by tests; production injects PostgresDiagramRepository. */
 export class DiagramRepository implements DiagramRepositoryLike {
@@ -40,9 +45,10 @@ export class DiagramRepository implements DiagramRepositoryLike {
   get(id: string) { const document = this.documents.get(id); return document && clone(document); }
   findComponent(id: string) { for (const document of this.documents.values()) { const component = document.components.find(item => item.id === id); if (component) return { id: component.id, diagramId: component.diagramId, name: component.name }; } return undefined; }
   findRelationship(id: string) { for (const document of this.documents.values()) { const relationship = document.relationships.find(item => item.id === id); if (relationship) return { id: relationship.id, diagramId: relationship.diagramId }; } return undefined; }
-  create(document: DiagramDocument) { const normalized = { ...document, groups: groupsOf(document) }; this.documents.set(document.id, clone(normalized)); return clone(normalized); }
+  create(document: DiagramDocument) { const normalized = { ...document, groups: normalizedGroups(document) }; this.documents.set(document.id, clone(normalized)); return clone(normalized); }
   replace(document: DiagramDocument) {
     const previous = this.documents.get(document.id);
+    if (!previous || previous.status !== 'active') return undefined;
     const updatedAt = new Date().toISOString();
     const updated = {
       ...document,
@@ -55,8 +61,8 @@ export class DiagramRepository implements DiagramRepositoryLike {
         const prior = previous?.relationships.find(item => item.id === relationship.id);
         return { ...relationship, label: relationship.label?.trim() || null, createdAt: prior?.createdAt ?? relationship.createdAt, updatedAt };
       }),
-      groups: groupsOf(document).map(group => {
-        const prior = groupsOf(previous ?? document).find(item => item.id === group.id);
+      groups: normalizedGroups(document).map(group => {
+        const prior = groupsOf(previous).find(item => item.id === group.id);
         return { ...group, name: group.name.trim(), memberComponentIds: [...group.memberComponentIds], createdAt: prior?.createdAt ?? group.createdAt, updatedAt };
       }),
     };

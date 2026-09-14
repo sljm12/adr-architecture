@@ -37,7 +37,7 @@ export function assertDiagramInvariants(document: DiagramDocument): void {
       const member = document.components.find(component => component.id === memberId);
       if (!member) throw new Error(`Group ${group.id} references missing component ${memberId}`);
       if (member.diagramId !== document.id) throw new Error(`Group member ${memberId} must belong to diagram ${document.id}`);
-      if (member.type !== 'software-system') throw new Error(`Group member ${memberId} must be a Software System`);
+      if (member.type !== 'software-system') throw new Error(`Group ${group.id} member ${memberId} must be a Software System`);
       const priorGroup = memberGroups.get(memberId);
       if (priorGroup) throw new Error(`Component ${memberId} cannot belong to more than one group (${priorGroup} and ${group.id})`);
       memberGroups.set(memberId, group.id);

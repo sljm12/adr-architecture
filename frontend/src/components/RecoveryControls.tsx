@@ -6,6 +6,17 @@ import './recovery.css';
 
 type Selection = { kind: 'component' | 'relationship'; id: string } | null;
 
+export function formatComponentRemovalError(error: unknown, name: string): string {
+  if (error instanceof DiagramApiError && error.status === 409) {
+    const groupIds = Array.isArray(error.details.groupIds) ? error.details.groupIds.filter((id): id is string => typeof id === 'string') : [];
+    if (groupIds.length) {
+      return `Cannot remove ${name}: it belongs to system group${groupIds.length === 1 ? '' : 's'} ${groupIds.join(', ')}. Remove membership or ungroup first.`;
+    }
+    return `Cannot remove ${name}: ${error.message}`;
+  }
+  return error instanceof Error ? `Could not remove ${name}: ${error.message}` : `Could not remove ${name}.`;
+}
+
 export function RecoveryControls({ selection }: { selection: Selection }) {
   const document = useDiagramStore(state => state.document);
   const update = useDiagramStore(state => state.update);
@@ -29,7 +40,7 @@ export function RecoveryControls({ selection }: { selection: Selection }) {
     if (!removal || removing) return;
     setRemoving(true);
     try { const result = await diagramClient.removeComponent(document.id, removal.componentId); update(() => result.document); setRemoval(null); setNotice(`${component?.name ?? 'Component'} removed. Undo available.`); }
-    catch (error) { setNotice(error instanceof DiagramApiError && error.status === 409 ? `Cannot remove ${removal.name}: ${error.message}` : error instanceof Error ? `Could not remove ${removal.name}: ${error.message}` : `Could not remove ${removal.name}.`); setRemoval(null); }
+    catch (error) { setNotice(formatComponentRemovalError(error, removal.name)); setRemoval(null); }
     finally { setRemoving(false); }
   };
   const removeRelationship = async () => {

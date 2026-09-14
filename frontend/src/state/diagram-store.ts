@@ -40,6 +40,7 @@ type State = {
   setRelationshipDirection: (relationshipId: string, direction: RelationshipDirection) => boolean;
   removeRelationship: (relationshipId: string) => void;
   save: () => Promise<void>;
+  retry: () => Promise<void>;
   refreshSavedDocuments: () => Promise<void>;
   loadSavedDocument: (id: string) => Promise<boolean>;
 };
@@ -349,17 +350,14 @@ export const useDiagramStore = create<State>((set, get) => ({
       if (get().document === documentAtSaveStart) {
         const normalized = copy(saved);
         set(state => ({ document: normalized, status: 'saved', error: null, savedDocuments: replaceSummary(state.savedDocuments, summary(normalized)) }));
-      } else {
-        set({ status: 'unsaved', error: null });
       }
     } catch (error) {
       if (get().document === documentAtSaveStart) {
         set({ status: 'failed', error: error instanceof Error ? error.message : 'Save failed' });
-      } else {
-        set({ status: 'unsaved', error: null });
       }
     }
   },
+  retry: async () => { await get().save(); },
   refreshSavedDocuments: async () => {
     set({ savedDocumentsStatus: 'loading', savedDocumentsError: null });
     try { const savedDocuments = await diagramClient.list(); set({ savedDocuments, savedDocumentsStatus: 'loaded', savedDocumentsError: null }); }

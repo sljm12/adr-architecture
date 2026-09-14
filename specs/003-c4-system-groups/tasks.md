@@ -146,18 +146,18 @@ members, and verify Mermaid output or an actionable unsupported-format error.
 
 ### Tests for User Story 3
 
-- [ ] T040 [P] [US3] Add PostgreSQL/in-memory persistence tests for group round trips, legacy empty-group compatibility, normalized membership, trimmed/case-insensitive name uniqueness, position-preserving group creation data, group ID/createdAt preservation, transactional invalid-save immutability, and component deletion conflicts in `backend/tests/persistence/system-groups.test.ts`.
-- [ ] T041 [P] [US3] Add Mermaid tests for Person and Software System shapes, labeled stable-ID subgraphs, complete relationship emission, escaped group names, invalid group errors, and no silent omission in `shared/tests/c4-system-groups-export.test.ts`.
-- [ ] T042 [P] [US3] Add frontend recovery/history tests for failed group saves, retry, stale save responses, save/reopen replacement, undo/redo, group deletion confirmation, and preservation of component/ADR identities in `frontend/tests/system-group-recovery.test.tsx`.
-- [ ] T043 [P] [US3] Add the save/reopen, member rename/reposition, ADR-link integrity, group deletion confirmation, grouped-component deletion conflict, and Mermaid export journey in `e2e/tests/c4-system-groups-persistence.spec.ts`.
+- [X] T040 [P] [US3] Add PostgreSQL/in-memory persistence tests for group round trips, legacy empty-group compatibility, normalized membership, trimmed/case-insensitive name uniqueness, position-preserving group creation data, group ID/createdAt preservation, transactional invalid-save immutability, and component deletion conflicts in `backend/tests/persistence/system-groups.test.ts`.
+- [X] T041 [P] [US3] Add Mermaid tests for Person and Software System shapes, labeled stable-ID subgraphs, complete relationship emission, escaped group names, invalid group errors, and no silent omission in `shared/tests/c4-system-groups-export.test.ts`.
+- [X] T042 [P] [US3] Add frontend recovery/history tests for failed group saves, retry, stale save responses, save/reopen replacement, undo/redo, group deletion confirmation, and preservation of component/ADR identities in `frontend/tests/system-group-recovery.test.tsx`.
+- [X] T043 [P] [US3] Add the save/reopen, member rename/reposition, ADR-link integrity, group deletion confirmation, grouped-component deletion conflict, and Mermaid export journey in `e2e/tests/c4-system-groups-persistence.spec.ts`.
 
 ### Implementation for User Story 3
 
-- [ ] T044 [US3] Complete transactional group reconciliation, server timestamp handling, legacy document defaults, stable group/member ID preservation, and grouped-component deletion blockers in `backend/src/persistence/diagram-repository.ts` and `backend/src/services/diagram-service.ts`.
-- [ ] T045 [US3] Extend `shared/src/export/mermaid-export.ts` to validate group data, escape group names, render typed component shapes, emit each group as a labeled `subgraph`, retain all relationships, and raise actionable group-specific errors for unsupported content.
-- [ ] T046 [US3] Update `frontend/src/components/ExportButton.tsx` and `frontend/src/api/export-client.ts` to expose Mermaid group semantics, explain that exact canvas positions are not exported, and surface group-specific validation failures without clearing saved data.
-- [ ] T047 [US3] Update `frontend/src/components/RecoveryControls.tsx` and `frontend/src/api/diagram-client.ts` to display group-membership deletion conflicts, preserve confirmation semantics, and keep existing relationship/ADR dependency messaging intact.
-- [ ] T048 [US3] Harden save/load response handling in `frontend/src/state/diagram-store.ts` so grouped drafts remain visible on failure, retries submit unchanged data, stale responses cannot overwrite newer group edits, and successful reopen resets history only after replacement succeeds.
+- [X] T044 [US3] Complete transactional group reconciliation, server timestamp handling, legacy document defaults, stable group/member ID preservation, and grouped-component deletion blockers in `backend/src/persistence/diagram-repository.ts` and `backend/src/services/diagram-service.ts`.
+- [X] T045 [US3] Extend `shared/src/export/mermaid-export.ts` to validate group data, escape group names, render typed component shapes, emit each group as a labeled `subgraph`, retain all relationships, and raise actionable group-specific errors for unsupported content.
+- [X] T046 [US3] Update `frontend/src/components/ExportButton.tsx` and `frontend/src/api/export-client.ts` to expose Mermaid group semantics, explain that exact canvas positions are not exported, and surface group-specific validation failures without clearing saved data.
+- [X] T047 [US3] Update `frontend/src/components/RecoveryControls.tsx` and `frontend/src/api/diagram-client.ts` to display group-membership deletion conflicts, preserve confirmation semantics, and keep existing relationship/ADR dependency messaging intact.
+- [X] T048 [US3] Harden save/load response handling in `frontend/src/state/diagram-store.ts` so grouped drafts remain visible on failure, retries submit unchanged data, stale responses cannot overwrite newer group edits, and successful reopen resets history only after replacement succeeds.
 
 **Checkpoint**: US3 proves durable reference integrity and recoverable group behavior across the
 shared, persistence, API, frontend, and export boundaries.

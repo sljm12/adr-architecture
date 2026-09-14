@@ -77,6 +77,7 @@ export class DiagramService {
       name: document.name.trim(),
       components: document.components.map(component => ({ ...component, name: component.name.trim() })),
       relationships: document.relationships.map(relationship => ({ ...relationship, label: relationship.label?.trim() || null })),
+      groups: document.groups.map(group => ({ ...group, name: group.name.trim(), memberComponentIds: [...group.memberComponentIds] })),
       });
       const resolve = (saved: DiagramDocument | undefined) => {
         if (!saved) throw new DiagramNotFoundError('Diagram not found');
