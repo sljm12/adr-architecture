@@ -115,6 +115,7 @@ is unchanged.
 - [X] T031 [P] [US2] Add end-to-end acceptance coverage for identifying every selected component, clearing selection feedback after cancellation and successful grouping, and rejecting mixed Person/Software System selections with an explanatory message and unchanged document in `e2e/tests/c4-system-groups.spec.ts`.
 - [X] T032 [US2] Update `frontend/src/components/DiagramCanvas.tsx` and `frontend/src/components/DiagramWorkspace.tsx` to keep grouping selections visibly highlighted without relying on color alone, update highlights after select/deselect, and clear transient selection state on deselection, cancellation, completion, or exit from grouping selection.
 - [X] T033 [US2] Update `frontend/src/components/DiagramToolbar.tsx` and `frontend/src/components/WorkspaceInspector.tsx` to explain why an ineligible or incompatible component cannot be grouped, including the Person/Software System rule, while preventing partial group creation and leaving the document unchanged.
+- [X] T033a [US2] Separate ordinary component selection from transient grouping selection: plain clicks select one component for editing/deletion, Shift-click toggles grouping candidates, grouping requires at least two Shift-selected components, and stale grouping selection is cleared after deletion, cancellation, completion, navigation, or inspector exit.
 
 **Checkpoint**: US2 is independently demonstrable with seeded or newly typed systems, and all group
 operations preserve member artifacts, relationships, and ADR references in the local document. The

@@ -8,21 +8,26 @@ describe('system group UI accessibility contract', () => {
     const canvas = source('../src/components/DiagramCanvas.tsx');
     const component = source('../src/components/ComponentNode.tsx');
     const workspace = source('../src/components/DiagramWorkspace.tsx');
-    expect(canvas).toContain('selectionOnDrag');
-    expect(canvas).toContain('multiSelectionKeyCode');
+    expect(canvas).toContain('selectionOnDrag={false}');
+    expect(canvas).toContain('selectionKeyCode="Shift"');
+    expect(canvas).toContain('multiSelectionKeyCode="Shift"');
     expect(canvas).toContain('onSelectionChange={handleSelectionChange}');
     expect(canvas).toContain('onMultiSelectionChange?.(componentIds)');
     expect(canvas).toContain('onMultiSelectionChange?.([])');
+    expect(canvas).toContain('if (event.shiftKey)');
+    expect(canvas).not.toContain('event.metaKey');
+    expect(canvas).not.toContain('event.ctrlKey');
     expect(canvas).toContain("kind: 'group'");
-    expect(canvas).toContain('constrainMemberPosition');
     expect(component).toContain('component-selection-state');
     expect(component).toContain('is-selected');
     expect(workspace).toContain('groupingSelectionActive');
     expect(workspace).toContain('clearCanvasSelection');
+    expect(workspace).toContain("next?.kind === 'components' ? next.ids : []");
   });
 
   it('exposes group creation feedback and member actions with confirmation semantics', () => {
     const inspector = source('../src/components/WorkspaceInspector.tsx');
+    const recovery = source('../src/components/RecoveryControls.tsx');
     const toolbar = source('../src/components/DiagramToolbar.tsx');
     const groupNode = source('../src/components/SystemGroupNode.tsx');
     expect(toolbar).toContain('Group selected systems');
@@ -32,6 +37,8 @@ describe('system group UI accessibility contract', () => {
     expect(inspector).toContain('Ungroup');
     expect(inspector).toContain('ConfirmDialog');
     expect(inspector).toContain('groupError');
+    expect(inspector).toContain('onSelectionClear={onClose}');
+    expect(recovery).toContain('onSelectionClear?.()');
     expect(groupNode).toContain('aria-label');
     expect(groupNode).toContain('System group');
   });

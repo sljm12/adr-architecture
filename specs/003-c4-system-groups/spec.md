@@ -40,13 +40,18 @@ When creating a diagram component, an architecture author can choose a C4 System
 
 When several software systems collectively form a larger system, an architecture author can select them, see which components are selected, give the group a name, and show them inside a labeled bounding box. If a selected component is not compatible with a system group, the author is told why before a group is created.
 
+Selection behavior is intentionally separate from grouping: a plain component click selects one
+component for editing or deletion, while Shift-click is the only grouping modifier and toggles
+temporary grouping candidates. Grouping is available only after at least two components are
+Shift-selected; a one-item grouping selection collapses back to ordinary component selection.
+
 **Why this priority**: A visible larger-system boundary is the core value of this feature: it lets readers understand ownership or scope without losing the detail of the constituent systems.
 
 **Independent Test**: Create at least two Software System components, group them, and verify that a named bounding box encloses them while their individual names, positions, and relationships remain visible.
 
 **Acceptance Scenarios**:
 
-1. **Given** a diagram contains at least two Software System components, **When** the author enters grouping selection and selects those systems, **Then** every currently selected component is visibly highlighted so the author can distinguish selected components from unselected components.
+1. **Given** a diagram contains at least two Software System components, **When** the author plain-clicks one system and Shift-clicks additional systems, **Then** the plain click selects only that component for editing or deletion, Shift-click toggles temporary grouping candidates, and every grouping-selected component is visibly highlighted so the author can distinguish selected components from unselected components.
 2. **Given** the grouping selection includes a Person and a Software System, **When** the author attempts to group the selection, **Then** the system prevents group creation and explains that a Person cannot be grouped with a Software System because system groups contain only Software Systems; no group or partial membership is created.
 3. **Given** a diagram contains at least two compatible Software System components, **When** the author starts grouping after selecting them, **Then** the author can provide a group name and create a group.
 4. **Given** a group is created, **When** the diagram is displayed, **Then** a labeled bounding box is rendered behind the member systems with enough visible spacing to distinguish the boundary from the members, without rearranging the systems’ existing positions.
@@ -136,6 +141,7 @@ When an architecture author saves, reopens, or edits a grouped diagram, the grou
 - Creating a group preserves each selected system’s existing position and calculates the initial boundary around those positions.
 - Group-name uniqueness is checked after trimming whitespace and ignoring capitalization.
 - The grouping workflow provides a visible selection state for every selected component and explains incompatibility immediately or when grouping is attempted; it does not silently ignore an incompatible component.
+- Plain component clicks never enter grouping selection. Shift is the only grouping modifier; grouping feedback and the group command appear only when at least two components are selected with Shift, and a one-item grouping selection collapses back to ordinary component selection.
 - Version one supports non-nested groups. A group cannot contain another group, and a group is not a new relationship endpoint.
 - Existing component relationships and ADR links continue to target individual stable component identities; grouping does not rewrite those references.
 - The author has access to the existing diagram editing and persistence workflows, and this feature does not introduce authentication, permissions, or real-time collaboration.

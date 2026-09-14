@@ -13,6 +13,18 @@ async function mockDiagramApi(page: Page) {
       latest = route.request().postDataJSON();
       return route.fulfill({ contentType: 'application/json', body: JSON.stringify(latest) });
     }
+    if (route.request().method() === 'DELETE' && route.request().url().includes('/components/')) {
+      const componentId = route.request().url().split('/components/')[1];
+      const groupIds = latest.groups.filter(group => group.memberComponentIds.includes(componentId)).map(group => group.id);
+      if (groupIds.length) {
+        return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ message: 'Component cannot be removed while it belongs to a system group. Remove membership or ungroup first.', groupIds }) });
+      }
+      latest = { ...latest, components: latest.components.filter(component => component.id !== componentId) };
+      return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ document: latest, relationshipCount: 0 }) });
+    }
+    if (route.request().method() === 'GET' && route.request().url().includes('/dependencies')) {
+      return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ relationshipCount: 0 }) });
+    }
     if (route.request().method() === 'GET') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(latest) });
     return route.fallback();
   });
@@ -118,6 +130,67 @@ async function createMockDiagram(page: Page) {
   await page.getByRole('button', { name: 'Create diagram' }).click();
 }
 
+test('keeps plain component selection separate from Shift grouping selection and clears it after deletion', async ({ page }) => {
+  await createMockDiagram(page);
+  await createTypedComponent(page, 'Billing', 'Software System');
+  await createTypedComponent(page, 'Ledger', 'Software System');
+
+  const inspector = page.getByLabel('Diagram inspector');
+  const commandBar = page.locator('.command-bar');
+  const billing = page.getByLabel('Component Billing, Software System');
+  const ledger = page.getByLabel('Component Ledger, Software System');
+  const groupCommand = commandBar.locator('button').filter({ hasText: 'Group selected systems' });
+
+  await billing.click();
+  await expect(inspector.getByRole('button', { name: 'Delete component' })).toBeVisible();
+  await expect(page.locator('.selection-feedback')).toHaveCount(0);
+  await expect(groupCommand).toBeDisabled();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('.save-status')).toHaveText('Saved');
+
+  await ledger.click({ modifiers: ['Shift'] });
+  await expect(billing.locator('.component-selection-state')).toHaveText('Selected');
+  await expect(ledger.locator('.component-selection-state')).toHaveText('Selected');
+  await expect(groupCommand).toBeEnabled();
+
+  await billing.click();
+  await expect(inspector.getByRole('button', { name: 'Delete component' })).toBeVisible();
+  await expect(page.locator('.selection-feedback')).toHaveCount(0);
+  await expect(groupCommand).toBeDisabled();
+  await expect(ledger.locator('.component-selection-state')).toHaveCount(0);
+
+  await inspector.getByRole('button', { name: 'Delete component' }).click();
+  await page.getByRole('button', { name: 'Remove component', exact: true }).click();
+  await expect(page.getByLabel('Component Billing, Software System')).toHaveCount(0);
+  await expect(page.locator('.selection-feedback')).toHaveCount(0);
+
+  await createTypedComponent(page, 'Billing replacement', 'Software System');
+  const replacement = page.getByLabel('Component Billing replacement, Software System');
+  const replacementBox = await replacement.boundingBox();
+  expect(replacementBox).not.toBeNull();
+  if (!replacementBox) throw new Error('The replacement component has no bounding box');
+  const replacementCenter = { x: replacementBox.x + replacementBox.width / 2, y: replacementBox.y + replacementBox.height / 2 };
+  await page.mouse.move(replacementCenter.x, replacementCenter.y);
+  await page.mouse.down();
+  await page.mouse.move(replacementCenter.x + 220, replacementCenter.y, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForTimeout(100);
+  await ledger.click();
+  await replacement.click({ modifiers: ['Shift'] });
+  await expect(groupCommand).toBeEnabled();
+  await groupCommand.click();
+  await page.getByLabel('Group name').fill('Finance');
+  await inspector.getByRole('button', { name: 'Group selected systems', exact: true }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('.save-status')).toHaveText('Saved');
+
+  await ledger.click();
+  await inspector.getByRole('button', { name: 'Delete component' }).click();
+  await page.getByRole('button', { name: 'Remove component', exact: true }).click();
+  await expect(page.locator('.recovery-notice')).toContainText('Remove membership or ungroup first.');
+  await expect(ledger).toBeVisible();
+});
+
 test('identifies each selected component and clears feedback after deselection, cancellation, and grouping', async ({ page }) => {
   await createMockDiagram(page);
   await createTypedComponent(page, 'Billing', 'Software System');
@@ -135,8 +208,9 @@ test('identifies each selected component and clears feedback after deselection, 
   await expect(ledger.locator('.component-selection-state')).toHaveText('Selected');
 
   await ledger.click({ modifiers: ['Shift'] });
-  await expect(page.locator('.selection-feedback')).toContainText('Billing (Software System)');
-  await expect(page.locator('.selection-feedback')).not.toContainText('Ledger (Software System)');
+  await expect(page.locator('.selection-feedback')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Delete component' })).toBeVisible();
+  await expect(page.getByLabel('Component name')).toHaveValue('Billing');
   await expect(ledger).not.toHaveClass(/is-selected/);
   await expect(ledger.locator('.component-selection-state')).toHaveCount(0);
 
