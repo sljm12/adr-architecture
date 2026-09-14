@@ -10,9 +10,11 @@ The existing `components.type` field is the serialized C4 system-context artifac
 | `software-system` | Software System | A software system shown in the system-context view. | Yes |
 
 The field remains nullable on stored documents for backwards compatibility with diagrams created
-before this feature. A null value is presented as `Unclassified`, is not a valid new component
-selection, and cannot be added to a system group until the component is edited to a supported C4
-type. New component creation and saved feature documents use only the two supported values.
+before this feature. The complete-document schema also tolerates older non-null string
+classifications; they are displayed using their stored label and are not group-eligible. A null
+value is presented as `Unclassified`, is not a valid new component selection, and cannot be added
+to a system group until the component is edited to a supported C4 type. New component creation and
+the current editor workflow use only the two supported values.
 
 ## Transient grouping selection
 
@@ -36,7 +38,7 @@ Software Systems. No group or membership mutation is made while the selection is
 | `name` | string | Required, stored trimmed, non-blank, and unique within the diagram after case-insensitive comparison. |
 | `memberComponentIds` | UUID[] | At least two unique component IDs; every member is a Software System in the same diagram. |
 | `position` | `{ x: number, y: number }` | Top-left boundary position in domain canvas coordinates; finite values. |
-| `size` | `{ width: number, height: number }` | Positive finite dimensions; includes the group label area and member padding. |
+| `size` | `{ width: number, height: number }` | Positive finite dimensions; includes the group label area and member padding. The current adapter uses a 180×72 default member box and 32/32/56/32 left/right/top/bottom padding. |
 | `createdAt` | timestamp | Server-managed; immutable after creation. |
 | `updatedAt` | timestamp | Server-managed on successful document persistence. |
 
@@ -101,10 +103,11 @@ Existing entities remain unchanged:
 
 ## Validation and error semantics
 
-Shared Zod schemas validate UUIDs, C4 type values for new/edit inputs, names, member uniqueness,
-positive layout dimensions, and the shape of the complete document. Domain invariants perform the
-cross-entity checks: group ownership, member ownership, type eligibility, one-group membership,
-group-name uniqueness, and boundary containment.
+Shared Zod schemas validate UUIDs, canonical C4 type values for new/edit inputs, names, member
+uniqueness, positive layout dimensions, and the shape of the complete document. The complete
+document component schema intentionally remains compatible with nullable legacy strings. Domain
+invariants perform the cross-entity checks: group ownership, member ownership, type eligibility,
+one-group membership, group-name uniqueness, and boundary containment.
 
 The API returns the existing actionable validation shape with paths such as:
 

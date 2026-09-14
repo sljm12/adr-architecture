@@ -26,6 +26,19 @@ invariants, migration expectations, and compatibility behavior are defined in
 [data-model.md](./data-model.md). The existing diagram GET/PUT save boundary is the only group
 persistence API.
 
+Implementation alignment:
+
+- `GET /diagrams/{diagramId}` always returns `groups`, using `[]` for legacy diagrams.
+- `PUT /diagrams/{diagramId}` accepts an omitted `groups` field as `[]`, trims persisted names, and
+  commits components, relationships, groups, and normalized memberships as one replacement.
+- The editor writes only `person` and `software-system`; complete documents remain readable when a
+  legacy component has a null or older string classification. Only Software Systems can be group
+  members.
+- `DELETE /diagrams/{diagramId}/components/{componentId}` returns a 409 with `groupIds` when
+  membership blocks deletion. Ungrouping removes only group state.
+- Mermaid export emits typed node shapes and labeled `subgraph` blocks. It preserves semantic group
+  membership, not exact canvas positions, and rejects invalid groups before producing a file.
+
 ## Acceptance scenarios
 
 1. **Create typed C4 components**: Open a new component form. Verify it offers Person and Software

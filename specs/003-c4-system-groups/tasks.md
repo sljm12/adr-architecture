@@ -170,10 +170,10 @@ shared, persistence, API, frontend, and export boundaries.
 **Purpose**: Finish documentation, accessibility, compatibility, and release validation across all
 stories.
 
-- [ ] T049 [P] Document C4 component types, group behavior, migration `0003_system_groups.sql`, Mermaid limitations, and stable-reference guarantees in `README.md`.
-- [ ] T050 [P] Add responsive and accessibility regression coverage for group labels, focus order, 44px targets, contrast, keyboard multi-selection, selected-state highlighting, incompatibility explanations, and confirmation dialogs in `frontend/tests/accessibility.test.tsx` and `frontend/src/styles.css`.
-- [ ] T051 [P] Reconcile the implementation-facing contract, data model, and validation scenarios in `specs/003-c4-system-groups/contracts/openapi.yaml`, `specs/003-c4-system-groups/data-model.md`, and `specs/003-c4-system-groups/quickstart.md` after implementation details stabilize.
-- [ ] T052 Run every command and acceptance scenario in `specs/003-c4-system-groups/quickstart.md`, including `npm test`, `npm run build`, and `npm run test:e2e`, and resolve any regression before marking the feature complete.
+- [X] T049 [P] Document C4 component types, group behavior, migration `0003_system_groups.sql`, Mermaid limitations, and stable-reference guarantees in `README.md`.
+- [X] T050 [P] Add responsive and accessibility regression coverage for group labels, focus order, 44px targets, contrast, keyboard multi-selection, selected-state highlighting, incompatibility explanations, and confirmation dialogs in `frontend/tests/accessibility.test.tsx` and `frontend/src/styles.css`.
+- [X] T051 [P] Reconcile the implementation-facing contract, data model, and validation scenarios in `specs/003-c4-system-groups/contracts/openapi.yaml`, `specs/003-c4-system-groups/data-model.md`, and `specs/003-c4-system-groups/quickstart.md` after implementation details stabilize.
+- [X] T052 Run every command and acceptance scenario in `specs/003-c4-system-groups/quickstart.md`, including `npm test`, `npm run build`, and `npm run test:e2e`, and resolve any regression before marking the feature complete.
 
 ---
 

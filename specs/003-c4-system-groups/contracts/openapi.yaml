@@ -5,7 +5,8 @@ info:
   description: >-
     The diagram document remains the atomic persistence boundary. This feature adds C4 artifact
     types and durable system groups to the existing diagram read/save contract; it does not add
-    per-group CRUD endpoints.
+    per-group CRUD endpoints. New component writes use `person` or `software-system`; complete
+    document reads remain compatible with older nullable or legacy classifications.
 paths:
   /diagrams/{diagramId}:
     get:
@@ -157,6 +158,7 @@ components:
           uniqueItems: true
         groups:
           type: array
+          default: []
           description: Optional for backwards-compatible clients; omitted means no groups. Group names are trimmed and must be unique within the diagram without regard to capitalization.
           items:
             $ref: '#/components/schemas/SystemGroup'
@@ -211,8 +213,10 @@ components:
         type:
           type: string
           nullable: true
-          enum: [person, software-system]
-          description: Null is retained only for components created before the C4 type workflow.
+          description: >-
+            Canonical values written by the C4 workflow are `person` and `software-system`.
+            Null and older string classifications remain readable on complete documents for
+            backwards compatibility; only `software-system` is eligible for a system group.
         position:
           $ref: '#/components/schemas/Position'
         createdAt:
@@ -262,6 +266,7 @@ components:
         name:
           type: string
           minLength: 1
+          maxLength: 200
           description: Group label; surrounding whitespace is trimmed and uniqueness is checked case-insensitively within the diagram.
         memberComponentIds:
           type: array
@@ -291,6 +296,7 @@ components:
     Position:
       type: object
       required: [x, y]
+      description: Finite domain-canvas coordinates; exact canvas coordinates are not preserved by Mermaid export.
       properties:
         x:
           type: number

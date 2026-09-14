@@ -9,6 +9,10 @@ const dialog = source('../src/components/ConfirmDialog.tsx');
 const switchDialog = source('../src/components/DiagramSwitchDialog.tsx');
 const savedList = source('../src/components/SavedDiagramList.tsx');
 const styles = source('../src/styles.css');
+const canvas = source('../src/components/DiagramCanvas.tsx');
+const componentNode = source('../src/components/ComponentNode.tsx');
+const groupNode = source('../src/components/SystemGroupNode.tsx');
+const store = source('../src/state/diagram-store.ts');
 
 function contrast(foreground: string, background: string): number {
   const channel = (value: string) => { const numeric = parseInt(value, 16) / 255; return numeric <= 0.03928 ? numeric / 12.92 : ((numeric + 0.055) / 1.055) ** 2.4; };
@@ -64,5 +68,34 @@ describe('core workflow accessibility contract', () => {
     expect(contrast('#5f6368', '#f5f5f7')).toBeGreaterThanOrEqual(4.5);
     expect(styles).toContain('#5f6368');
     expect(styles).not.toContain('color:#7a7a7a');
+  });
+
+  it('keeps C4 groups and selection feedback keyboard discoverable', () => {
+    expect(componentNode).toContain('tabIndex={0}');
+    expect(componentNode).toContain('aria-selected');
+    expect(groupNode).toContain('tabIndex={0}');
+    expect(groupNode).toContain('aria-selected');
+    expect(groupNode).toContain('Software System boundary');
+    expect(canvas).toContain('selectionKeyCode="Shift"');
+    expect(canvas).toContain('multiSelectionKeyCode="Shift"');
+    expect(canvas).toContain('selectionOnDrag={false}');
+    expect(inspector).toContain('Remove from group');
+    expect(inspector).toContain('ConfirmDialog');
+    expect(styles).toContain('.component-node:focus-visible');
+    expect(styles).toContain('.system-group-node:focus-visible');
+    expect(styles).toContain('@media(max-width:640px)');
+    expect(styles).toContain('min-height:44px');
+  });
+
+  it('uses non-color selection cues and accessible incompatibility feedback', () => {
+    expect(componentNode).toContain('component-selection-state');
+    expect(groupNode).toContain('group-selection-state');
+    expect(toolbar).toContain('selection-feedback-error');
+    expect(toolbar).toContain('role={selectionError ? \'alert\' : \'status\'}');
+    expect(store).toContain('Person cannot be grouped with a Software System');
+    expect(inspector).toContain('aria-live="polite"');
+    expect(styles).toContain('outline:3px solid #0071e3');
+    expect(contrast('#ffffff', '#272729')).toBeGreaterThanOrEqual(4.5);
+    expect(contrast('#c8d0d8', '#272729')).toBeGreaterThanOrEqual(4.5);
   });
 });
