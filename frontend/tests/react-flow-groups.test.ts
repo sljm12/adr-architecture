@@ -28,6 +28,7 @@ describe('React Flow system group adapter', () => {
     const groupNode = visual.nodes[0];
     const firstNode = visual.nodes[1];
     expect(groupNode.type).toBe('systemGroup');
+    expect(groupNode.className ?? '').not.toContain('system-group-node');
     expect(groupNode.connectable).toBe(false);
     expect(groupNode.zIndex).toBeLessThan(0);
     expect(firstNode.parentId).toBe(ids.group);

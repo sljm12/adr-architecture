@@ -65,7 +65,6 @@ export function toReactFlow(document:DiagramDocument,sizes?:ComponentSizeMap):{n
     position:group.position,
     data:{label:group.name,groupId:group.id,memberCount:group.memberComponentIds.length},
     type:'systemGroup',
-    className:'system-group-node',
     style:{width:group.size.width,height:group.size.height},
     zIndex:-1,
     selectable:true,

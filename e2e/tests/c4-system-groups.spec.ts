@@ -115,6 +115,48 @@ test('groups selected systems, reviews and renames the boundary, removes a membe
   await expect(page.locator('.component-node')).toHaveCount(3);
 });
 
+test('keeps multiple group boundaries aligned with their member systems', async ({ page }) => {
+  await createMockDiagram(page);
+  for (const name of ['Billing', 'Ledger', 'Notifications', 'Reporting']) {
+    await createTypedComponent(page, name, 'Software System');
+  }
+
+  const inspector = page.getByLabel('Diagram inspector');
+  const groupCommand = page.getByRole('button', { name: 'Group selected systems', exact: true });
+  const createGroup = async (members: string[], groupName: string) => {
+    await page.getByLabel(`Component ${members[0]}, Software System`).click();
+    for (const member of members.slice(1)) {
+      await page.getByLabel(`Component ${member}, Software System`).click({ modifiers: ['Shift'] });
+    }
+    await expect(groupCommand).toBeEnabled();
+    await groupCommand.click();
+    await inspector.getByLabel('Group name').fill(groupName);
+    await inspector.getByRole('button', { name: 'Group selected systems', exact: true }).click();
+  };
+
+  await createGroup(['Billing', 'Ledger'], 'Core systems');
+  await createGroup(['Notifications', 'Reporting'], 'Support systems');
+
+  const assertEnclosesMembers = async (groupName: string, members: string[]) => {
+    const group = page.getByLabel(`System group ${groupName}, 2 Software System members`);
+    const groupBox = await group.boundingBox();
+    expect(groupBox).not.toBeNull();
+    if (!groupBox) throw new Error(`${groupName} has no bounding box`);
+    for (const member of members) {
+      const memberBox = await page.getByLabel(`Component ${member}, Software System`).boundingBox();
+      expect(memberBox).not.toBeNull();
+      if (!memberBox) throw new Error(`${member} has no bounding box`);
+      expect(memberBox.x).toBeGreaterThanOrEqual(groupBox.x - 1);
+      expect(memberBox.y).toBeGreaterThanOrEqual(groupBox.y - 1);
+      expect(memberBox.x + memberBox.width).toBeLessThanOrEqual(groupBox.x + groupBox.width + 1);
+      expect(memberBox.y + memberBox.height).toBeLessThanOrEqual(groupBox.y + groupBox.height + 1);
+    }
+  };
+
+  await assertEnclosesMembers('Core systems', ['Billing', 'Ledger']);
+  await assertEnclosesMembers('Support systems', ['Notifications', 'Reporting']);
+});
+
 async function createTypedComponent(page: Page, name: string, type: 'Person' | 'Software System') {
   const inspector = page.getByLabel('Diagram inspector');
   await page.locator('.command-bar').getByRole('button', { name: 'Add component' }).click();
