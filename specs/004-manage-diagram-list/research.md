@@ -54,6 +54,11 @@ creation date—available for restoration.
 - Add a panel-only hidden flag: rejected because it would create a second deletion state outside
   the existing persistence and recovery model.
 
+The panel store keeps only a transient client-side guard for a successful deletion while refresh
+responses settle. This prevents a stale active-list response from re-adding the deleted UUID; it
+does not create a second persisted lifecycle state and is cleared when the existing restore flow
+returns the diagram to the active list.
+
 ## Decision 4: Keep deletion coordination at the workspace boundary
 
 **Decision**: Let `SavedDiagramList` emit a delete request, while `DiagramWorkspace` coordinates
@@ -70,6 +75,10 @@ non-current entries.
   diagram and ADR edits.
 - Block deletion of the current diagram entirely: rejected because it leaves a valid management
   action unavailable and provides a poorer workflow than the existing save/discard/cancel pattern.
+
+The row confirmation is completed before the workspace guard runs. For the current diagram, the
+workspace then presents save-and-delete, discard-and-delete, and cancel choices; only an explicit
+save or discard resolution reaches the trash request.
 
 ## Decision 5: Use inclusive local-calendar date ranges and deterministic ties
 

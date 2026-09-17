@@ -7,7 +7,9 @@ const toolbar = source('../src/components/DiagramToolbar.tsx');
 const inspector = source('../src/components/WorkspaceInspector.tsx');
 const dialog = source('../src/components/ConfirmDialog.tsx');
 const switchDialog = source('../src/components/DiagramSwitchDialog.tsx');
+const deletionDialog = source('../src/components/DiagramDeletionUnsavedDialog.tsx');
 const savedList = source('../src/components/SavedDiagramList.tsx');
+const savedListStyles = source('../src/components/saved-diagram-list.css');
 const styles = source('../src/styles.css');
 const canvas = source('../src/components/DiagramCanvas.tsx');
 const componentNode = source('../src/components/ComponentNode.tsx');
@@ -51,6 +53,12 @@ describe('core workflow accessibility contract', () => {
     expect(switchDialog).toContain('aria-modal="true"');
     expect(switchDialog).toContain("event.key === 'Escape'");
     expect(switchDialog).toContain('previouslyFocused?.focus()');
+    expect(savedList).toContain('aria-label={`Delete ${document.name}`}');
+    expect(savedList).toContain('aria-busy={deleteStatus === \'deleting\'}');
+    expect(deletionDialog).toContain('Save and delete');
+    expect(deletionDialog).toContain('Discard and delete');
+    expect(deletionDialog).toContain('event.key === \'Escape\'');
+    expect(deletionDialog).toContain('previouslyFocused?.focus()');
   });
 
   it('labels navigation, inspector controls, and live save feedback', () => {
@@ -68,6 +76,9 @@ describe('core workflow accessibility contract', () => {
     expect(contrast('#5f6368', '#f5f5f7')).toBeGreaterThanOrEqual(4.5);
     expect(styles).toContain('#5f6368');
     expect(styles).not.toContain('color:#7a7a7a');
+    expect(savedList).toContain('role="alert"');
+    expect(savedListStyles).toContain('.saved-diagram-delete');
+    expect(savedListStyles).toContain('min-height: 44px');
   });
 
   it('keeps C4 groups and selection feedback keyboard discoverable', () => {

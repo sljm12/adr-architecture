@@ -1,7 +1,7 @@
 import { type Page, type Route } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 import type { DiagramDocument, DiagramSummary } from '../../shared/src/index';
-import { activeDiagramListFixtures } from '../../frontend/tests/diagram-list-fixtures';
+import { activeDiagramListFixtures, recoverableDiagramFixture } from '../../frontend/tests/diagram-list-fixtures';
 
 type JsonValue = DiagramDocument | DiagramSummary | DiagramSummary[] | { message: string };
 
@@ -114,5 +114,87 @@ test.describe('sort diagrams for review', () => {
     await expect(page.locator(`.saved-diagram-button[data-diagram-id="${selected.id}"]`)).toHaveCount(1);
     await page.locator(`.saved-diagram-button[data-diagram-id="${selected.id}"]`).click();
     await expect(page.locator('.current-diagram strong')).toHaveText(selected.name);
+  });
+});
+
+test.describe('delete diagrams safely', () => {
+  test('names the target, allows cancellation, then removes only the confirmed UUID', async ({ page }) => {
+    const target = activeDiagramListFixtures[0];
+    await mockActiveDiagramSummaries(page, activeDiagramListFixtures);
+    await mockSuccessfulDiagramDeletion(page, target.id);
+    await page.goto('/');
+
+    const row = page.locator(`li:has(.saved-diagram-button[data-diagram-id="${target.id}"])`);
+    await row.getByRole('button', { name: `Delete ${target.name}` }).click();
+    await expect(page.getByRole('alertdialog')).toContainText(`Delete "${target.name}"?`);
+    await expect(page.getByRole('alertdialog')).toContainText('recoverable trash');
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await expect(row).toBeVisible();
+
+    await row.getByRole('button', { name: `Delete ${target.name}` }).click();
+    await page.getByRole('button', { name: 'Move to trash' }).click();
+    await expect(page.locator(`.saved-diagram-button[data-diagram-id="${target.id}"]`)).toHaveCount(0);
+    await expect(page.locator('.saved-diagrams-success')).toContainText('recoverable trash');
+    await expect(page.locator(`.saved-diagram-button[data-diagram-id="${activeDiagramListFixtures[1].id}"]`)).toHaveCount(1);
+  });
+
+  test('keeps a failed target visible and exposes an actionable error', async ({ page }) => {
+    const target = activeDiagramListFixtures[0];
+    await mockActiveDiagramSummaries(page, activeDiagramListFixtures);
+    await mockFailedDiagramDeletion(page, target.id, 'Diagram is unavailable.');
+    await page.goto('/');
+    const row = page.locator(`li:has(.saved-diagram-button[data-diagram-id="${target.id}"])`);
+    await row.getByRole('button', { name: `Delete ${target.name}` }).click();
+    await page.getByRole('button', { name: 'Move to trash' }).click();
+    await expect(row).toBeVisible();
+    await expect(page.getByRole('alert')).toContainText('Diagram is unavailable.');
+    await expect(page.getByRole('alert')).toContainText('Refresh the list');
+  });
+
+  test('shows the create action after deleting the last active diagram', async ({ page }) => {
+    const target = activeDiagramListFixtures[0];
+    await mockActiveDiagramSummaries(page, [target]);
+    await mockSuccessfulDiagramDeletion(page, target.id);
+    await page.goto('/');
+    await page.getByRole('button', { name: `Delete ${target.name}` }).click();
+    await page.getByRole('button', { name: 'Move to trash' }).click();
+    await expect(page.getByText('No saved diagrams yet.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Create your first diagram' })).toBeVisible();
+  });
+
+  test('requires resolving unsaved current work before deletion can proceed', async ({ page }) => {
+    const current = { ...recoverableDiagramFixture, id: '00000000-0000-4000-8000-000000000420', name: 'Current draft', status: 'active' as const, trashedAt: null };
+    await page.route('**/api/diagrams', route => {
+      if (route.request().method() === 'GET') return fulfillJson(route, []);
+      if (route.request().method() === 'POST') return fulfillJson(route, current);
+      return route.fallback();
+    });
+    await page.route(`**/api/diagrams/${current.id}`, route => {
+      if (route.request().method() === 'GET') return fulfillJson(route, current);
+      if (route.request().method() === 'PUT') return fulfillJson(route, current);
+      if (route.request().method() === 'DELETE') return route.fulfill({ status: 204 });
+      return route.fallback();
+    });
+    await page.goto('/');
+    await page.getByLabel('Diagram name').fill(current.name);
+    await page.getByRole('button', { name: 'Create diagram' }).click();
+    await page.getByRole('button', { name: 'Add component' }).click();
+    await page.getByLabel('Component name').fill('Draft service');
+    await page.getByRole('button', { name: 'Add component' }).last().click();
+    await page.getByRole('button', { name: `Delete ${current.name}` }).click();
+    await page.getByRole('button', { name: 'Move to trash' }).click();
+    await expect(page.getByRole('alertdialog')).toContainText('Resolve unsaved changes before deletion');
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.locator('.current-diagram strong')).toHaveText('Current draft');
+    await expect(page.locator(`[data-diagram-id="${current.id}"]`)).toHaveCount(1);
+  });
+
+  test('restores the original document through the existing recovery endpoints', async ({ page }) => {
+    const summary = { id: recoverableDiagramFixture.id, name: recoverableDiagramFixture.name, status: 'trashed' as const, createdAt: recoverableDiagramFixture.createdAt, updatedAt: recoverableDiagramFixture.updatedAt };
+    await mockActiveDiagramSummaries(page, []);
+    await mockTrashAndRestore(page, [summary], { [summary.id]: { ...recoverableDiagramFixture, status: 'active', trashedAt: null } });
+    await page.goto('/');
+    const restored = await page.evaluate(async id => (await fetch(`/api/diagrams/${id}/restore`, { method: 'POST' })).json(), summary.id);
+    expect(restored).toMatchObject({ id: summary.id, status: 'active', createdAt: summary.createdAt, components: expect.arrayContaining([expect.objectContaining({ id: recoverableDiagramFixture.components[0].id })]), relationships: expect.arrayContaining([expect.objectContaining({ id: recoverableDiagramFixture.relationships[0].id })]) });
   });
 });
