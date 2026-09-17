@@ -59,14 +59,14 @@ verify the complete active list returns. Verify invalid ranges and no matches ha
 
 ### Tests for User Story 1
 
-- [ ] T009 [P] [US1] Add unit coverage for trimmed case-insensitive substring matching, optional inclusive start/end dates, combined AND filtering, invalid date ranges, empty queries, empty collections, no-match results, and creation-date display data in `frontend/tests/diagram-list.test.ts`.
-- [ ] T010 [P] [US1] Add Playwright coverage for name filtering, date-boundary filtering, combined filters, invalid-range feedback, no-match messaging, clear-filters behavior, and the empty active-list state in `e2e/tests/diagram-list-management.spec.ts`.
+- [X] T009 [P] [US1] Add unit coverage for trimmed case-insensitive substring matching, optional inclusive start/end dates, combined AND filtering, invalid date ranges, empty queries, empty collections, no-match results, and creation-date display data in `frontend/tests/diagram-list.test.ts`.
+- [X] T010 [P] [US1] Add Playwright coverage for name filtering, date-boundary filtering, combined filters, invalid-range feedback, no-match messaging, clear-filters behavior, and the empty active-list state in `e2e/tests/diagram-list-management.spec.ts`.
 
 ### Implementation for User Story 1
 
-- [ ] T011 [US1] Implement the filtered list derivation and panel controls for name, start date, end date, clear filters, and creation-date display in `frontend/src/components/SavedDiagramList.tsx` using `frontend/src/state/diagram-list.ts`.
-- [ ] T012 [P] [US1] Add panel layout, input, select, empty-state, no-match, error, and focus styles for the filter workflow in `frontend/src/components/saved-diagram-list.css` according to `DESIGN.md`.
-- [ ] T013 [US1] Add accessible labels, keyboard order, visible focus, range validation feedback, live status announcements, and distinct empty-list/no-match states for the filter controls in `frontend/src/components/SavedDiagramList.tsx`.
+- [X] T011 [US1] Implement the filtered list derivation and panel controls for name, start date, end date, clear filters, and creation-date display in `frontend/src/components/SavedDiagramList.tsx` using `frontend/src/state/diagram-list.ts`.
+- [X] T012 [P] [US1] Add panel layout, input, select, empty-state, no-match, error, and focus styles for the filter workflow in `frontend/src/components/saved-diagram-list.css` according to `DESIGN.md`.
+- [X] T013 [US1] Add accessible labels, keyboard order, visible focus, range validation feedback, live status announcements, and distinct empty-list/no-match states for the filter controls in `frontend/src/components/SavedDiagramList.tsx`.
 
 **Checkpoint**: US1 is independently usable as the MVP: authors can identify a diagram by name or
 creation date, combine and clear filters, understand no-result/error states, and still open a result.

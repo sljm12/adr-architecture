@@ -1,5 +1,7 @@
 import { type Page, type Route } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import type { DiagramDocument, DiagramSummary } from '../../shared/src/index';
+import { activeDiagramListFixtures } from '../../frontend/tests/diagram-list-fixtures';
 
 type JsonValue = DiagramDocument | DiagramSummary | DiagramSummary[] | { message: string };
 
@@ -39,3 +41,45 @@ export async function mockActiveRefreshRace(page: Page, snapshots: DiagramSummar
     return fulfillJson(route, snapshot);
   });
 }
+
+test.describe('find diagrams by name or creation date', () => {
+  test('filters by trimmed name, inclusive date boundaries, and combined criteria', async ({ page }) => {
+    await mockActiveDiagramSummaries(page, activeDiagramListFixtures);
+    await page.goto('/');
+
+    await expect(page.locator('.saved-diagram-button')).toHaveCount(activeDiagramListFixtures.length);
+    await page.getByLabel('Filter diagrams by name').fill('  API ');
+    await expect(page.getByRole('button', { name: /Payments API, last saved/ })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: /Inventory, last saved/ })).toHaveCount(0);
+
+    await page.getByLabel('Filter diagrams by name').fill('');
+    await page.getByLabel('Created from').fill('2026-01-10');
+    await page.getByLabel('Created to').fill('2026-01-12');
+    await expect(page.getByRole('button', { name: /Payments API, last saved/ })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: /Inventory, last saved/ })).toHaveCount(0);
+
+    await page.getByLabel('Filter diagrams by name').fill('payments');
+    await page.getByLabel('Created to').fill('2026-01-01');
+    await expect(page.getByRole('alert')).toContainText('End date must be on or after the start date.');
+    await page.getByLabel('Created to').fill('2026-01-10');
+    await expect(page.getByRole('button', { name: /Payments, last saved/ })).toHaveCount(2);
+  });
+
+  test('reports no matches and restores the complete active list', async ({ page }) => {
+    await mockActiveDiagramSummaries(page, activeDiagramListFixtures);
+    await page.goto('/');
+
+    await page.getByLabel('Filter diagrams by name').fill('does not exist');
+    await expect(page.getByText('No diagrams match these filters.')).toBeVisible();
+    await page.getByRole('button', { name: 'Clear filters' }).first().click();
+    await expect(page.getByRole('button', { name: /Inventory, last saved/ })).toBeVisible();
+    await expect(page.getByText('No diagrams match these filters.')).toHaveCount(0);
+  });
+
+  test('shows the empty active-list state', async ({ page }) => {
+    await mockActiveDiagramSummaries(page, []);
+    await page.goto('/');
+    await expect(page.getByText('No saved diagrams yet.')).toBeVisible();
+    await expect(page.getByLabel('Filter diagrams by name')).toHaveCount(0);
+  });
+});

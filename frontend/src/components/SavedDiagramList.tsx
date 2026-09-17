@@ -1,9 +1,48 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useDiagramStore } from '../state/diagram-store';
+import { deriveDiagramList } from '../state/diagram-list';
 import './saved-diagram-list.css';
+
 const formatLastSaved = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
-export function SavedDiagramList({ onSelect, onCreate }: { onSelect: (id: string) => void; onCreate: () => void }) {
-  const documents = useDiagramStore(state => state.savedDocuments); const status = useDiagramStore(state => state.savedDocumentsStatus); const error = useDiagramStore(state => state.savedDocumentsError); const refresh = useDiagramStore(state => state.refreshSavedDocuments);
+const formatCreatedDate = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(value));
+
+type SavedDiagramListProps = { onSelect: (id: string) => void; onCreate: () => void };
+
+export function SavedDiagramList({ onSelect, onCreate }: SavedDiagramListProps) {
+  const documents = useDiagramStore(state => state.savedDocuments);
+  const status = useDiagramStore(state => state.savedDocumentsStatus);
+  const error = useDiagramStore(state => state.savedDocumentsError);
+  const refresh = useDiagramStore(state => state.refreshSavedDocuments);
+  const [nameQuery, setNameQuery] = useState('');
+  const [createdFrom, setCreatedFrom] = useState('');
+  const [createdTo, setCreatedTo] = useState('');
+
   useEffect(() => { void refresh(); }, [refresh]);
-  return <section className="saved-diagrams" aria-labelledby="saved-diagrams-heading"><div className="saved-diagrams-title"><span className="card-kicker">Saved work</span><h2 id="saved-diagrams-heading">Saved diagrams</h2></div>{status === 'loading' && <p className="saved-diagrams-status" role="status">Loading saved diagrams…</p>}{status === 'failed' && <p className="saved-diagrams-status saved-diagrams-error" role="status">Could not load saved diagrams: {error}</p>}{status === 'loaded' && documents.length === 0 && <div className="saved-diagrams-empty"><p>No saved diagrams yet.</p><button className="primary-pill" type="button" onClick={onCreate}>Create your first diagram</button></div>}{documents.length > 0 && <ul className="saved-diagrams-list">{documents.map(document => { const lastSaved = formatLastSaved(document.updatedAt); return <li key={document.id}><button className="saved-diagram-button" type="button" onClick={() => onSelect(document.id)} aria-label={`${document.name}, last saved ${lastSaved}`}><strong>{document.name}</strong><span>Last saved {lastSaved}</span><i aria-hidden="true">›</i></button></li>; })}</ul>}</section>;
+
+  const list = useMemo(() => deriveDiagramList(documents, { nameQuery, createdFrom, createdTo }), [documents, nameQuery, createdFrom, createdTo]);
+  const hasFilters = Boolean(nameQuery.trim() || createdFrom || createdTo);
+  const clearFilters = () => { setNameQuery(''); setCreatedFrom(''); setCreatedTo(''); };
+
+  return <section className="saved-diagrams" aria-labelledby="saved-diagrams-heading">
+    <div className="saved-diagrams-title"><span className="card-kicker">Saved work</span><h2 id="saved-diagrams-heading">Saved diagrams</h2></div>
+    {status === 'loading' && <p className="saved-diagrams-status" role="status">Loading saved diagrams…</p>}
+    {status === 'failed' && <p className="saved-diagrams-status saved-diagrams-error" role="status">Could not load saved diagrams: {error}</p>}
+    {status === 'loaded' && documents.length === 0 && <div className="saved-diagrams-empty"><p>No saved diagrams yet.</p><button className="primary-pill" type="button" onClick={onCreate}>Create your first diagram</button></div>}
+    {status === 'loaded' && documents.length > 0 && <>
+      <div className="saved-diagrams-filters" aria-label="Diagram filters">
+        <div className="saved-diagrams-filter-field">
+          <label htmlFor="saved-diagrams-name">Filter diagrams by name</label>
+          <input id="saved-diagrams-name" type="search" value={nameQuery} onChange={event => setNameQuery(event.target.value)} placeholder="Search names" autoComplete="off" aria-describedby="saved-diagrams-filter-status" />
+        </div>
+        <div className="saved-diagrams-date-fields">
+          <div className="saved-diagrams-filter-field"><label htmlFor="saved-diagrams-created-from">Created from</label><input id="saved-diagrams-created-from" type="date" value={createdFrom} onChange={event => setCreatedFrom(event.target.value)} aria-describedby="saved-diagrams-filter-status" /></div>
+          <div className="saved-diagrams-filter-field"><label htmlFor="saved-diagrams-created-to">Created to</label><input id="saved-diagrams-created-to" type="date" value={createdTo} onChange={event => setCreatedTo(event.target.value)} aria-describedby="saved-diagrams-filter-status" /></div>
+        </div>
+        <button className="saved-diagrams-clear" type="button" onClick={clearFilters} disabled={!hasFilters}>Clear filters</button>
+      </div>
+      {list.rangeError && <p className="saved-diagrams-feedback saved-diagrams-error" id="saved-diagrams-filter-status" role="alert">{list.rangeError}</p>}
+      {!list.rangeError && <p className="saved-diagrams-feedback" id="saved-diagrams-filter-status" role="status" aria-live="polite">{hasFilters ? `${list.items.length} of ${documents.length} diagrams match the filters.` : `${documents.length} saved diagrams.`}</p>}
+      {list.rangeError ? null : list.items.length === 0 ? <div className="saved-diagrams-empty saved-diagrams-no-match"><p>No diagrams match these filters.</p><button className="secondary-action" type="button" onClick={clearFilters}>Clear filters</button></div> : <ul className="saved-diagrams-list">{list.items.map(document => { const lastSaved = formatLastSaved(document.updatedAt); const created = formatCreatedDate(document.createdAt); return <li key={document.id}><button className="saved-diagram-button" type="button" onClick={() => onSelect(document.id)} aria-label={`${document.name}, last saved ${lastSaved}; created ${created}`}><strong>{document.name}</strong><span>Created {created} · Last saved {lastSaved}</span><i aria-hidden="true">›</i></button></li>; })}</ul>}
+    </>}
+  </section>;
 }
