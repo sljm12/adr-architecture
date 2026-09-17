@@ -106,16 +106,16 @@ creation date, then verify failed deletion and current unsaved-change flows pres
 
 ### Tests for User Story 3
 
-- [ ] T019 [P] [US3] Add API/store coverage for confirmed trash transitions, summary removal only after success, deletion failure retention, target-not-found handling, duplicate-name targeting by UUID, and restore preservation in `backend/tests/recovery.test.ts` and `frontend/tests/saved-diagram-store.test.ts`.
-- [ ] T020 [P] [US3] Add Playwright coverage for named confirmation, cancel, success, failure, last-item empty state, trash/restore preservation, refresh races, and deletion of a current diagram with unsaved diagram or ADR changes in `e2e/tests/diagram-list-management.spec.ts`.
+- [X] T019 [P] [US3] Add API/store coverage for confirmed trash transitions, summary removal only after success, deletion failure retention, target-not-found handling, duplicate-name targeting by UUID, and restore preservation in `backend/tests/recovery.test.ts` and `frontend/tests/saved-diagram-store.test.ts`.
+- [X] T020 [P] [US3] Add Playwright coverage for named confirmation, cancel, success, failure, last-item empty state, trash/restore preservation, refresh races, and deletion of a current diagram with unsaved diagram or ADR changes in `e2e/tests/diagram-list-management.spec.ts`.
 
 ### Implementation for User Story 3
 
-- [ ] T021 [US3] Add a typed saved-document trash action that calls the existing delete endpoint, removes only the successful target summary, exposes in-progress/success/error state, and retains the original document on failure in `frontend/src/api/diagram-client.ts` and `frontend/src/state/diagram-store.ts`.
-- [ ] T022 [US3] Add a separate labeled Delete action per diagram row and a diagram-specific confirmation dialog explaining recoverable trash behavior in `frontend/src/components/SavedDiagramList.tsx` and `frontend/src/components/ConfirmDialog.tsx`.
-- [ ] T023 [US3] Wire deletion callbacks through `frontend/src/components/DiagramWorkspace.tsx` so the current diagram’s unsaved diagram/ADR changes require explicit save, discard, or cancel resolution before trashing, and a successful current deletion leaves no trashed document presented as active.
-- [ ] T024 [US3] Render deletion progress, success, failure, unavailable-target, and post-deletion empty states with actionable live feedback while preventing duplicate submissions or unrelated-row removal in `frontend/src/components/SavedDiagramList.tsx` and `frontend/src/components/saved-diagram-list.css`.
-- [ ] T025 [US3] Update recovery summary handling and restore assertions so trashed diagrams expose `createdAt` and restore the complete original artifact document in `backend/src/api/recovery-routes.ts`, `frontend/src/api/diagram-client.ts`, and `frontend/src/components/RecoveryControls.tsx`.
+- [X] T021 [US3] Add a typed saved-document trash action that calls the existing delete endpoint, removes only the successful target summary, exposes in-progress/success/error state, and retains the original document on failure in `frontend/src/api/diagram-client.ts` and `frontend/src/state/diagram-store.ts`.
+- [X] T022 [US3] Add a separate labeled Delete action per diagram row and a diagram-specific confirmation dialog explaining recoverable trash behavior in `frontend/src/components/SavedDiagramList.tsx` and `frontend/src/components/ConfirmDialog.tsx`.
+- [X] T023 [US3] Wire deletion callbacks through `frontend/src/components/DiagramWorkspace.tsx` so the current diagram’s unsaved diagram/ADR changes require explicit save, discard, or cancel resolution before trashing, and a successful current deletion leaves no trashed document presented as active.
+- [X] T024 [US3] Render deletion progress, success, failure, unavailable-target, and post-deletion empty states with actionable live feedback while preventing duplicate submissions or unrelated-row removal in `frontend/src/components/SavedDiagramList.tsx` and `frontend/src/components/saved-diagram-list.css`.
+- [X] T025 [US3] Update recovery summary handling and restore assertions so trashed diagrams expose `createdAt` and restore the complete original artifact document in `backend/src/api/recovery-routes.ts`, `frontend/src/api/diagram-client.ts`, and `frontend/src/components/RecoveryControls.tsx`.
 
 **Checkpoint**: All three user stories are demonstrable: filtering and sorting remain view-only, delete
 is explicitly confirmed and recoverable, unsaved work is protected, and artifact identities/references
@@ -126,9 +126,9 @@ survive trash and restore.
 **Purpose**: Complete boundary validation, accessibility regression coverage, documentation alignment,
 and the runnable release checks across all stories.
 
-- [ ] T026 [P] Add keyboard-only and accessibility regression coverage for filter inputs, date controls, sort controls, row open/delete actions, confirmation dialogs, focus return, status announcements, contrast, and 44px targets in `frontend/tests/accessibility.test.tsx` and `frontend/src/components/saved-diagram-list.css`.
-- [ ] T027 [P] Reconcile the implementation-facing API contract, data model, research decisions, and quickstart expectations after code changes in `specs/004-manage-diagram-list/contracts/openapi.yaml`, `specs/004-manage-diagram-list/data-model.md`, and `specs/004-manage-diagram-list/quickstart.md`.
-- [ ] T028 Run the focused tests, `npm run build`, and the complete feature workflow from `specs/004-manage-diagram-list/quickstart.md`, then resolve regressions in `shared/`, `backend/`, `frontend/`, or `e2e/tests/diagram-list-management.spec.ts` before recording final validation in `specs/004-manage-diagram-list/quickstart.md`.
+- [X] T026 [P] Add keyboard-only and accessibility regression coverage for filter inputs, date controls, sort controls, row open/delete actions, confirmation dialogs, focus return, status announcements, contrast, and 44px targets in `frontend/tests/accessibility.test.tsx` and `frontend/src/components/saved-diagram-list.css`.
+- [X] T027 [P] Reconcile the implementation-facing API contract, data model, research decisions, and quickstart expectations after code changes in `specs/004-manage-diagram-list/contracts/openapi.yaml`, `specs/004-manage-diagram-list/data-model.md`, and `specs/004-manage-diagram-list/quickstart.md`.
+- [X] T028 Run the focused tests, `npm run build`, and the complete feature workflow from `specs/004-manage-diagram-list/quickstart.md`, then resolve regressions in `shared/`, `backend/`, `frontend/`, or `e2e/tests/diagram-list-management.spec.ts` before recording final validation in `specs/004-manage-diagram-list/quickstart.md`.
 
 ## Dependencies and Execution Order
 

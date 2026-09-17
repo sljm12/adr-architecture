@@ -74,6 +74,12 @@ trashed diagram / summary removed from active panel
 active diagram restored with original contents, IDs, and createdAt
 ```
 
+The frontend store exposes deletion state as `idle | deleting | succeeded | failed` with a
+message/error pair for live feedback. A successful UUID is held in a transient deleted-target set
+while active-list refreshes settle, so an in-flight or stale refresh cannot re-add a diagram that
+has already been moved to trash. Restore removes that UUID from the set and registers the restored
+summary, including its original `createdAt`.
+
 If the target is the current diagram with unsaved diagram or ADR changes, the transition first
 enters the existing save/discard/cancel resolution flow. Cancel or failed save keeps the current
 document and active summary unchanged; only an explicit resolution permits the trash request.

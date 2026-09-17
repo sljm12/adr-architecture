@@ -21,4 +21,18 @@ describe('recovery service', () => {
     expect((await app.inject({ method: 'POST', url: '/diagrams/diagram/restore' })).json()).toMatchObject({ id: 'diagram', status: 'active', createdAt: document.createdAt });
     await app.close();
   });
+  it('returns not found for a missing deletion target and leaves all active diagrams unchanged', async () => { const repository = new DiagramRepository(); repository.create(document); const app = buildApp(repository); await app.ready();
+    const response = await app.inject({ method: 'DELETE', url: '/diagrams/missing' });
+    expect(response.statusCode).toBe(404);
+    expect(repository.list().map(item => item.id)).toEqual(['diagram']);
+    await app.close();
+  });
+  it('targets duplicate names by UUID and restores the complete document without changing identities', async () => { const repository = new DiagramRepository(); const duplicate = { ...document, id: 'diagram-duplicate', components: document.components.map(component => ({ ...component, diagramId: 'diagram-duplicate' })) , relationships: document.relationships.map(relationship => ({ ...relationship, diagramId: 'diagram-duplicate', sourceComponentId: 'api', targetComponentId: 'db' })) }; repository.create(document); repository.create(duplicate); const app = buildApp(repository); await app.ready();
+    expect((await app.inject({ method: 'DELETE', url: '/diagrams/diagram-duplicate' })).statusCode).toBe(204);
+    expect(repository.list().map(item => item.id)).toEqual(['diagram']);
+    const restored = await app.inject({ method: 'POST', url: '/diagrams/diagram-duplicate/restore' });
+    expect(restored.statusCode).toBe(200);
+    expect(restored.json()).toMatchObject({ id: 'diagram-duplicate', createdAt: document.createdAt, components: expect.arrayContaining([expect.objectContaining({ id: 'api' })]), relationships: expect.arrayContaining([expect.objectContaining({ id: 'uses' })]) });
+    await app.close();
+  });
 });

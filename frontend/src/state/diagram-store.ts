@@ -5,6 +5,7 @@ import { BoundedHistory } from './history';
 
 export type SaveStatus = 'idle' | 'unsaved' | 'saving' | 'saved' | 'failed';
 export type SavedDocumentsStatus = 'idle' | 'loading' | 'loaded' | 'failed';
+export type SavedDocumentDeleteStatus = 'idle' | 'deleting' | 'succeeded' | 'failed';
 
 type State = {
   document: DiagramDocument | null;
@@ -14,6 +15,10 @@ type State = {
   savedDocuments: DiagramSummary[];
   savedDocumentsStatus: SavedDocumentsStatus;
   savedDocumentsError: string | null;
+  savedDocumentsDeleteStatus: SavedDocumentDeleteStatus;
+  savedDocumentsDeleteError: string | null;
+  savedDocumentsDeleteMessage: string | null;
+  deletedSavedDocumentIds: string[];
   loadError: string | null;
   canUndo: boolean;
   canRedo: boolean;
@@ -42,6 +47,8 @@ type State = {
   save: () => Promise<void>;
   retry: () => Promise<void>;
   refreshSavedDocuments: () => Promise<void>;
+  trashSavedDocument: (id: string) => Promise<boolean>;
+  registerRestoredSavedDocument: (document: DiagramDocument) => void;
   loadSavedDocument: (id: string) => Promise<boolean>;
 };
 
@@ -88,7 +95,10 @@ export const useDiagramStore = create<State>((set, get) => ({
   status: 'idle',
   error: null,
   groupError: null,
-  savedDocuments: [], savedDocumentsStatus: 'idle', savedDocumentsError: null, loadError: null,
+  savedDocuments: [], savedDocumentsStatus: 'idle', savedDocumentsError: null,
+  savedDocumentsDeleteStatus: 'idle', savedDocumentsDeleteError: null, savedDocumentsDeleteMessage: null,
+  deletedSavedDocumentIds: [],
+  loadError: null,
   canUndo: false,
   canRedo: false,
   open: input => {
@@ -360,9 +370,42 @@ export const useDiagramStore = create<State>((set, get) => ({
   retry: async () => { await get().save(); },
   refreshSavedDocuments: async () => {
     set({ savedDocumentsStatus: 'loading', savedDocumentsError: null });
-    try { const savedDocuments = await diagramClient.list(); set({ savedDocuments, savedDocumentsStatus: 'loaded', savedDocumentsError: null }); }
+    try {
+      const savedDocuments = await diagramClient.list();
+      const deletedIds = new Set(get().deletedSavedDocumentIds ?? []);
+      set({ savedDocuments: savedDocuments.filter(document => !deletedIds.has(document.id)), savedDocumentsStatus: 'loaded', savedDocumentsError: null });
+    }
     catch (error) { set({ savedDocumentsStatus: 'failed', savedDocumentsError: error instanceof Error ? error.message : 'Could not load saved diagrams.' }); }
   },
+  trashSavedDocument: async id => {
+    if (get().savedDocumentsDeleteStatus === 'deleting') return false;
+    if (!get().savedDocuments.some(document => document.id === id)) {
+      set({ savedDocumentsDeleteStatus: 'failed', savedDocumentsDeleteError: 'That diagram is no longer available. Refresh the list and try again.', savedDocumentsDeleteMessage: null });
+      return false;
+    }
+    set({ savedDocumentsDeleteStatus: 'deleting', savedDocumentsDeleteError: null, savedDocumentsDeleteMessage: null });
+    try {
+      await diagramClient.trash(id);
+      set(state => ({
+        savedDocuments: state.savedDocuments.filter(document => document.id !== id),
+        deletedSavedDocumentIds: [...new Set([...(state.deletedSavedDocumentIds ?? []), id])],
+        savedDocumentsDeleteStatus: 'succeeded',
+        savedDocumentsDeleteError: null,
+        savedDocumentsDeleteMessage: 'Diagram moved to recoverable trash.',
+      }));
+      return true;
+    } catch (error) {
+      set({ savedDocumentsDeleteStatus: 'failed', savedDocumentsDeleteError: error instanceof Error ? error.message : 'Could not move the diagram to trash. Try again.', savedDocumentsDeleteMessage: null });
+      return false;
+    }
+  },
+  registerRestoredSavedDocument: document => set(state => ({
+    savedDocuments: replaceSummary(state.savedDocuments, summary(document)),
+    deletedSavedDocumentIds: (state.deletedSavedDocumentIds ?? []).filter(id => id !== document.id),
+    savedDocumentsDeleteStatus: 'idle',
+    savedDocumentsDeleteError: null,
+    savedDocumentsDeleteMessage: null,
+  })),
   loadSavedDocument: async id => {
     set({ loadError: null });
     try {
