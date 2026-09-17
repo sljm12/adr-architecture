@@ -1,0 +1,144 @@
+openapi: 3.0.3
+info:
+  title: ADR Diagram API - Manage Diagram List
+  version: 1.0.0
+  description: >-
+    Contract delta for the active diagram list and recoverable panel deletion. Filtering and sorting
+    are local panel operations; the API returns active summaries with the original creation date.
+paths:
+  /diagrams:
+    get:
+      summary: List active diagram summaries
+      responses:
+        '200':
+          description: Active diagrams available to the single-user diagram panel.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagramSummaryList'
+  /diagrams/{diagramId}:
+    delete:
+      summary: Move an active diagram to recoverable trash
+      description: >-
+        The panel calls this operation only after explicit user confirmation. Successful deletion
+        changes the diagram status to trashed without removing its contained architecture artifacts,
+        stable identities, links, or original createdAt. The operation returns no body.
+      parameters:
+        - $ref: '#/components/parameters/DiagramId'
+      responses:
+        '204':
+          description: Diagram moved to trash and removed from the active list.
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /diagrams/trash:
+    get:
+      summary: List recoverable diagrams
+      responses:
+        '200':
+          description: Diagrams currently in recoverable trash.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagramSummaryList'
+  /diagrams/{diagramId}/restore:
+    post:
+      summary: Restore a trashed diagram
+      parameters:
+        - $ref: '#/components/parameters/DiagramId'
+      responses:
+        '200':
+          description: Restored complete diagram document with its original identity and createdAt.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagramDocument'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Diagram exists but is not currently trashed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  parameters:
+    DiagramId:
+      name: diagramId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    NotFound:
+      description: Diagram was not found or is not available for the requested lifecycle operation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    DiagramSummaryList:
+      type: array
+      items:
+        $ref: '#/components/schemas/DiagramSummary'
+    DiagramSummary:
+      type: object
+      required: [id, name, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+        status:
+          type: string
+          enum: [active, trashed]
+        createdAt:
+          type: string
+          format: date-time
+          description: Original diagram creation timestamp; it does not change when the diagram is edited or restored.
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last diagram update timestamp; it is not the creation date.
+    DiagramDocument:
+      type: object
+      required: [id, name, status, createdAt, updatedAt, trashedAt, components, relationships]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+          enum: [active, trashed]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        trashedAt:
+          type: string
+          format: date-time
+          nullable: true
+        components:
+          type: array
+          items:
+            type: object
+        relationships:
+          type: array
+          items:
+            type: object
+        groups:
+          type: array
+          items:
+            type: object
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
