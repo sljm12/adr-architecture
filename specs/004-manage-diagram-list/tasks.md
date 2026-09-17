@@ -29,8 +29,8 @@ an independently demonstrable increment after the shared foundation.
 **Purpose**: Establish focused fixtures and browser mock boundaries for the feature. The existing
 project, dependencies, and test runners are reused; no new package or database migration is needed.
 
-- [ ] T001 [P] Add reusable diagram-list fixtures covering active diagrams, duplicate names, equal creation dates, date-range boundaries, and a populated recoverable document in `frontend/tests/diagram-list-fixtures.ts`.
-- [ ] T002 [P] Add Playwright API route helpers for active summaries, trash/restore responses, successful deletion, deletion failure, and refresh races in `e2e/tests/diagram-list-management.spec.ts`.
+- [X] T001 [P] Add reusable diagram-list fixtures covering active diagrams, duplicate names, equal creation dates, date-range boundaries, and a populated recoverable document in `frontend/tests/diagram-list-fixtures.ts`.
+- [X] T002 [P] Add Playwright API route helpers for active summaries, trash/restore responses, successful deletion, deletion failure, and refresh races in `e2e/tests/diagram-list-management.spec.ts`.
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
@@ -38,12 +38,12 @@ project, dependencies, and test runners are reused; no new package or database m
 boundary used by filtering, sorting, opening, and deletion. All user-story work depends on this
 phase.
 
-- [ ] T003 [P] Extend `DiagramSummary` with required `createdAt` and update summary validation in `shared/src/domain/types.ts` and `shared/src/validation/schemas.ts` without changing complete-document identity or timestamp semantics.
-- [ ] T004 [P] Include persisted `createdAt` in active and trashed summary responses in `backend/src/api/diagram-routes.ts` and `backend/src/api/recovery-routes.ts`, preserving existing active-only and recoverable-trash behavior.
-- [ ] T005 [P] Preserve `createdAt` when summaries are loaded, replaced after save, or normalized in `frontend/src/api/diagram-client.ts` and `frontend/src/state/diagram-store.ts`.
-- [ ] T006 Create the typed list-view derivation boundary in `frontend/src/state/diagram-list.ts` for trimmed case-insensitive name matching, inclusive optional date bounds, invalid-range reporting, and deterministic name/creation-date sorting inputs.
-- [ ] T007 [P] Add shared/API regression coverage for required summary `createdAt`, original creation-date retention through edit/trash/restore, active and trash list responses, and failed deletion immutability in `shared/tests/validation.test.ts`, `backend/tests/diagrams.test.ts`, and `backend/tests/recovery.test.ts`.
-- [ ] T008 [P] Synchronize the affected OpenAPI list, trash, delete, and restore contract with the implementation in `specs/004-manage-diagram-list/contracts/openapi.yaml`, including required `createdAt`, recoverable deletion semantics, and not-found/conflict responses.
+- [X] T003 [P] Extend `DiagramSummary` with required `createdAt` and update summary validation in `shared/src/domain/types.ts` and `shared/src/validation/schemas.ts` without changing complete-document identity or timestamp semantics.
+- [X] T004 [P] Include persisted `createdAt` in active and trashed summary responses in `backend/src/api/diagram-routes.ts` and `backend/src/api/recovery-routes.ts`, preserving existing active-only and recoverable-trash behavior.
+- [X] T005 [P] Preserve `createdAt` when summaries are loaded, replaced after save, or normalized in `frontend/src/api/diagram-client.ts` and `frontend/src/state/diagram-store.ts`.
+- [X] T006 Create the typed list-view derivation boundary in `frontend/src/state/diagram-list.ts` for trimmed case-insensitive name matching, inclusive optional date bounds, invalid-range reporting, and deterministic name/creation-date sorting inputs.
+- [X] T007 [P] Add shared/API regression coverage for required summary `createdAt`, original creation-date retention through edit/trash/restore, active and trash list responses, and failed deletion immutability in `shared/tests/validation.test.ts`, `backend/tests/diagrams.test.ts`, and `backend/tests/recovery.test.ts`.
+- [X] T008 [P] Synchronize the affected OpenAPI list, trash, delete, and restore contract with the implementation in `specs/004-manage-diagram-list/contracts/openapi.yaml`, including required `createdAt`, recoverable deletion semantics, and not-found/conflict responses.
 
 **Checkpoint**: The shared summary contract, API responses, persisted timestamp semantics, and pure
 list-view boundary are ready; user-story implementation can proceed without adding new storage.

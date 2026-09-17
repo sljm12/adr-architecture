@@ -4,7 +4,7 @@ import type { DiagramRepositoryLike } from '../persistence/diagram-repository';
 import { sendError } from './errors';
 
 export function registerDiagramRoutes(app: FastifyInstance, repository: DiagramRepositoryLike, service: DiagramService): void {
-  const summary = (document: Awaited<ReturnType<DiagramRepositoryLike['list']>>[number]) => ({ id: document.id, name: document.name, status: document.status, updatedAt: document.updatedAt });
+  const summary = (document: Awaited<ReturnType<DiagramRepositoryLike['list']>>[number]) => ({ id: document.id, name: document.name, status: document.status, createdAt: document.createdAt, updatedAt: document.updatedAt });
   const completeDocument = (document: Awaited<ReturnType<DiagramRepositoryLike['get']>>) => document ? { ...document, groups: document.groups ?? [] } : document;
   app.get('/diagrams', async () => (await repository.list()).map(summary));
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { buildApp } from '../src/api/app';
 import { DiagramRepository } from '../src/persistence/diagram-repository';
 import { DiagramService } from '../src/services/diagram-service';
 import { AdrRepository } from '../src/persistence/adr-repository';
@@ -12,4 +13,12 @@ describe('recovery service', () => {
   it('rechecks dependencies when a stale preflight is followed by removal', () => { const repository = new DiagramRepository(); const unconnected = { ...document, relationships: [] }; repository.create(unconnected); const service = new DiagramService(repository); expect(service.dependencyCount('diagram', 'api')).toBe(0); repository.replace(document); expect(() => service.removeComponent('diagram', 'api')).toThrow(/1 dependent relationship/); expect(repository.get('diagram')?.components).toHaveLength(2); });
   it('blocks deletion when an ADR links the component and leaves the diagram unchanged', () => { const componentId = '00000000-0000-0000-0000-000000000098'; const repository = new DiagramRepository(); repository.create({ ...document, relationships: [], components: [{ ...document.components[0], id: componentId }] }); const adrs = new AdrRepository(); const adr = adrs.create('00000000-0000-0000-0000-000000000099', completeAdrPayload); adrs.replaceLinks(adr.id, [componentId]); const service = new DiagramService(repository, adrs); expect(() => service.removeComponent('diagram', componentId)).toThrow(/linked to one or more ADRs/); expect(repository.get('diagram')?.components.map(component => component.id)).toEqual([componentId]); });
   it('moves a diagram to trash and restores its stable content', () => { const repository = new DiagramRepository(); repository.create(document); const service = new DiagramService(repository); service.trash('diagram'); expect(repository.list()).toEqual([]); expect(repository.listTrash()[0].id).toBe('diagram'); const restored = service.restore('diagram'); expect(restored.status).toBe('active'); expect(restored.components[0].id).toBe('api'); expect(restored.relationships[0].id).toBe('uses'); });
+  it('preserves the original creation date through edit, trash, and restore', () => { const repository = new DiagramRepository(); repository.create(document); const service = new DiagramService(repository); const edited = repository.replace({ ...document, name: 'Renamed', createdAt: 'changed-by-client' }); expect(edited?.createdAt).toBe(document.createdAt); service.trash('diagram'); expect(repository.listTrash()[0].createdAt).toBe(document.createdAt); expect(service.restore('diagram').createdAt).toBe(document.createdAt); });
+  it('returns createdAt in trash summaries and preserves it after restore', async () => { const repository = new DiagramRepository(); repository.create(document); const app = buildApp(repository); await app.ready();
+    expect((await app.inject({ method: 'DELETE', url: '/diagrams/diagram' })).statusCode).toBe(204);
+    const trash = await app.inject({ method: 'GET', url: '/diagrams/trash' });
+    expect(trash.json()).toEqual([expect.objectContaining({ id: 'diagram', status: 'trashed', createdAt: document.createdAt })]);
+    expect((await app.inject({ method: 'POST', url: '/diagrams/diagram/restore' })).json()).toMatchObject({ id: 'diagram', status: 'active', createdAt: document.createdAt });
+    await app.close();
+  });
 });

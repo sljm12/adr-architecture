@@ -28,7 +28,7 @@ export const systemGroupSchema = z.object({
 export const groupBoundaryLayoutSchema = z.object({ position: positionSchema, size: groupSizeSchema });
 export const diagramDocumentSchema = z.object({id:uuidSchema, name:z.string().trim().min(1), status:z.enum(['active','trashed']), createdAt:z.string(), updatedAt:z.string(), trashedAt:z.string().nullable(), components:z.array(componentSchema), relationships:z.array(relationshipSchema), groups:z.array(systemGroupSchema).default([])}).superRefine((d,ctx)=>{const ids=new Set(d.components.map(c=>c.id)); d.relationships.forEach((r,i)=>{if(!ids.has(r.sourceComponentId)||!ids.has(r.targetComponentId))ctx.addIssue({code:'custom',path:['relationships',i],message:`Relationship ${r.id} references a missing component`}); if(r.sourceComponentId===r.targetComponentId)ctx.addIssue({code:'custom',path:['relationships',i],message:'Self-referential relationships are not supported'});});});
 export const diagramCreateSchema = z.object({name:z.string().trim().min(1)});
-export const diagramSummarySchema = z.object({id:uuidSchema, name:z.string().trim().min(1), status:z.enum(['active','trashed']), updatedAt:z.string()});
+export const diagramSummarySchema = z.object({id:uuidSchema, name:z.string().trim().min(1), status:z.enum(['active','trashed']), createdAt:z.string().datetime({ offset: true }), updatedAt:z.string()});
 export const diagramSummaryListSchema = z.array(diagramSummarySchema);
 export function validationFields(error: z.ZodError) {
   const path = (parts: (string | number)[]) => parts.reduce((value, part) => typeof part === 'number' ? `${value}[${part}]` : value ? `${value}.${part}` : part, '');

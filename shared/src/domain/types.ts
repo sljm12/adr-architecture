@@ -9,7 +9,7 @@ export interface Diagram { id: UUID; name: string; status: DiagramStatus; create
 export interface GroupBoundaryLayout { position: Position; size: { width: number; height: number } }
 export interface SystemGroup extends GroupBoundaryLayout { id: UUID; diagramId: UUID; name: string; memberComponentIds: UUID[]; createdAt: string; updatedAt: string }
 export interface DiagramDocument extends Diagram { components: Component[]; relationships: Relationship[]; groups: SystemGroup[] }
-export interface DiagramSummary { id: UUID; name: string; status: DiagramStatus; updatedAt: string }
+export interface DiagramSummary { id: UUID; name: string; status: DiagramStatus; createdAt: string; updatedAt: string }
 
 export type AdrStatus = 'draft' | 'accepted' | 'superseded' | 'rejected';
 

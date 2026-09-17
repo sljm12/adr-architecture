@@ -10,3 +10,9 @@ playwright-report/
 test-results/
 *.db
 *.tsbuildinfo
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+.vscode/
+.idea/

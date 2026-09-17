@@ -52,6 +52,7 @@ export class DiagramRepository implements DiagramRepositoryLike {
     const updatedAt = new Date().toISOString();
     const updated = {
       ...document,
+      createdAt: previous.createdAt,
       updatedAt,
       components: document.components.map(component => {
         const prior = previous?.components.find(item => item.id === component.id);

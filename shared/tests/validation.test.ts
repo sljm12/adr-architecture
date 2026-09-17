@@ -1,8 +1,14 @@
-import { describe, expect, it } from 'vitest'; import { diagramDocumentSchema } from '../src/index';
+import { describe, expect, it } from 'vitest'; import { diagramDocumentSchema, diagramSummarySchema } from '../src/index';
 const ids = { diagram: '00000000-0000-0000-0000-000000000001', a: '00000000-0000-0000-0000-000000000002', b: '00000000-0000-0000-0000-000000000003', relationship: '00000000-0000-0000-0000-000000000004' };
 const base = { id: ids.diagram, name: 'System', status: 'active' as const, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', trashedAt: null, components: [{ id: ids.a, diagramId: ids.diagram, name: 'API', description: null, type: null, position: { x: 0, y: 0 }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }, { id: ids.b, diagramId: ids.diagram, name: 'DB', description: null, type: null, position: { x: 100, y: 0 }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }], relationships: [{ id: ids.relationship, diagramId: ids.diagram, sourceComponentId: ids.a, targetComponentId: ids.b, direction: 'directed' as const, label: 'queries', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }] };
 describe('document validation',()=>{
   it('rejects invalid relationships with actionable paths',()=>{const result=diagramDocumentSchema.safeParse({...base,components:[],relationships:[{...base.relationships[0],sourceComponentId:'00000000-0000-0000-0000-000000000005',targetComponentId:'00000000-0000-0000-0000-000000000006'}]}); expect(result.success).toBe(false); if(!result.success)expect(result.error.issues[0].path.join('.')).toContain('relationships');});
   it('accepts edited names, labels, and both relationship direction modes',()=>{for (const direction of ['directed','undirected'] as const) expect(diagramDocumentSchema.safeParse({...base,components:base.components.map(component=>component.id===ids.a?{...component,name:' Gateway '}:component),relationships:[{...base.relationships[0],label:' sends events ',direction}]}).success).toBe(true);});
   it('rejects blank component names and unsupported relationship directions',()=>{const blank=diagramDocumentSchema.safeParse({...base,components:base.components.map(component=>component.id===ids.a?{...component,name:'   '}:component)}); expect(blank.success).toBe(false); const invalid=diagramDocumentSchema.safeParse({...base,relationships:[{...base.relationships[0],direction:'backward'}]}); expect(invalid.success).toBe(false);});
+  it('requires an offset-aware original creation timestamp on diagram summaries',()=>{
+    const summary = { id: ids.diagram, name: 'System', status: 'active' as const, createdAt: base.createdAt, updatedAt: base.updatedAt };
+    expect(diagramSummarySchema.safeParse(summary).success).toBe(true);
+    expect(diagramSummarySchema.safeParse({ ...summary, createdAt: undefined }).success).toBe(false);
+    expect(diagramSummarySchema.safeParse({ ...summary, createdAt: 'not-a-date' }).success).toBe(false);
+  });
 });

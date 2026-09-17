@@ -4,7 +4,8 @@ info:
   version: 1.0.0
   description: >-
     Contract delta for the active diagram list and recoverable panel deletion. Filtering and sorting
-    are local panel operations; the API returns active summaries with the original creation date.
+    are local panel operations; the API returns active and trashed summaries with the original,
+    immutable creation date.
 paths:
   /diagrams:
     get:
@@ -27,7 +28,7 @@ paths:
         - $ref: '#/components/parameters/DiagramId'
       responses:
         '204':
-          description: Diagram moved to trash and removed from the active list.
+          description: Diagram moved to recoverable trash and removed from the active list. Its complete document and createdAt are retained.
         '404':
           $ref: '#/components/responses/NotFound'
   /diagrams/trash:
