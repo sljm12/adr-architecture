@@ -365,7 +365,12 @@ export const useDiagramStore = create<State>((set, get) => ({
   },
   loadSavedDocument: async id => {
     set({ loadError: null });
-    try { const document = await diagramClient.get(id); get().open(document); return true; }
+    try {
+      const document = await diagramClient.get(id);
+      if (document.id !== id) throw new Error('The selected diagram identity did not match the requested diagram.');
+      get().open(document);
+      return true;
+    }
     catch (error) { set({ loadError: error instanceof Error ? error.message : 'Could not load the selected diagram.' }); return false; }
   },
 }));

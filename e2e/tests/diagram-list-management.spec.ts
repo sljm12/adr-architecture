@@ -83,3 +83,36 @@ test.describe('find diagrams by name or creation date', () => {
     await expect(page.getByLabel('Filter diagrams by name')).toHaveCount(0);
   });
 });
+
+test.describe('sort diagrams for review', () => {
+  test('sorts by field and direction, keeps filtered ties stable, and opens the selected UUID', async ({ page }) => {
+    await mockActiveDiagramSummaries(page, activeDiagramListFixtures);
+    const selected = activeDiagramListFixtures.find(item => item.id === '00000000-0000-4000-8000-000000000404')!;
+    const selectedDocument: DiagramDocument = { ...selected, status: 'active', trashedAt: null, components: [], relationships: [], groups: [] };
+    await page.route(`**/api/diagrams/${selected.id}`, route => route.request().method() === 'GET' ? fulfillJson(route, selectedDocument) : route.fallback());
+    await page.goto('/');
+
+    const names = () => page.locator('.saved-diagram-button strong').allTextContents();
+    await page.getByLabel('Sort diagrams by').selectOption('name');
+    await page.getByLabel('Sort direction').selectOption('ascending');
+    await expect.poll(names).toEqual(['Before range', 'Inventory', 'Payments', 'Payments', 'Payments API']);
+
+    await page.getByLabel('Sort direction').selectOption('descending');
+    await expect.poll(names).toEqual(['Payments API', 'Payments', 'Payments', 'Inventory', 'Before range']);
+
+    await page.getByLabel('Sort diagrams by').selectOption('createdAt');
+    await page.getByLabel('Sort direction').selectOption('ascending');
+    await expect.poll(names).toEqual(['Before range', 'Payments', 'Payments', 'Payments API', 'Inventory']);
+
+    await page.getByLabel('Sort direction').selectOption('descending');
+    await expect.poll(names).toEqual(['Inventory', 'Payments API', 'Payments', 'Payments', 'Before range']);
+
+    await page.getByLabel('Filter diagrams by name').fill('payments');
+    await page.getByLabel('Sort diagrams by').selectOption('name');
+    await page.getByLabel('Sort direction').selectOption('ascending');
+    await expect.poll(names).toEqual(['Payments', 'Payments', 'Payments API']);
+    await expect(page.locator(`.saved-diagram-button[data-diagram-id="${selected.id}"]`)).toHaveCount(1);
+    await page.locator(`.saved-diagram-button[data-diagram-id="${selected.id}"]`).click();
+    await expect(page.locator('.current-diagram strong')).toHaveText(selected.name);
+  });
+});

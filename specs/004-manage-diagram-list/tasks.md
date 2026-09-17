@@ -82,14 +82,14 @@ selected stable UUID is loaded.
 
 ### Tests for User Story 2
 
-- [ ] T014 [P] [US2] Add unit coverage for name and creation-date ascending/descending order, case-insensitive names, deterministic normalized-name/UUID tie-breaks, and sorting after filters in `frontend/tests/diagram-list.test.ts`.
-- [ ] T015 [P] [US2] Add Playwright coverage for every sort field/direction, filtered sorting, equal-value ties, duplicate-name entries, and opening the exact selected diagram in `e2e/tests/diagram-list-management.spec.ts`.
+- [X] T014 [P] [US2] Add unit coverage for name and creation-date ascending/descending order, case-insensitive names, deterministic normalized-name/UUID tie-breaks, and sorting after filters in `frontend/tests/diagram-list.test.ts`.
+- [X] T015 [P] [US2] Add Playwright coverage for every sort field/direction, filtered sorting, equal-value ties, duplicate-name entries, and opening the exact selected diagram in `e2e/tests/diagram-list-management.spec.ts`.
 
 ### Implementation for User Story 2
 
-- [ ] T016 [US2] Implement name/creation-date sort-field and ascending/descending controls, default newest-created-first ordering, and filtered-result ordering in `frontend/src/state/diagram-list.ts` and `frontend/src/components/SavedDiagramList.tsx`.
-- [ ] T017 [US2] Ensure every open action and rendered row remains keyed and dispatched by stable diagram UUID, including duplicate names and equal creation dates, in `frontend/src/components/SavedDiagramList.tsx` and `frontend/src/state/diagram-store.ts`.
-- [ ] T018 [US2] Add accessible sort control labels, focus behavior, selected-direction feedback, and responsive styles without reducing the delete/open target distinction in `frontend/src/components/SavedDiagramList.tsx` and `frontend/src/components/saved-diagram-list.css`.
+- [X] T016 [US2] Implement name/creation-date sort-field and ascending/descending controls, default newest-created-first ordering, and filtered-result ordering in `frontend/src/state/diagram-list.ts` and `frontend/src/components/SavedDiagramList.tsx`.
+- [X] T017 [US2] Ensure every open action and rendered row remains keyed and dispatched by stable diagram UUID, including duplicate names and equal creation dates, in `frontend/src/components/SavedDiagramList.tsx` and `frontend/src/state/diagram-store.ts`.
+- [X] T018 [US2] Add accessible sort control labels, focus behavior, selected-direction feedback, and responsive styles without reducing the delete/open target distinction in `frontend/src/components/SavedDiagramList.tsx` and `frontend/src/components/saved-diagram-list.css`.
 
 **Checkpoint**: US1 and US2 both work independently: authors can filter, sort, and open any active
 diagram without changing the underlying architecture documents or confusing duplicate names.

@@ -1,10 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { deriveDiagramList, defaultDiagramListSort } from '../src/state/diagram-list';
+import { deriveDiagramList, defaultDiagramListSort, type DiagramListSort } from '../src/state/diagram-list';
 import {
   activeDiagramListFixtures,
   dateRangeBoundaryFixtures,
   diagramListFixtures,
 } from './diagram-list-fixtures';
+
+const sortingFixtures = [
+  { id: '00000000-0000-4000-8000-000000000409', name: 'zeta', status: 'active' as const, createdAt: '2026-01-12T00:00:00.000Z', updatedAt: '2026-01-12T00:00:00.000Z' },
+  { id: '00000000-0000-4000-8000-000000000407', name: 'alpha', status: 'active' as const, createdAt: '2026-01-10T00:00:00.000Z', updatedAt: '2026-01-10T00:00:00.000Z' },
+  { id: '00000000-0000-4000-8000-000000000408', name: 'Beta', status: 'active' as const, createdAt: '2026-01-11T00:00:00.000Z', updatedAt: '2026-01-11T00:00:00.000Z' },
+  { id: '00000000-0000-4000-8000-000000000406', name: ' Alpha ', status: 'active' as const, createdAt: '2026-01-10T00:00:00.000Z', updatedAt: '2026-01-10T00:00:00.000Z' },
+];
+
+const sort = (field: DiagramListSort['field'], direction: DiagramListSort['direction']): DiagramListSort => ({ field, direction });
 
 describe('diagram list derivation', () => {
   it('matches trimmed, case-insensitive name substrings', () => {
@@ -61,6 +70,45 @@ describe('diagram list derivation', () => {
       ['00000000-0000-4000-8000-000000000402', '2026-01-12T23:59:59.000Z'],
       ['00000000-0000-4000-8000-000000000401', '2026-01-10T00:00:00.000Z'],
       ['00000000-0000-4000-8000-000000000404', '2026-01-10T00:00:00.000Z'],
+    ]);
+  });
+
+  it('sorts names case-insensitively in both directions with deterministic UUID ties', () => {
+    expect(deriveDiagramList(sortingFixtures, {}, sort('name', 'ascending')).items.map(item => item.id)).toEqual([
+      '00000000-0000-4000-8000-000000000406',
+      '00000000-0000-4000-8000-000000000407',
+      '00000000-0000-4000-8000-000000000408',
+      '00000000-0000-4000-8000-000000000409',
+    ]);
+    expect(deriveDiagramList(sortingFixtures, {}, sort('name', 'descending')).items.map(item => item.id)).toEqual([
+      '00000000-0000-4000-8000-000000000409',
+      '00000000-0000-4000-8000-000000000408',
+      '00000000-0000-4000-8000-000000000406',
+      '00000000-0000-4000-8000-000000000407',
+    ]);
+  });
+
+  it('sorts creation dates in both directions and resolves equal dates by name then UUID', () => {
+    expect(deriveDiagramList(sortingFixtures, {}, sort('createdAt', 'ascending')).items.map(item => item.id)).toEqual([
+      '00000000-0000-4000-8000-000000000406',
+      '00000000-0000-4000-8000-000000000407',
+      '00000000-0000-4000-8000-000000000408',
+      '00000000-0000-4000-8000-000000000409',
+    ]);
+    expect(deriveDiagramList(sortingFixtures, {}, sort('createdAt', 'descending')).items.map(item => item.id)).toEqual([
+      '00000000-0000-4000-8000-000000000409',
+      '00000000-0000-4000-8000-000000000408',
+      '00000000-0000-4000-8000-000000000406',
+      '00000000-0000-4000-8000-000000000407',
+    ]);
+  });
+
+  it('sorts the filtered collection without changing which summaries match', () => {
+    const result = deriveDiagramList(sortingFixtures, { nameQuery: 'a', createdFrom: '2026-01-10', createdTo: '2026-01-11' }, sort('name', 'descending'));
+    expect(result.items.map(item => item.id)).toEqual([
+      '00000000-0000-4000-8000-000000000408',
+      '00000000-0000-4000-8000-000000000406',
+      '00000000-0000-4000-8000-000000000407',
     ]);
   });
 });
