@@ -78,6 +78,18 @@ describe('ADR API contract', () => {
     await app.close();
   });
 
+  it('returns diagram-scoped sparse component ADR counts and rejects missing diagrams', async () => {
+    const app = buildApp(); await app.ready();
+    const diagram = (await app.inject({ method: 'POST', url: '/diagrams', payload: { name: 'Counts' } })).json();
+    const component = { id: '00000000-0000-0000-0000-000000000081', diagramId: diagram.id, name: 'API', description: null, type: 'service', position: { x: 0, y: 0 }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' };
+    await app.inject({ method: 'PUT', url: `/diagrams/${diagram.id}`, payload: { ...diagram, components: [component], relationships: [] } });
+    const adr = (await app.inject({ method: 'POST', url: `/diagrams/${diagram.id}/adrs`, payload: completeAdrPayload })).json();
+    await app.inject({ method: 'PUT', url: `/adrs/${adr.id}/components`, payload: { componentIds: [component.id] } });
+    expect((await app.inject({ method: 'GET', url: `/diagrams/${diagram.id}/component-adr-counts` })).json()).toEqual([{ componentId: component.id, count: 1 }]);
+    expect((await app.inject({ method: 'GET', url: '/diagrams/00000000-0000-0000-0000-000000000099/component-adr-counts' })).statusCode).toBe(404);
+    await app.close();
+  });
+
   it('replaces relationship links independently, returns relationship summaries, and rejects invalid links', async () => {
     const app = buildApp(); await app.ready();
     const first = (await app.inject({ method: 'POST', url: '/diagrams', payload: { name: 'Payments' } })).json();

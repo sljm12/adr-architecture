@@ -59,6 +59,23 @@ describe('ADR repository', () => {
     expect(repository.listByComponent(adrFixtureIds.diagram, adrFixtureIds.otherComponent)).toBeUndefined();
   });
 
+  it('returns sparse component ADR counts scoped to the diagram', () => {
+    const repository = new AdrRepository();
+    repository.registerComponent({ id: adrFixtureIds.componentA, diagramId: adrFixtureIds.diagram, name: 'API' });
+    repository.registerComponent({ id: adrFixtureIds.componentB, diagramId: adrFixtureIds.diagram, name: 'Database' });
+    repository.registerComponent({ id: adrFixtureIds.otherComponent, diagramId: adrFixtureIds.otherDiagram, name: 'Other' });
+    const first = repository.create(adrFixtureIds.diagram, completeAdrPayload);
+    const second = repository.create(adrFixtureIds.diagram, { ...completeAdrPayload, status: 'accepted' });
+    const other = repository.create(adrFixtureIds.otherDiagram, completeAdrPayload);
+    repository.replaceLinks(first.id, [adrFixtureIds.componentA, adrFixtureIds.componentB]);
+    repository.replaceLinks(second.id, [adrFixtureIds.componentA]);
+    repository.replaceLinks(other.id, [adrFixtureIds.otherComponent]);
+    expect(repository.componentAdrCounts(adrFixtureIds.diagram)).toEqual([
+      { componentId: adrFixtureIds.componentA, count: 2 },
+      { componentId: adrFixtureIds.componentB, count: 1 },
+    ]);
+  });
+
   it('replaces relationship links independently while preserving component links', () => {
     const repository = new AdrRepository();
     const relationship = { id: '00000000-0000-0000-0000-000000000231', diagramId: adrFixtureIds.diagram };

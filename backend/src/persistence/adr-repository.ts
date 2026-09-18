@@ -1,6 +1,6 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, count, eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import type { AdrDependencyBlocker, AdrSummary, ArchitectureDecisionRecord, AdrWritePayload, ComponentAdrSummary, ComponentReference, RelationshipAdrSummary, RelationshipReference } from '../../../shared/src/index';
+import type { AdrDependencyBlocker, AdrSummary, ArchitectureDecisionRecord, AdrWritePayload, ComponentAdrCount, ComponentAdrSummary, ComponentReference, RelationshipAdrSummary, RelationshipReference } from '../../../shared/src/index';
 import { architectureDecisionRecordSchema, adrComponentsWriteSchema, adrRelationshipsWriteSchema, adrWriteSchema, assertAdrInvariants } from '../../../shared/src/index';
 import * as schema from './schema';
 import type { MaybePromise } from './diagram-repository';
@@ -15,6 +15,7 @@ export interface AdrRepositoryLike {
   replaceLinks(id: string, componentIds: string[]): MaybePromise<ArchitectureDecisionRecord | undefined>;
   replaceRelationshipLinks(id: string, relationshipIds: string[]): MaybePromise<ArchitectureDecisionRecord | undefined>;
   listByComponent(diagramId: string, componentId: string): MaybePromise<ComponentAdrSummary[] | undefined>;
+  componentAdrCounts(diagramId: string): MaybePromise<ComponentAdrCount[]>;
   listByRelationship(diagramId: string, relationshipId: string): MaybePromise<RelationshipAdrSummary[] | undefined>;
   delete(id: string): MaybePromise<AdrDeleteResult | undefined>;
   componentBlockers(componentId: string): MaybePromise<AdrDependencyBlocker[]>;
@@ -45,6 +46,14 @@ export class AdrRepository implements AdrRepositoryLike {
     const component = this.components.get(componentId);
     if (component && component.diagramId !== diagramId) return undefined;
     return [...this.records.values()].filter(adr => adr.diagramId === diagramId && adr.componentIds.includes(componentId)).sort(byUpdatedAtThenId).map(componentSummaryOf);
+  }
+  componentAdrCounts(diagramId: string): ComponentAdrCount[] {
+    const counts = new Map<string, number>();
+    for (const adr of this.records.values()) {
+      if (adr.diagramId !== diagramId) continue;
+      for (const componentId of adr.componentIds) counts.set(componentId, (counts.get(componentId) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([componentId, count]) => ({ componentId, count }));
   }
   listByRelationship(diagramId: string, relationshipId: string) {
     const relationship = this.relationships.get(relationshipId);
@@ -77,6 +86,15 @@ export class PostgresAdrRepository implements AdrRepositoryLike {
       .where(and(eq(schema.adrs.diagramId, diagramId), eq(schema.adrComponentLinks.componentId, componentId)))
       .orderBy(asc(schema.adrs.updatedAt), asc(schema.adrs.id));
     return rows.map(row => ({ id: row.id, title: row.title, status: row.status, updatedAt: iso(row.updatedAt) }));
+  }
+  async componentAdrCounts(diagramId: string): Promise<ComponentAdrCount[]> {
+    const rows = await this.db.select({ componentId: schema.adrComponentLinks.componentId, count: count() })
+      .from(schema.adrComponentLinks)
+      .innerJoin(schema.adrs, eq(schema.adrs.id, schema.adrComponentLinks.adrId))
+      .where(eq(schema.adrs.diagramId, diagramId))
+      .groupBy(schema.adrComponentLinks.componentId)
+      .orderBy(asc(schema.adrComponentLinks.componentId));
+    return rows.map(row => ({ componentId: row.componentId, count: Number(row.count) }));
   }
   async listByRelationship(diagramId: string, relationshipId: string): Promise<RelationshipAdrSummary[] | undefined> {
     const [relationship] = await this.db.select({ id: schema.relationships.id }).from(schema.relationships).where(and(eq(schema.relationships.id, relationshipId), eq(schema.relationships.diagramId, diagramId))).limit(1);

@@ -53,7 +53,7 @@ export function getReactFlowNodeSize(node:Pick<Node,'measured'|'width'|'height'|
   const styleHeight=typeof style.height==='number'?style.height:undefined;
   return {width:positiveDimension(node.measured?.width??node.width??styleWidth,fallback.width),height:positiveDimension(node.measured?.height??node.height??styleHeight,fallback.height)};
 }
-export function toReactFlow(document:DiagramDocument,sizes?:ComponentSizeMap):{nodes:Node[];edges:Edge[]}{
+export function toReactFlow(document:DiagramDocument,sizes?:ComponentSizeMap,adrCounts?:Record<string,number>,onOpenComponentAdrs?:(componentId:string)=>void):{nodes:Node[];edges:Edge[]}{
   const components=new Map(document.components.map(c=>[c.id,c]));
   const routed=document.relationships.map(relationship=>{const source=components.get(relationship.sourceComponentId);const target=components.get(relationship.targetComponentId);const handles=source&&target?nearestHandle(source.position,target.position):{source:'right' as HandleSide,target:'left' as HandleSide};return {relationship,...handles};});
   const routing=assignRouting(routed);
@@ -76,7 +76,7 @@ export function toReactFlow(document:DiagramDocument,sizes?:ComponentSizeMap):{n
     const groupId=membership.get(c.id); const group=groupId?groups.find(item=>item.id===groupId):undefined;
     const size=sizes?.get(c.id)??DEFAULT_COMPONENT_SIZE;
     const node:Node={id:c.id,position:group?getRelativeMemberPosition(c.position,group.position):c.position,data:{label:c.name},type:'component',style:{width:size.width,height:size.height}};
-    node.data={...node.data,type:c.type,groupId};
+    node.data={...node.data,id:c.id,adrCount:adrCounts?.[c.id] ?? 0,onOpenComponentAdrs,type:c.type,groupId};
     if(group){node.parentId=group.id;node.extent='parent';node.expandParent=true;}
     return node;
   });

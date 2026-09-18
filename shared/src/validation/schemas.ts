@@ -87,6 +87,8 @@ export const adrSummarySchema = z.object({
 });
 
 export const adrSummaryListSchema = z.array(adrSummarySchema);
+export const componentAdrCountSchema = z.object({ componentId: uuidSchema, count: z.number().int().positive() });
+export const componentAdrCountListSchema = z.array(componentAdrCountSchema);
 export const componentAdrSummarySchema = z.object({
   id: uuidSchema,
   title: requiredAdrText('Title'),

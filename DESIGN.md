@@ -560,3 +560,13 @@ The structural breakpoints that matter for agents: 1440px (content lock), 1068px
 - Dark-mode counterparts for store and accessories utility cards were not surfaced on the analyzed pages; the system documented is the daytime/light-dominant variant Apple ships by default.
 - Atmospheric photography (environment page mountain vista) is a content asset, not a design token; the documented `{component.environment-quote-card}` describes the structural surface only.
 - The exact backdrop-filter blur radius on `{component.sub-nav-frosted}` and `{component.floating-sticky-bar}` is platform-dependent; production CSS uses `saturate(180%) blur(20px)` as a typical baseline but the value isn't formalized as a token.
+
+## ADR Diagram Workspace Extensions
+
+The editor shell uses the same quiet Apple-inspired chrome while giving the architecture canvas priority. The global navigation remains 44px; the workspace header is compact; the library and Details surfaces are independently collapsible and scroll internally. Panel state is transient UI state and never enters an architecture artifact or undo history.
+
+Unselected diagram components use a neutral hairline border. Action Blue is reserved for selected/focused outlines, connection handles, relationship emphasis, and ADR count badges. Handles are visually quiet until a node is selected, focused, or used for connection. Relationship labels use the canvas surface as a backing treatment so text remains readable over curves.
+
+System group boundaries retain the dashed boundary grammar, but their 44px header reserves the top padding for the group name and member count. The explanatory subtitle is omitted from the canvas; accessible names retain the complete boundary description.
+
+Components with linked decision records may show a compact pill badge containing the positive count. The badge is a keyboard target and opens the existing Linked ADRs inspector section. Counts are derived metadata, not part of the persisted diagram document, and unavailable counts are hidden rather than rendered as zero.

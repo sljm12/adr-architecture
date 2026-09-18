@@ -5,13 +5,16 @@ const systemChromium = process.env.PLAYWRIGHT_EXECUTABLE_PATH || [
   '/usr/bin/chromium',
   '/usr/bin/chromium-browser',
   '/usr/bin/google-chrome',
+  'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
 ].find(path => existsSync(path));
+const usesWindowsBrowser = Boolean(systemChromium?.match(/^[A-Z]:\//i));
 
 export default defineConfig({
   testDir: './e2e/tests',
   use: {
     baseURL: 'http://localhost:5173',
-    ...(systemChromium ? { executablePath: systemChromium } : {}),
+    ...(systemChromium ? { launchOptions: { executablePath: systemChromium, ...(usesWindowsBrowser ? { headless: false } : {}) } } : {}),
     trace: 'retain-on-failure',
   },
   webServer: [

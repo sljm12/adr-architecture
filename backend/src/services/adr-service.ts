@@ -13,6 +13,7 @@ export class AdrService {
   constructor(private readonly adrs: AdrRepositoryLike, private readonly diagrams: DiagramRepositoryLike) {}
 
   async list(diagramId: string): Promise<AdrSummary[]> { await this.diagram(diagramId); return this.adrs.list(diagramId); }
+  async componentAdrCounts(diagramId: string) { await this.diagram(diagramId); return this.adrs.componentAdrCounts(diagramId); }
   async load(id: string): Promise<ArchitectureDecisionRecord> { const adr = await this.adrs.get(id); if (!adr) throw new AdrNotFoundError('ADR not found'); return adr; }
 
   async create(diagramId: string, payload: unknown): Promise<ArchitectureDecisionRecord> {

@@ -50,6 +50,11 @@ export interface AdrSummary {
   relationshipCount: number;
 }
 
+export interface ComponentAdrCount {
+  componentId: UUID;
+  count: number;
+}
+
 export interface ComponentAdrSummary {
   id: UUID;
   title: string;

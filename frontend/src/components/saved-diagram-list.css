@@ -6,6 +6,18 @@
   border-radius: 18px;
 }
 
+.saved-diagrams-filter-disclosure { margin: 12px 0 14px; border-bottom: 1px solid #f0f0f0; }
+.saved-diagrams-filter-disclosure summary { min-height: 44px; padding: 10px 0; color: #0066cc; font-size: 14px; font-weight: 600; cursor: pointer; }
+.saved-diagrams-filter-disclosure[open] summary { margin-bottom: 4px; }
+.saved-diagram-row.is-current .saved-diagram-button { border-color: #0066cc; background: #f5faff; }
+.saved-diagram-current { display: block; margin-top: 3px; color: #0066cc; font-size: 11px; font-weight: 600; }
+.saved-diagrams-recovery { margin-top: 18px; padding-top: 14px; border-top: 1px solid #e0e0e0; }
+.saved-diagrams-trash { display: grid; gap: 8px; margin-top: 8px; }
+.saved-diagram-trash-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 52px; padding: 8px 10px; border: 1px solid #e0e0e0; border-radius: 8px; background: #fff; }
+.saved-diagram-trash-row span { display: grid; gap: 2px; min-width: 0; }
+.saved-diagram-trash-row strong { overflow-wrap: anywhere; font-size: 13px; }
+.saved-diagram-trash-row small { color: #5f6368; font-size: 11px; }
+
 .saved-diagrams-title { margin-bottom: 16px; }
 .saved-diagrams-title h2 { margin: 4px 0 0; font-family: "SF Pro Display", system-ui, sans-serif; font-size: 21px; font-weight: 600; line-height: 1.19; letter-spacing: -0.28px; }
 .saved-diagrams-status { margin: 0; color: #5f6368; font-size: 14px; line-height: 1.43; }

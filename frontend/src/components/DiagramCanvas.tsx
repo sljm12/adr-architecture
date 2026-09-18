@@ -20,14 +20,16 @@ type DiagramCanvasProps = {
   onMultiSelectionChange?: (componentIds: string[]) => void;
   groupingSelectionActive?: boolean;
   canvasEpoch?: number;
+  adrCounts?: Record<string, number>;
+  onOpenComponentAdrs?: (componentId: string) => void;
 };
 
-export function DiagramCanvas({ onSelection, selectedComponentIds = [], selectedComponentId = null, selectedGroupId = null, selectedRelationshipId = null, onMultiSelectionChange, groupingSelectionActive = false, canvasEpoch = 0 }: DiagramCanvasProps) {
+export function DiagramCanvas({ onSelection, selectedComponentIds = [], selectedComponentId = null, selectedGroupId = null, selectedRelationshipId = null, onMultiSelectionChange, groupingSelectionActive = false, canvasEpoch = 0, adrCounts = {}, onOpenComponentAdrs }: DiagramCanvasProps) {
   const document = useDiagramStore(state => state.document);
   const update = useDiagramStore(state => state.update);
   const [memberSizes, setMemberSizes] = useState<Record<string, { width: number; height: number }>>({});
   const sizeMap = useMemo(() => new Map(Object.entries(memberSizes)), [memberSizes]);
-  const visual = useMemo(() => document ? toReactFlow(document, sizeMap) : { nodes: [], edges: [] }, [document, sizeMap]);
+  const visual = useMemo(() => document ? toReactFlow(document, sizeMap, adrCounts, onOpenComponentAdrs) : { nodes: [], edges: [] }, [document, sizeMap, adrCounts, onOpenComponentAdrs]);
   const [interactiveNodes, setInteractiveNodes] = useState<Node[]>([]);
   useEffect(() => setInteractiveNodes(visual.nodes), [visual]);
   const selectedIds = useMemo(() => new Set(selectedComponentIds.length ? selectedComponentIds : selectedComponentId ? [selectedComponentId] : []), [selectedComponentId, selectedComponentIds]);
@@ -142,5 +144,5 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
     emitSelection({ kind: 'relationship', id: edge.id }, `relationship:${edge.id}`);
   }, [emitSelection, groupingSelectionActive, onMultiSelectionChange]);
 
-  return <main id="diagram-canvas" tabIndex={-1} aria-label="Architecture diagram canvas"><ReactFlow key={`${document?.id ?? 'empty'}:${visual.nodes.length}:${canvasEpoch}`} nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={onNodesChange} onEdgesChange={() => undefined} onNodeDragStop={onNodeDragStop} onNodeClick={onNodeClick} onEdgeClick={onEdgeClick} onSelectionChange={handleSelectionChange} onPaneClick={() => { selectionSignature.current = ''; onMultiSelectionChange?.([]); onSelection(null); }} selectionOnDrag={false} selectionKeyCode="Shift" multiSelectionKeyCode="Shift" selectionMode="full" fitView><Background aria-hidden="true" /><Controls aria-label="Canvas zoom controls" /></ReactFlow></main>;
+  return <main id="diagram-canvas" tabIndex={-1} aria-label="Architecture diagram canvas"><ReactFlow key={`${document?.id ?? 'empty'}:${visual.nodes.length}:${canvasEpoch}`} nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={onNodesChange} onEdgesChange={() => undefined} onNodeDragStop={onNodeDragStop} onNodeClick={onNodeClick} onEdgeClick={onEdgeClick} onSelectionChange={handleSelectionChange} onPaneClick={() => { selectionSignature.current = ''; onMultiSelectionChange?.([]); onSelection(null); }} selectionOnDrag={false} selectionKeyCode="Shift" multiSelectionKeyCode="Shift" selectionMode="full" fitView fitViewOptions={{ padding: 0.4 }}><Background aria-hidden="true" /><Controls aria-label="Canvas zoom controls" /></ReactFlow></main>;
 }

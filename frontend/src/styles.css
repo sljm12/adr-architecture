@@ -43,9 +43,74 @@
   .component-adr-summary,.relationship-adr-summary{padding-left:16px;padding-right:16px}
 }
 @media(max-width:480px){
-  .workspace-inspector-adr .adr-link-chip{align-items:flex-start;flex-wrap:wrap}
-  .workspace-inspector-adr .adr-link-chip button{flex:0 0 auto}
-  .component-adr-summary-row,.relationship-adr-summary-row{align-items:flex-start;flex-wrap:wrap}
+.workspace-inspector-adr .adr-link-chip{align-items:flex-start;flex-wrap:wrap}
+.workspace-inspector-adr .adr-link-chip button{flex:0 0 auto}
+}
+
+/* Workspace usability overrides */
+html,body,#root{overflow:hidden}
+.app-shell{height:100%;display:flex;flex-direction:column;overflow:hidden}
+.sub-nav{height:64px;flex:0 0 64px;padding-block:8px}
+.sub-nav h1{font-size:19px}
+.workspace{min-height:0;flex:1;grid-template-columns:280px minmax(0,1fr);overflow:hidden}
+.workspace-sidebar{min-height:0;overflow:auto;padding:20px 18px}
+.library-closed .workspace{grid-template-columns:0 minmax(0,1fr)}
+.library-closed .workspace-sidebar{padding:0}
+.editor-area{display:flex;flex-direction:column;min-height:0}
+.command-bar{flex:0 0 auto;min-height:76px;padding:8px 16px;gap:12px;flex-wrap:nowrap;overflow:hidden}
+.command-bar-title{min-width:0;flex:0 0 220px}
+.command-bar-actions{flex:1 1 auto;min-width:0;flex-wrap:nowrap;justify-content:flex-start;overflow-x:auto;scrollbar-width:thin}
+.command-bar-actions>*{flex:0 0 auto}
+.command-bar .primary-action{background:#0066cc;color:#fff}
+.command-bar .save-action{background:#fafafc;color:#333;border-color:#e0e0e0}
+.canvas-workspace{height:auto;min-height:0;flex:1;grid-template-columns:minmax(0,1fr) 300px}
+.canvas-workspace.inspector-closed{grid-template-columns:minmax(0,1fr)}
+.canvas-workspace.inspector-closed .workspace-inspector{display:none}
+.canvas-workspace.adr-mode.inspector-open{grid-template-columns:minmax(0,1fr) minmax(640px,760px)}
+.workspace-inspector{min-height:0}
+.adr-count-feedback{flex:0 0 auto;margin:0;padding:7px 16px;border-bottom:1px solid #e0e0e0;background:#fff7f6;color:#7d1c1c;font-size:13px;line-height:1.3}
+.adr-count-feedback .text-action{min-height:32px;margin-left:4px;padding:3px 8px;border:1px solid #0066cc;border-radius:9999px;background:#fff;color:#0066cc}
+.component-node{border:2px solid #b9c2cc;box-shadow:none}
+.component-node .react-flow__handle{opacity:0;transition:opacity .12s ease}
+.component-node.is-selected,.component-node:focus-within{border-color:#2997ff;outline:3px solid #fff;outline-offset:3px}
+.component-node.is-selected .react-flow__handle,.component-node:focus-within .react-flow__handle{opacity:1}
+.component-adr-badge{position:absolute;right:8px;bottom:7px;z-index:3;display:inline-flex;align-items:center;gap:4px;min-height:32px;padding:4px 9px;border:1px solid #0066cc;border-radius:9999px;background:#f5faff;color:#0066cc;font-size:12px;font-weight:600;line-height:1}
+.component-adr-badge span{font-size:15px;line-height:1}
+.component-adr-badge:focus-visible{outline:2px solid #0071e3;outline-offset:2px}
+.react-flow__edge-path{stroke:#c8d0d8;stroke-width:2.2px}
+.react-flow__edge:hover .react-flow__edge-path{stroke:#fff;stroke-width:2.8px}
+.react-flow__edge.selected .react-flow__edge-path{stroke:#2997ff;stroke-width:3px}
+.relationship-label{font-size:13px;paint-order:stroke;stroke:#272729;stroke-width:6px;stroke-linejoin:round}
+.system-group-node{border-width:2px}
+.group-boundary-label{min-height:44px;padding:6px 12px}
+.group-boundary-hint{display:none}
+.group-boundary-label strong{max-width:calc(100% - 112px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.saved-diagrams{margin-top:20px;padding:0;border:0;background:transparent;border-radius:0}
+.saved-diagrams-filters{margin-top:12px}
+.saved-diagrams-filter-field input,.saved-diagrams-select{min-height:44px}
+
+@media(max-width:1250px) and (min-width:834px){.canvas-workspace.adr-mode.inspector-open{grid-template-columns:minmax(0,1fr) minmax(520px,620px)}}
+@media(max-width:833px){
+  .workspace-sidebar{display:block;position:fixed;z-index:13;inset:108px auto 0 0;width:min(320px,calc(100vw - 24px));box-shadow:2px 0 16px #0002}
+  .library-closed .workspace-sidebar{display:none}
+  .workspace,.library-closed .workspace{grid-template-columns:1fr}
+  .canvas-workspace,.canvas-workspace.inspector-open,.canvas-workspace.adr-mode.inspector-open{grid-template-columns:1fr}
+  .workspace-inspector{position:fixed;z-index:12;right:0;bottom:0;width:min(420px,100vw);height:calc(100vh - 108px);box-shadow:-2px 0 16px #0002}
+  .command-bar{padding-inline:10px}
+  .command-bar-actions{gap:6px}
+  .library-toggle{display:grid}
+}
+@media(max-width:640px){
+  .sub-nav{height:56px;flex-basis:56px;padding-inline:16px}
+  .sub-nav h1{font-size:17px}
+  .sub-nav-actions .quiet-note{display:none}
+  .command-bar-title .eyebrow{display:none}
+  .command-bar-title strong{max-width:120px}
+  .command-bar-actions .secondary-action{padding-inline:10px}
+  .workspace-inspector{height:62vh;border-top:1px solid #e0e0e0}
+  .workspace-sidebar{inset:100px auto 0 0}
+}
+@media(max-width:480px){.component-adr-summary-row,.relationship-adr-summary-row{align-items:flex-start;flex-wrap:wrap}
 }
 .c4-type-fieldset{display:grid;gap:8px;margin:8px 0 4px;padding:12px;border:1px solid #e0e0e0;border-radius:11px;background:#fff}.c4-type-fieldset legend{padding:0 4px;font-size:14px;font-weight:600}.c4-type-option{display:flex!important;align-items:flex-start;gap:10px;min-height:44px;margin:0!important;padding:8px;border:1px solid transparent;border-radius:8px;font-weight:400!important}.c4-type-option:has(input:checked){border-color:#0066cc;background:#f5faff}.c4-type-option input{width:20px!important;min-width:20px;min-height:20px!important;margin-top:2px;padding:0!important}.c4-type-option span{display:grid;gap:2px}.c4-type-option strong{font-size:14px}.c4-type-option small{color:#5f6368;font-size:12px;font-weight:400}.component-type-label{display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:5px;color:#5f6368;font-size:11px;font-weight:600;letter-spacing:.02em}.component-node-person{border-style:dashed}.component-node-software-system{border-style:solid}.component-node-unclassified{border-style:dotted}.adr-link-chip small{color:#5f6368;font-size:11px}
 .system-group-node{position:relative;width:100%;height:100%;min-width:220px;border:2px dashed #a9b4c0;border-radius:8px;background:rgba(255,255,255,.035);color:#fff;pointer-events:all}

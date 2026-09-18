@@ -1,5 +1,5 @@
-import type { AdrComponentsWritePayload, AdrRelationshipsWritePayload, AdrSummary, ArchitectureDecisionRecord, AdrWritePayload, ComponentAdrSummary, RelationshipAdrSummary } from '../../../shared/src/index';
-import { componentAdrSummaryListSchema, relationshipAdrSummaryListSchema } from '../../../shared/src/index';
+import type { AdrComponentsWritePayload, AdrRelationshipsWritePayload, AdrSummary, ArchitectureDecisionRecord, AdrWritePayload, ComponentAdrCount, ComponentAdrSummary, RelationshipAdrSummary } from '../../../shared/src/index';
+import { componentAdrCountListSchema, componentAdrSummaryListSchema, relationshipAdrSummaryListSchema } from '../../../shared/src/index';
 import { DiagramApiError } from './diagram-client';
 
 export class AdrApiError extends DiagramApiError { constructor(message: string, status: number, details: Record<string, unknown> = {}) { super(message, status, details); this.name = 'AdrApiError'; } }
@@ -7,6 +7,7 @@ const json = async (response: Response) => { const body = await response.json().
 
 export const adrClient = {
   list: (diagramId: string) => fetch(`/api/diagrams/${diagramId}/adrs`).then(json) as Promise<AdrSummary[]>,
+  componentAdrCounts: async (diagramId: string): Promise<ComponentAdrCount[]> => componentAdrCountListSchema.parse(await fetch(`/api/diagrams/${diagramId}/component-adr-counts`).then(json)),
   get: (id: string) => fetch(`/api/adrs/${id}`).then(json) as Promise<ArchitectureDecisionRecord>,
   create: (diagramId: string, payload: AdrWritePayload) => fetch(`/api/diagrams/${diagramId}/adrs`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) }).then(json) as Promise<ArchitectureDecisionRecord>,
   update: (id: string, payload: AdrWritePayload) => fetch(`/api/adrs/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) }).then(json) as Promise<ArchitectureDecisionRecord>,

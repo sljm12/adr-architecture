@@ -8,6 +8,10 @@ export function registerAdrRoutes(app: FastifyInstance, service: AdrService): vo
     try { return reply.send(await service.list(request.params.diagramId)); }
     catch (error) { if (error instanceof AdrDiagramNotFoundError) return reply.code(404).send({ message: error.message }); return sendError(reply, error); }
   });
+  app.get<{ Params: { diagramId: string } }>('/diagrams/:diagramId/component-adr-counts', async (request, reply) => {
+    try { return reply.send(await service.componentAdrCounts(request.params.diagramId)); }
+    catch (error) { if (error instanceof AdrDiagramNotFoundError) return reply.code(404).send({ message: error.message }); return sendError(reply, error); }
+  });
   app.post<{ Params: { diagramId: string } }>('/diagrams/:diagramId/adrs', async (request, reply) => {
     try { return reply.code(201).send(await service.create(request.params.diagramId, request.body)); }
     catch (error) { if (error instanceof AdrDiagramNotFoundError) return reply.code(404).send({ message: error.message }); return sendError(reply, error); }

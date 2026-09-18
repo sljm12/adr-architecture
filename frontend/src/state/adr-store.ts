@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { AdrStatus, AdrSummary, AdrWritePayload, ArchitectureDecisionRecord, ComponentAdrSummary, RelationshipAdrSummary } from '../../../shared/src/index';
+import type { AdrStatus, AdrSummary, AdrWritePayload, ArchitectureDecisionRecord, ComponentAdrCount, ComponentAdrSummary, RelationshipAdrSummary } from '../../../shared/src/index';
 import { adrWriteSchema } from '../../../shared/src/index';
 import { AdrApiError, adrClient } from '../api/adr-client';
 import { BoundedHistory } from './history';
@@ -26,6 +26,11 @@ type State = {
   relationshipSummaryRelationshipId: string | null;
   relationshipSummaryStatus: 'idle' | 'loading' | 'loaded' | 'failed';
   relationshipSummaryError: string | null;
+  componentAdrCounts: Record<string, number>;
+  componentAdrCountsDiagramId: string | null;
+  componentAdrCountsStatus: 'idle' | 'loading' | 'loaded' | 'failed';
+  componentAdrCountsError: string | null;
+  componentAdrCountsRequest: number;
   canUndo: boolean;
   canRedo: boolean;
   load: (diagramId: string) => Promise<void>;
@@ -46,6 +51,8 @@ type State = {
   remove: () => Promise<boolean>;
   loadComponentSummary: (diagramId: string, componentId: string) => Promise<void>;
   loadRelationshipSummary: (diagramId: string, relationshipId: string) => Promise<void>;
+  loadComponentAdrCounts: (diagramId: string) => Promise<void>;
+  invalidateComponentAdrCounts: (diagramId?: string) => void;
 };
 
 const history = new BoundedHistory<AdrDraft>();
@@ -59,10 +66,10 @@ const replaceSummary = (records: AdrSummary[], next: AdrSummary) => records.some
 const sameIds = (left: string[], right: string[]) => left.length === right.length && left.every((id, index) => id === right[index]);
 
 export const useAdrStore = create<State>((set, get) => ({
-  diagramId: null, records: [], draft: null, status: 'idle', error: null, fieldErrors: {}, deleteStatus: 'idle', deleteError: null, deleteBlockers: [], deleteMessage: null, componentSummaries: [], componentSummaryComponentId: null, componentSummaryStatus: 'idle', componentSummaryError: null, relationshipSummaries: [], relationshipSummaryRelationshipId: null, relationshipSummaryStatus: 'idle', relationshipSummaryError: null, canUndo: false, canRedo: false,
+  diagramId: null, records: [], draft: null, status: 'idle', error: null, fieldErrors: {}, deleteStatus: 'idle', deleteError: null, deleteBlockers: [], deleteMessage: null, componentSummaries: [], componentSummaryComponentId: null, componentSummaryStatus: 'idle', componentSummaryError: null, relationshipSummaries: [], relationshipSummaryRelationshipId: null, relationshipSummaryStatus: 'idle', relationshipSummaryError: null, componentAdrCounts: {}, componentAdrCountsDiagramId: null, componentAdrCountsStatus: 'idle', componentAdrCountsError: null, componentAdrCountsRequest: 0, canUndo: false, canRedo: false,
   load: async diagramId => { set({ diagramId, status: 'loading', error: null }); try { const records = await adrClient.list(diagramId); set(state => { const keepDraft = state.draft?.diagramId === diagramId; return { records, status: keepDraft ? state.status : 'idle', draft: keepDraft ? state.draft : null, fieldErrors: keepDraft ? state.fieldErrors : {}, ...historyState() }; }); } catch (error) { set({ status: 'failed', error: error instanceof Error ? error.message : 'Could not load ADRs.' }); } },
   select: async id => { set({ status: 'loading', error: null, deleteStatus: 'idle', deleteError: null, deleteBlockers: [], deleteMessage: null }); try { const record = normalizeRecord(await adrClient.get(id)); const draft = history.reset({ ...record }); set({ draft, diagramId: record.diagramId, status: 'saved', error: null, fieldErrors: {}, ...historyState() }); } catch (error) { set({ status: 'failed', error: error instanceof Error ? error.message : 'Could not load ADR.' }); } },
-  startNew: diagramId => { const id = diagramId ?? get().diagramId; if (!id) return; const draft = history.reset(emptyDraft(id)); set({ diagramId: id, draft, status: 'idle', error: null, fieldErrors: {}, deleteStatus: 'idle', deleteError: null, deleteBlockers: [], deleteMessage: null, ...historyState() }); },
+  startNew: diagramId => { const id = diagramId ?? get().diagramId; if (!id) return; const draft = history.reset(emptyDraft(id)); get().invalidateComponentAdrCounts(id); set({ diagramId: id, draft, status: 'idle', error: null, fieldErrors: {}, deleteStatus: 'idle', deleteError: null, deleteBlockers: [], deleteMessage: null, ...historyState() }); },
   open: record => { const normalized = normalizeRecord(record); const draft = history.reset({ ...normalized }); set({ diagramId: normalized.diagramId, draft, status: 'saved', error: null, fieldErrors: {}, deleteStatus: 'idle', deleteError: null, deleteBlockers: [], deleteMessage: null, ...historyState() }); },
   update: fn => { const current = get().draft; if (!current) return; const draft = history.push(copy(fn(copy(current)))); set({ draft, status: 'unsaved', error: null, fieldErrors: {}, ...historyState() }); },
   setComponentIds: componentIds => { const unique = [...new Set(componentIds)]; get().update(current => ({ ...current, componentIds: unique })); },
@@ -79,18 +86,21 @@ export const useAdrStore = create<State>((set, get) => ({
     if (!validation.success) { const fieldErrors = Object.fromEntries(validation.error.issues.map(issue => [issue.path.join('.') || 'form', issue.message])); set({ status: 'failed', error: 'Complete the required ADR fields before saving.', fieldErrors }); return false; }
     const snapshot = draft; set({ status: 'saving', error: null, fieldErrors: {} });
     let saved: ArchitectureDecisionRecord | null = null;
+    let writeAttempted = false;
     try {
+      writeAttempted = true;
       saved = normalizeRecord(snapshot.id ? await adrClient.update(snapshot.id, validation.data) : await adrClient.create(snapshot.diagramId, validation.data));
       if (!sameIds(snapshot.componentIds, saved.componentIds)) saved = normalizeRecord(await adrClient.replaceLinks(saved.id, { componentIds: snapshot.componentIds }));
       if (!sameIds(snapshot.relationshipIds, saved.relationshipIds)) saved = normalizeRecord(await adrClient.replaceRelationshipLinks(saved.id, { relationshipIds: snapshot.relationshipIds }));
       if (get().draft !== snapshot) { set({ status: 'unsaved', error: null }); return false; }
-      history.reset({ ...saved }); set(state => ({ draft: saved, status: 'saved', error: null, fieldErrors: {}, records: replaceSummary(state.records, summary(saved!)), ...historyState() })); return true;
+      history.reset({ ...saved }); set(state => ({ draft: saved, status: 'saved', error: null, fieldErrors: {}, records: replaceSummary(state.records, summary(saved!)), ...historyState() })); void get().loadComponentAdrCounts(snapshot.diagramId); if (get().componentSummaryComponentId) void get().loadComponentSummary(snapshot.diagramId, get().componentSummaryComponentId); return true;
     }
     catch (error) {
       if (get().draft === snapshot) {
         const draft = saved && !snapshot.id ? { ...saved, componentIds: snapshot.componentIds, relationshipIds: snapshot.relationshipIds } : undefined;
         set({ ...(draft ? { draft } : {}), status: 'failed', error: error instanceof Error ? error.message : 'Save failed. Your edits are preserved.' });
       }
+      if (writeAttempted) void get().loadComponentAdrCounts(snapshot.diagramId);
       return false;
     }
   },
@@ -105,6 +115,8 @@ export const useAdrStore = create<State>((set, get) => ({
       const diagramId = draft.diagramId;
       history.reset(emptyDraft(diagramId));
       set(state => ({ records: state.records.filter(record => record.id !== deletedId), draft: null, status: 'idle', error: null, fieldErrors: {}, deleteStatus: 'succeeded', deleteError: null, deleteBlockers: [], deleteMessage: 'Decision deleted successfully.', ...historyState() }));
+      void get().loadComponentAdrCounts(diagramId);
+      if (get().componentSummaryComponentId) void get().loadComponentSummary(diagramId, get().componentSummaryComponentId);
       return true;
     } catch (error) {
       const blockers = error instanceof AdrApiError && Array.isArray(error.details.blockers)
@@ -135,6 +147,21 @@ export const useAdrStore = create<State>((set, get) => ({
       if (get().relationshipSummaryRelationshipId !== relationshipId) return;
       set({ relationshipSummaryStatus: 'failed', relationshipSummaryError: error instanceof Error ? error.message : 'Could not load linked ADRs.' });
     }
+  },
+  loadComponentAdrCounts: async diagramId => {
+    const request = get().componentAdrCountsRequest + 1;
+    set({ componentAdrCountsDiagramId: diagramId, componentAdrCountsStatus: 'loading', componentAdrCountsError: null, componentAdrCounts: {}, componentAdrCountsRequest: request });
+    try {
+      const counts = await adrClient.componentAdrCounts(diagramId);
+      if (get().componentAdrCountsRequest !== request || get().componentAdrCountsDiagramId !== diagramId) return;
+      set({ componentAdrCounts: Object.fromEntries(counts.map((item: ComponentAdrCount) => [item.componentId, item.count])), componentAdrCountsStatus: 'loaded', componentAdrCountsError: null });
+    } catch (error) {
+      if (get().componentAdrCountsRequest !== request || get().componentAdrCountsDiagramId !== diagramId) return;
+      set({ componentAdrCounts: {}, componentAdrCountsStatus: 'failed', componentAdrCountsError: error instanceof Error ? error.message : 'Could not load decision counts.' });
+    }
+  },
+  invalidateComponentAdrCounts: diagramId => {
+    set(state => ({ componentAdrCounts: {}, componentAdrCountsDiagramId: diagramId ?? state.componentAdrCountsDiagramId, componentAdrCountsStatus: diagramId ? 'idle' : 'idle', componentAdrCountsError: null, componentAdrCountsRequest: state.componentAdrCountsRequest + 1 }));
   },
 }));
 

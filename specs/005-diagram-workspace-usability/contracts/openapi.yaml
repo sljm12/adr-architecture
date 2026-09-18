@@ -1,0 +1,28 @@
+openapi: 3.0.3
+info:
+  title: ADR Diagram workspace additions
+  version: 1.0.0
+paths:
+  /api/diagrams/{diagramId}/component-adr-counts:
+    get:
+      summary: Count linked ADRs by component
+      parameters:
+        - name: diagramId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Sparse positive component counts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [componentId, count]
+                  properties:
+                    componentId: { type: string, format: uuid }
+                    count: { type: integer, minimum: 1 }
+        '404':
+          description: Active diagram not found
