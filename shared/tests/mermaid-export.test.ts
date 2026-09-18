@@ -13,6 +13,7 @@ const document: DiagramDocument = {
     { id: '3f2504e0-4f89-41d3-9a0c-0305e82c3305', diagramId: '3f2504e0-4f89-41d3-9a0c-0305e82c3301', sourceComponentId: '3f2504e0-4f89-41d3-9a0c-0305e82c3302', targetComponentId: '3f2504e0-4f89-41d3-9a0c-0305e82c3304', direction: 'directed', label: 'reads | writes', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
     { id: '3f2504e0-4f89-41d3-9a0c-0305e82c3306', diagramId: '3f2504e0-4f89-41d3-9a0c-0305e82c3301', sourceComponentId: '3f2504e0-4f89-41d3-9a0c-0305e82c3303', targetComponentId: '3f2504e0-4f89-41d3-9a0c-0305e82c3304', direction: 'undirected', label: 'sync', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
   ],
+  groups: [],
 };
 
 describe('Mermaid export', () => {

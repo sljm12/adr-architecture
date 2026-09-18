@@ -26,14 +26,16 @@ test('keeps edits unsaved until the user explicitly saves', async ({ page }) => 
   await page.goto('/');
   await page.getByLabel('Diagram name').fill('System');
   await page.getByRole('button', { name: 'Create diagram' }).click();
-  await page.getByLabel('Name your next building block').fill('API');
-  await page.getByRole('button', { name: 'Add' }).click();
+  await page.getByRole('button', { name: 'Add component' }).click();
+  const inspector = page.getByLabel('Diagram inspector');
+  await inspector.getByLabel('Component name').fill('API');
+  await inspector.getByRole('button', { name: 'Add component' }).click();
 
   await expect(page.locator('.save-status')).toHaveText('Unsaved changes');
   await page.waitForTimeout(500);
   expect(api.putCount()).toBe(0);
 
-  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.locator('.save-status')).toHaveText('Saved');
   expect(api.putCount()).toBe(1);
 });

@@ -17,7 +17,8 @@ const document: DiagramDocument = {
     { id: ids.api, diagramId: ids.diagram, name: 'API', description: null, type: null, position: { x: 0, y: 0 }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
     { id: ids.database, diagramId: ids.diagram, name: 'Database', description: null, type: null, position: { x: 1, y: 1 }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }
   ],
-  relationships: [{ id: ids.relationship, diagramId: ids.diagram, sourceComponentId: ids.api, targetComponentId: ids.database, direction: 'directed', label: null, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }]
+  relationships: [{ id: ids.relationship, diagramId: ids.diagram, sourceComponentId: ids.api, targetComponentId: ids.database, direction: 'directed', label: null, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }],
+  groups: []
 };
 
 describe('recovery API', () => {

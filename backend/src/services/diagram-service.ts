@@ -1,26 +1,54 @@
 import { assertDiagramInvariants, diagramCreateSchema, diagramDocumentSchema, type DiagramDocument } from '../../../shared/src/index';
-import type { DiagramRepositoryLike, MaybePromise, RemoveComponentResult } from '../persistence/diagram-repository';
+import type { AdrDependencyBlocker } from '../../../shared/src/index';
+import type { AdrRepositoryLike } from '../persistence/adr-repository';
+import type { DiagramRepositoryLike, MaybePromise, RemoveComponentResult, RemoveRelationshipResult } from '../persistence/diagram-repository';
+import { ApiValidationError } from '../api/errors';
 
 export class DiagramNotFoundError extends Error {}
 export class DiagramConflictError extends Error {}
 export class ComponentDependencyConflictError extends DiagramConflictError {
-  constructor(readonly componentId: string, readonly relationshipCount: number) {
-    super(`Component cannot be removed while it has ${relationshipCount} dependent relationship${relationshipCount === 1 ? '' : 's'}. Remove the relationships first.`);
+  constructor(readonly componentId: string, readonly relationshipCount: number, readonly blockers: AdrDependencyBlocker[] = [], readonly groupIds: string[] = []) {
+    super(blockers.length ? 'Component cannot be removed while it is linked to one or more ADRs. Repair those ADR links first.' : groupIds.length ? `Component cannot be removed while it belongs to system group${groupIds.length === 1 ? '' : 's'} ${groupIds.join(', ')}. Remove membership or ungroup first.` : `Component cannot be removed while it has ${relationshipCount} dependent relationship${relationshipCount === 1 ? '' : 's'}. Remove the relationships first.`);
     this.name = 'ComponentDependencyConflictError';
+  }
+}
+export class RelationshipDependencyConflictError extends DiagramConflictError {
+  constructor(readonly relationshipId: string, readonly blockers: AdrDependencyBlocker[]) {
+    super('Relationship cannot be removed while it is linked to one or more ADRs. Repair those ADR links first.');
+    this.name = 'RelationshipDependencyConflictError';
   }
 }
 
 const isPromise = <T>(value: MaybePromise<T>): value is Promise<T> => value instanceof Promise;
 
+function invariantFields(document: DiagramDocument, message: string): Record<string, string> {
+  const fields: Record<string, string> = {};
+  const groupIndex = (document.groups ?? []).findIndex(group => message.includes(group.id));
+  if (groupIndex >= 0) {
+    const suffix = /name|blank|duplicate/.test(message) ? 'name' : /layout|boundary/.test(message) ? 'size' : 'memberComponentIds';
+    fields[`groups[${groupIndex}].${suffix}`] = message;
+    return fields;
+  }
+  const componentIndex = document.components.findIndex(component => message.includes(component.id));
+  if (componentIndex >= 0) fields[`components[${componentIndex}].type`] = message;
+  else fields.document = message;
+  return fields;
+}
+
+function assertApiInvariants(document: DiagramDocument): void {
+  try { assertDiagramInvariants(document); }
+  catch (error) { throw new ApiValidationError(invariantFields(document, error instanceof Error ? error.message : 'Invalid diagram')); }
+}
+
 export class DiagramService {
-  constructor(private readonly repository: DiagramRepositoryLike) {}
+  constructor(private readonly repository: DiagramRepositoryLike, private readonly adrs?: Pick<AdrRepositoryLike, 'componentBlockers' | 'relationshipBlockers'>) {}
 
   create(name: string): MaybePromise<DiagramDocument> {
     const input = diagramCreateSchema.parse({ name });
     const now = new Date().toISOString();
     return this.repository.create({
       id: crypto.randomUUID(), name: input.name.trim(), status: 'active',
-      createdAt: now, updatedAt: now, trashedAt: null, components: [], relationships: [],
+      createdAt: now, updatedAt: now, trashedAt: null, components: [], relationships: [], groups: [],
     });
   }
 
@@ -36,24 +64,29 @@ export class DiagramService {
   save(id: string, input: unknown): MaybePromise<DiagramDocument> {
     const document = diagramDocumentSchema.parse(input);
     if (document.id !== id) throw new Error('Path and document IDs must match');
-    assertDiagramInvariants(document);
+    assertApiInvariants(document);
     for (const component of document.components) {
       if (component.diagramId !== id) throw new Error(`Component ${component.id} must belong to diagram ${id}`);
     }
     for (const relationship of document.relationships) {
       if (relationship.diagramId !== id) throw new Error(`Relationship ${relationship.id} must belong to diagram ${id}`);
     }
-    const result = this.repository.replace({
+    const replace = (existing: DiagramDocument | undefined) => {
+      const result = this.repository.replace({
       ...document,
       name: document.name.trim(),
       components: document.components.map(component => ({ ...component, name: component.name.trim() })),
       relationships: document.relationships.map(relationship => ({ ...relationship, label: relationship.label?.trim() || null })),
-    });
-    const resolve = (saved: DiagramDocument | undefined) => {
-      if (!saved) throw new DiagramNotFoundError('Diagram not found');
-      return saved;
+      groups: document.groups.map(group => ({ ...group, name: group.name.trim(), memberComponentIds: [...group.memberComponentIds] })),
+      });
+      const resolve = (saved: DiagramDocument | undefined) => {
+        if (!saved) throw new DiagramNotFoundError('Diagram not found');
+        return saved;
+      };
+      return isPromise(result) ? result.then(resolve) : resolve(result);
     };
-    return isPromise(result) ? result.then(resolve) : resolve(result);
+    const existing = this.repository.get(id);
+    return isPromise(existing) ? existing.then(replace) : replace(existing);
   }
 
   dependencyCount(diagramId: string, componentId: string): MaybePromise<number> {
@@ -67,13 +100,54 @@ export class DiagramService {
   }
 
   removeComponent(diagramId: string, componentId: string): MaybePromise<Extract<RemoveComponentResult, { document: DiagramDocument }>> {
-    const result = this.repository.removeComponent(diagramId, componentId);
     const resolve = (removal: RemoveComponentResult | undefined) => {
       if (!removal) throw new DiagramNotFoundError('Diagram or component not found');
-      if ('conflict' in removal) throw new ComponentDependencyConflictError(componentId, removal.relationshipCount);
+      if ('conflict' in removal) throw new ComponentDependencyConflictError(componentId, removal.relationshipCount, [], removal.groupIds);
       return removal;
     };
-    return isPromise(result) ? result.then(resolve) : resolve(result);
+    const remove = (blockers: AdrDependencyBlocker[]) => {
+      if (blockers.length) throw new ComponentDependencyConflictError(componentId, 0, blockers, []);
+      const result = this.repository.removeComponent(diagramId, componentId);
+      return isPromise(result) ? result.then(resolve) : resolve(result);
+    };
+    if (!this.adrs) return remove([]);
+    const document = this.repository.get(diagramId);
+    const validate = (current: DiagramDocument | undefined) => {
+      if (!current || current.status !== 'active' || !current.components.some(component => component.id === componentId)) throw new DiagramNotFoundError('Diagram or component not found');
+      const direct = this.adrs!.componentBlockers(componentId);
+      const dependentRelationships = current.relationships.filter(relationship => relationship.sourceComponentId === componentId || relationship.targetComponentId === componentId);
+      const relationshipBlockers = dependentRelationships.map(relationship => this.adrs!.relationshipBlockers(relationship.id));
+      const collect = (values: AdrDependencyBlocker[][]) => {
+        const blockers = values.flat().filter((blocker, index, all) => all.findIndex(candidate => candidate.adrId === blocker.adrId) === index);
+        return remove(blockers);
+      };
+      if (!isPromise(direct) && relationshipBlockers.every(result => !isPromise(result))) {
+        return collect([direct as AdrDependencyBlocker[], ...relationshipBlockers as AdrDependencyBlocker[][]]);
+      }
+      return Promise.all([direct, ...relationshipBlockers]).then(collect);
+    };
+    return isPromise(document) ? document.then(validate) : validate(document);
+  }
+
+  removeRelationship(diagramId: string, relationshipId: string): MaybePromise<Extract<RemoveRelationshipResult, { document: DiagramDocument }>> {
+    const current = this.repository.get(diagramId);
+    const validate = (document: DiagramDocument | undefined) => {
+      if (!document || document.status !== 'active' || !document.relationships.some(relationship => relationship.id === relationshipId)) throw new DiagramNotFoundError('Diagram or relationship not found');
+      const remove = (blockers: AdrDependencyBlocker[]) => {
+        if (blockers.length) throw new RelationshipDependencyConflictError(relationshipId, blockers);
+        const result = this.repository.removeRelationship(diagramId, relationshipId);
+        const resolve = (removal: RemoveRelationshipResult | undefined) => {
+          if (!removal) throw new DiagramNotFoundError('Diagram or relationship not found');
+          if ('conflict' in removal) throw new DiagramConflictError('Relationship cannot be removed.');
+          return removal;
+        };
+        return isPromise(result) ? result.then(resolve) : resolve(result);
+      };
+      if (!this.adrs) return remove([]);
+      const blockers = this.adrs.relationshipBlockers(relationshipId);
+      return isPromise(blockers) ? blockers.then(remove) : remove(blockers);
+    };
+    return isPromise(current) ? current.then(validate) : validate(current);
   }
 
   trash(id: string): MaybePromise<DiagramDocument> {

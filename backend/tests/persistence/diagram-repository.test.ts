@@ -24,7 +24,7 @@ const document: DiagramDocument = {
     { id: componentA, diagramId, name: 'API', description: 'Public edge', type: 'service', position: { x: 120, y: 80 }, createdAt: timestamp, updatedAt: timestamp },
     { id: componentB, diagramId, name: 'Database', description: null, type: 'store', position: { x: 420, y: 260 }, createdAt: timestamp, updatedAt: timestamp },
   ],
-  relationships: [{ id: relationshipId, diagramId, sourceComponentId: componentA, targetComponentId: componentB, direction: 'directed', label: 'queries', createdAt: timestamp, updatedAt: timestamp }],
+  relationships: [{ id: relationshipId, diagramId, sourceComponentId: componentA, targetComponentId: componentB, direction: 'directed', label: 'queries', createdAt: timestamp, updatedAt: timestamp }], groups: [],
 };
 
 describe.skipIf(!enabled)('PostgreSQL diagram repository', () => {
@@ -63,5 +63,12 @@ describe.skipIf(!enabled)('PostgreSQL diagram repository', () => {
     expect(loaded?.name).toBe('Renamed topology');
     expect(loaded?.components.find(component => component.id === componentA)).toMatchObject({ id: componentA, name: 'Gateway', position: { x: 900, y: 700 } });
     expect(loaded?.relationships[0].sourceComponentId).toBe(componentA);
+  });
+
+  it('updates relationship labels and direction while retaining relationship identity and creation time', async () => {
+    const previous = (await repository!.get(diagramId))!.relationships[0];
+    await repository!.replace({ ...document, relationships: [{ ...previous, sourceComponentId: componentB, targetComponentId: componentA, direction: 'undirected', label: 'sends events' }] });
+    const loaded = await repository!.get(diagramId);
+    expect(loaded?.relationships[0]).toMatchObject({ id: relationshipId, sourceComponentId: componentB, targetComponentId: componentA, direction: 'undirected', label: 'sends events', createdAt: previous.createdAt });
   });
 });

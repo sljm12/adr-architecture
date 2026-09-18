@@ -15,7 +15,7 @@ async function mockDiagramApi(page: Page, failFirstSave = false) {
   });
 }
 
-test('loads, autosaves, and exports a five-component/five-relationship diagram within the feedback target', async ({ page }) => {
+test('loads, saves, and exports a five-component/five-relationship diagram within the feedback target', async ({ page }) => {
   await mockDiagramApi(page);
   await page.goto('/');
   const started = await page.evaluate(() => performance.now());
@@ -23,17 +23,22 @@ test('loads, autosaves, and exports a five-component/five-relationship diagram w
   await page.getByRole('button', { name: 'Create diagram' }).click();
 
   for (const name of ['API', 'Web', 'Worker', 'Database', 'Queue']) {
-    await page.getByLabel('Name your next building block').fill(name);
-    await page.getByRole('button', { name: 'Add' }).click();
+    await page.getByRole('button', { name: 'Add component' }).click();
+    const inspector = page.getByLabel('Diagram inspector');
+    await inspector.getByLabel('Component name').fill(name);
+    await inspector.getByRole('button', { name: 'Add component' }).click();
   }
   const relationships = [['Web', 'API'], ['API', 'Worker'], ['Worker', 'Database'], ['Worker', 'Queue'], ['Queue', 'Web']];
   for (const [source, target] of relationships) {
-    await page.getByLabel('Relationship source component').selectOption({ label: source });
-    await page.getByLabel('Relationship target component').selectOption({ label: target });
-    await page.getByRole('button', { name: 'Connect' }).click();
+    await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    const inspector = page.getByLabel('Diagram inspector');
+    await inspector.getByLabel('From').selectOption({ label: source });
+    await inspector.getByLabel('To', { exact: true }).selectOption({ label: target });
+    await inspector.getByRole('button', { name: 'Connect components' }).click();
   }
 
-  await expect(page.locator('.save-status')).toHaveText('Saved automatically', { timeout: 3_000 });
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('.save-status')).toHaveText('Saved', { timeout: 3_000 });
   const saveElapsed = await page.evaluate(start => performance.now() - start, started);
   expect(saveElapsed).toBeLessThan(3_000);
 
@@ -50,11 +55,17 @@ test('keeps the draft visible after a save failure and recovers on the next edit
   await page.goto('/');
   await page.getByLabel('Diagram name').fill('Recovery system');
   await page.getByRole('button', { name: 'Create diagram' }).click();
-  await page.getByLabel('Name your next building block').fill('API');
-  await page.getByRole('button', { name: 'Add' }).click();
+  await page.getByRole('button', { name: 'Add component' }).click();
+  let inspector = page.getByLabel('Diagram inspector');
+  await inspector.getByLabel('Component name').fill('API');
+  await inspector.getByRole('button', { name: 'Add component' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.locator('.save-status')).toContainText('Save failed', { timeout: 3_000 });
   await expect(page.getByRole('group', { name: 'Component API' })).toBeVisible();
-  await page.getByLabel('Name your next building block').fill('Database');
-  await page.getByRole('button', { name: 'Add' }).click();
-  await expect(page.locator('.save-status')).toHaveText('Saved automatically', { timeout: 3_000 });
+  await page.getByRole('button', { name: 'Add component' }).click();
+  inspector = page.getByLabel('Diagram inspector');
+  await inspector.getByLabel('Component name').fill('Database');
+  await inspector.getByRole('button', { name: 'Add component' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('.save-status')).toHaveText('Saved', { timeout: 3_000 });
 });

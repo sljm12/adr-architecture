@@ -1,1 +1,1 @@
-export * from './domain/types'; export * from './domain/invariants'; export * from './validation/schemas'; export * from './export/mermaid-export';
+export * from './domain/types'; export * from './domain/c4'; export * from './domain/group-layout'; export * from './domain/invariants'; export * from './validation/schemas'; export * from './export/mermaid-export';

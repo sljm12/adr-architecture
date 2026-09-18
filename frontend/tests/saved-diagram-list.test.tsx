@@ -14,6 +14,13 @@ describe('saved-document controls', () => {
     expect(list).toContain('role="status"');
   });
 
+  it('provides accessible sorting controls and stable identity hooks for rows', () => {
+    expect(list).toContain('Sort diagrams by');
+    expect(list).toContain('Sort direction');
+    expect(list).toContain('data-diagram-id={document.id}');
+    expect(list).toContain('defaultDiagramListSort');
+  });
+
   it('offers save, discard, and cancel choices before replacing unsaved work', () => {
     expect(dialog).toContain('Save and load');
     expect(dialog).toContain('Discard and load');

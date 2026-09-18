@@ -15,7 +15,7 @@ test('opens the new-diagram form without discarding a saved diagram', async ({ p
   await page.getByLabel('Diagram name').fill('Current system');
   await page.getByRole('button', { name: 'Create diagram' }).click();
 
-  await page.getByRole('button', { name: 'New Diagram' }).click();
+  await page.getByRole('button', { name: 'New diagram' }).click();
   await expect(page.getByRole('heading', { name: 'Create a diagram' })).toBeVisible();
   await expect(page.getByLabel('Diagram name')).toBeVisible();
 });
@@ -25,10 +25,12 @@ test('confirms before discarding unsaved edits for a new diagram', async ({ page
   await page.goto('/');
   await page.getByLabel('Diagram name').fill('Current system');
   await page.getByRole('button', { name: 'Create diagram' }).click();
-  await page.getByLabel('Name your next building block').fill('API');
-  await page.getByRole('button', { name: 'Add' }).click();
+  await page.getByRole('button', { name: 'Add component' }).click();
+  const inspector = page.getByLabel('Diagram inspector');
+  await inspector.getByLabel('Component name').fill('API');
+  await inspector.getByRole('button', { name: 'Add component' }).click();
 
-  await page.getByRole('button', { name: 'New Diagram' }).click();
+  await page.getByRole('button', { name: 'New diagram' }).click();
   await expect(page.getByRole('alertdialog', { name: 'Discard unsaved changes?' })).toBeVisible();
   await page.getByRole('button', { name: 'Discard and create' }).click();
   await expect(page.getByLabel('Diagram name')).toBeVisible();

@@ -1,11 +1,11 @@
-# Quickstart Validation: ADR Component Tagging
+# Quickstart Validation: ADR Component and Relationship Tagging
 
 ## Prerequisites
 
 - Node.js and npm installed.
 - Dependencies installed with `npm install`.
 - PostgreSQL available and `DATABASE_URL` configured when running persistence tests.
-- A diagram containing at least two components with stable UUIDs.
+- A diagram containing at least two components and one relationship with stable UUIDs.
 
 ## Validation commands
 
@@ -20,7 +20,9 @@ npm run test:e2e
 
 Apply `backend/drizzle/0002_adrs.sql` after `0001_initial.sql` before running PostgreSQL-backed
 tests. The API contract is defined in [contracts/openapi.yaml](./contracts/openapi.yaml), and
-entities/invariants are defined in [data-model.md](./data-model.md).
+entities/invariants are defined in [data-model.md](./data-model.md). Component and relationship
+edit persistence reuses the diagram document save contract in
+[spec 001's OpenAPI contract](../001-software-architecture-diagrams/contracts/openapi.yaml).
 
 ## Acceptance scenarios
 
@@ -28,19 +30,30 @@ entities/invariants are defined in [data-model.md](./data-model.md).
    Save and reopen it; verify UUID, content, status, and timestamps are preserved.
 2. Omit each required field in separate save attempts; verify an actionable field message and no
    completed-save state. Omit alternatives/constraints; verify a valid save remains possible.
-3. Link an ADR to zero, one, and multiple components. Verify names are shown, links use component
-   UUIDs, and unlinking one preserves the remaining links.
-4. Rename and reposition a linked component. Reopen the ADR and verify the same component resolves.
-5. Attempt a missing-component and cross-diagram link. Verify a 422-style actionable error and no
-   broken link.
-6. Mark an ADR superseded without a replacement; verify rejection. Select a same-diagram replacement;
+3. Link an ADR to zero, one, and multiple components and/or relationships. Verify component names
+   and distinguishable relationship references are shown, links use stable UUIDs, and unlinking one
+   preserves the remaining links of both types.
+4. Rename a linked component, edit a linked relationship's label, reverse its direction, and
+   switch its direction mode between directed and undirected. Save and reopen the diagram, then
+   reopen the ADR and verify the updated name, label, direction, and the same stable artifacts
+   resolve.
+5. View a component and a relationship with linked ADRs. Verify every linked ADR appears with its
+   title and current status, and activate each summary to open the corresponding ADR without
+   searching.
+6. View a component and a relationship with no linked ADRs. Verify each view shows a clear
+   no-linked-ADRs state that is distinct from an error or unavailable-data state.
+7. Attempt missing-artifact and cross-diagram links for both components and relationships. Verify a
+   422-style actionable error and no broken link.
+8. Attempt to delete a linked relationship, then delete a component whose dependent relationship is
+   linked. Verify each deletion is blocked until affected ADR links are repaired or explicitly
+   removed, and blocking ADR IDs/titles are identified.
+9. Mark an ADR superseded without a replacement; verify rejection. Select a same-diagram replacement;
    verify the original remains discoverable with its replacement reference.
-7. Attempt to delete a replacement target and a linked component. Verify deletion is blocked and
-   blocking ADR IDs/titles are identified. Repair or explicitly remove links, retry, and verify clear
-   success feedback.
-8. Attempt to delete an ADR from the UI. Verify confirmation is required and success/failure feedback
+10. Attempt to delete a replacement target and an ADR with both link types. Verify replacement
+   deletion is blocked, ADR deletion requires confirmation, and success/failure feedback
    is visible.
-9. Simulate API unavailability during save. Verify edits remain visible, the ADR is marked unsaved/
+11. Simulate API unavailability during save. Verify edits remain visible, the ADR is marked unsaved/
    failed, and retry succeeds after the backend returns.
-10. Navigate create, edit, link, status, save, retry, and delete flows by keyboard; verify labels,
-    focus order, 44px targets, contrast, and accessible status announcements.
+12. Navigate create, edit, link, status, component-summary, relationship-summary, save, retry, and
+   delete flows by keyboard; verify labels, focus order, 44px targets, contrast, and accessible
+   status announcements.

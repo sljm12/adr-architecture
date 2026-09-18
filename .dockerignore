@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+coverage/
+*.log
+.env*
+!.env.example
+.git/
+Dockerfile*
+.vscode/
+.idea/
+playwright-report/
+test-results/
+*.tsbuildinfo

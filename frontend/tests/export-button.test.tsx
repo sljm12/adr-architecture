@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { getExportBlockReason } from '../src/components/ExportButton';
+import { DiagramApiError } from '../src/api/diagram-client';
+import { formatExportError, getExportBlockReason } from '../src/components/ExportButton';
 
 describe('Mermaid export save guard', () => {
   it.each([
@@ -13,5 +14,11 @@ describe('Mermaid export save guard', () => {
   it('allows export only when the document has no pending save state', () => {
     expect(getExportBlockReason('saved')).toBeNull();
     expect(getExportBlockReason('idle')).toBeNull();
+  });
+
+  it('surfaces group-specific validation details without changing saved data', () => {
+    const error = new DiagramApiError('Diagram cannot be exported until validation errors are corrected', 422, { fields: { 'groups[0].name': 'Remove control characters before exporting.' } });
+    expect(formatExportError(error)).toContain('groups');
+    expect(formatExportError(error)).toContain('Remove control characters');
   });
 });

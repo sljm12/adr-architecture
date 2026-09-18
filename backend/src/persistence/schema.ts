@@ -1,5 +1,31 @@
-import { pgTable, uuid, varchar, text, doublePrecision, timestamp, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, doublePrecision, timestamp, pgEnum, primaryKey, index } from 'drizzle-orm/pg-core';
 export const diagramStatus=pgEnum('diagram_status',['active','trashed']); export const relationshipDirection=pgEnum('relationship_direction',['directed','undirected']);
 export const diagrams=pgTable('diagrams',{id:uuid('id').primaryKey(),name:varchar('name',{length:200}).notNull(),status:diagramStatus('status').notNull().default('active'),createdAt:timestamp('created_at',{withTimezone:true}).notNull(),updatedAt:timestamp('updated_at',{withTimezone:true}).notNull(),trashedAt:timestamp('trashed_at',{withTimezone:true})});
 export const components=pgTable('components',{id:uuid('id').primaryKey(),diagramId:uuid('diagram_id').notNull().references(()=>diagrams.id),name:varchar('name',{length:200}).notNull(),description:text('description'),type:varchar('type',{length:100}),x:doublePrecision('x').notNull(),y:doublePrecision('y').notNull(),createdAt:timestamp('created_at',{withTimezone:true}).notNull(),updatedAt:timestamp('updated_at',{withTimezone:true}).notNull()});
 export const relationships=pgTable('relationships',{id:uuid('id').primaryKey(),diagramId:uuid('diagram_id').notNull().references(()=>diagrams.id),sourceComponentId:uuid('source_component_id').notNull().references(()=>components.id),targetComponentId:uuid('target_component_id').notNull().references(()=>components.id),direction:relationshipDirection('direction').notNull(),label:text('label'),createdAt:timestamp('created_at',{withTimezone:true}).notNull(),updatedAt:timestamp('updated_at',{withTimezone:true}).notNull()});
+export const adrStatus=pgEnum('adr_status',['draft','accepted','superseded','rejected']);
+export const adrs=pgTable('adrs',{
+  id:uuid('id').primaryKey(), diagramId:uuid('diagram_id').notNull().references(()=>diagrams.id),
+  title:varchar('title',{length:300}).notNull(), context:text('context').notNull(), decision:text('decision').notNull(),
+  consequences:text('consequences').notNull(), alternativesOrConstraints:text('alternatives_or_constraints'),
+  status:adrStatus('status').notNull().default('draft'), replacementAdrId:uuid('replacement_adr_id'),
+  createdAt:timestamp('created_at',{withTimezone:true}).notNull(), updatedAt:timestamp('updated_at',{withTimezone:true}).notNull(),
+}, table => ({ diagramIdx:index('adrs_diagram_idx').on(table.diagramId), replacementIdx:index('adrs_replacement_idx').on(table.replacementAdrId) }));
+export const adrComponentLinks=pgTable('adr_component_links',{
+  adrId:uuid('adr_id').notNull().references(()=>adrs.id), componentId:uuid('component_id').notNull().references(()=>components.id),
+  createdAt:timestamp('created_at',{withTimezone:true}).notNull(),
+}, table => ({ pk:primaryKey({ columns:[table.adrId, table.componentId] }), componentIdx:index('adr_component_links_component_idx').on(table.componentId) }));
+export const adrRelationshipLinks=pgTable('adr_relationship_links',{
+  adrId:uuid('adr_id').notNull().references(()=>adrs.id), relationshipId:uuid('relationship_id').notNull().references(()=>relationships.id),
+  createdAt:timestamp('created_at',{withTimezone:true}).notNull(),
+}, table => ({ pk:primaryKey({ columns:[table.adrId, table.relationshipId] }), relationshipIdx:index('adr_relationship_links_relationship_idx').on(table.relationshipId) }));
+export const systemGroups=pgTable('system_groups',{
+  id:uuid('id').primaryKey(), diagramId:uuid('diagram_id').notNull().references(()=>diagrams.id),
+  name:varchar('name',{length:200}).notNull(), x:doublePrecision('x').notNull(), y:doublePrecision('y').notNull(),
+  width:doublePrecision('width').notNull(), height:doublePrecision('height').notNull(),
+  createdAt:timestamp('created_at',{withTimezone:true}).notNull(), updatedAt:timestamp('updated_at',{withTimezone:true}).notNull(),
+}, table => ({ diagramIdx:index('system_groups_diagram_idx').on(table.diagramId) }));
+export const systemGroupMembers=pgTable('system_group_members',{
+  groupId:uuid('group_id').notNull().references(()=>systemGroups.id), componentId:uuid('component_id').notNull().references(()=>components.id),
+  createdAt:timestamp('created_at',{withTimezone:true}).notNull(),
+}, table => ({ pk:primaryKey({ columns:[table.groupId, table.componentId] }), groupIdx:index('system_group_members_group_idx').on(table.groupId), componentIdx:index('system_group_members_component_idx').on(table.componentId) }));

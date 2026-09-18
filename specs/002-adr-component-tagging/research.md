@@ -1,4 +1,4 @@
-# Research: ADR Component Tagging
+# Research: ADR Component and Relationship Tagging
 
 ## Decision: Extend the existing three-boundary TypeScript application
 
@@ -14,23 +14,25 @@ persistence requirement and make future multi-user evolution require a storage m
 
 ## Decision: Keep ADRs independent of React Flow
 
-**Rationale:** ADRs and component links will use stable UUIDs from the shared domain. Component names,
-React Flow node IDs, and screen positions remain presentation data. Renaming or repositioning a
-component therefore cannot break a link.
+**Rationale:** ADRs, component links, and relationship links will use stable UUIDs from the shared
+domain. Component/relationship names, React Flow IDs, endpoints, and screen positions remain
+presentation or editable artifact data. Ordinary edits therefore cannot break a link.
 
-**Alternatives considered:** Storing component names, node IDs, or positions in ADR records was
-rejected because each can change during ordinary editor operations.
+**Alternatives considered:** Storing component or relationship names, labels, endpoints, node IDs,
+or positions in ADR records was rejected because each can change during ordinary editor operations.
 
-## Decision: Use relational ADR and link tables
+## Decision: Use separate relational ADR link tables
 
 **Rationale:** PostgreSQL through Drizzle matches the existing persistence layer. An `adrs` table plus
-`adr_component_links` composite-key table supports zero, one, or many links, efficient summaries,
-and explicit dependency queries. Foreign keys protect missing IDs; service checks enforce same-
-diagram ownership and return actionable conflicts.
+`adr_component_links` and `adr_relationship_links` composite-key tables supports zero, one, or many
+links of either artifact type, mixed link sets, efficient summaries, and explicit dependency queries.
+Separate tables preserve direct foreign-key integrity to each parent artifact without a polymorphic
+reference. Service checks enforce same-diagram ownership and return actionable conflicts.
 
-**Alternatives considered:** Embedding component IDs as a JSON array was rejected because it weakens
-referential integrity, cross-diagram validation, and component-deletion diagnostics. Cascading deletes
-were rejected because they silently discard architectural knowledge.
+**Alternatives considered:** Embedding IDs as JSON arrays or using one polymorphic link table was
+rejected because those approaches weaken referential integrity, cross-diagram validation, and
+component/relationship-deletion diagnostics. Cascading deletes were rejected because they silently
+discard architectural knowledge.
 
 ## Decision: Validate at shared, API, and persistence boundaries
 
@@ -47,8 +49,9 @@ feedback or predictable conflict details.
 
 **Rationale:** Any status may transition to another supported status, but `superseded` requires a
 different replacement ADR in the same diagram. An ADR referenced as a replacement cannot be deleted.
-A component with ADR links cannot be deleted. Both checks return the affected IDs/titles so users can
-repair or explicitly remove references before retrying.
+A component or relationship with ADR links cannot be deleted. Component deletion also checks
+relationships that would be removed as dependents. All checks return the affected IDs/titles so
+users can repair or explicitly remove references before retrying.
 
 **Alternatives considered:** Allowing dangling replacement/link records or automatic nulling/cascade
 cleanup was rejected because it violates the constitution and hides history changes.
@@ -81,3 +84,41 @@ baseline.
 
 **Alternatives considered:** A separate ADR application or a new visual language was rejected because
 it fragments navigation and increases first-release complexity.
+
+## Decision: Provide component- and relationship-scoped ADR summary read models
+
+**Rationale:** The requirements make the relationship navigable in both directions for both artifact
+types. Component and relationship views need focused lists of linked ADR IDs, titles, statuses, and
+update times, while the existing ADR detail response already supports opening the selected record.
+Separate scoped read endpoints can derive each summary from its link table and `adrs`, preserving one
+source of truth for links and returning an empty list for a valid artifact with no linked ADRs.
+
+**Alternatives considered:** Loading every ADR for the diagram and filtering in the browser was
+rejected because it over-fetches data and makes artifact ownership/error handling less explicit.
+Duplicating ADR summaries inside component or relationship records was rejected because it would
+create stale, second-copy metadata and complicate link updates.
+
+## Decision: Persist component and relationship edits through the existing diagram document boundary
+
+**Rationale:** The existing diagram API already explicitly saves the complete validated document,
+including component names and relationship fields. Reusing that boundary keeps ADR link integrity
+centralized: existing component and relationship UUIDs are matched and updated in place, while
+their creation timestamps and link records remain stable. The visual editor can therefore update
+names, labels, endpoints, and direction without introducing a second edit API or duplicating
+diagram state in the ADR feature.
+
+**Alternatives considered:** Separate endpoints for renaming components and editing relationships
+were rejected for this feature because they would split the current save workflow and create extra
+concurrency and error-handling paths. Storing names, labels, or direction in ADR link records was
+rejected because those are editable properties of the diagram artifacts, not link identity.
+
+## Decision: Treat relationship direction as an in-place semantic edit
+
+**Rationale:** A relationship already has a stable UUID, a `directed`/`undirected` mode, and source
+and target component IDs. Reversing a directed relationship updates the ordered endpoints and
+visual marker while preserving the relationship UUID and every ADR relationship link. Switching
+direction mode follows the same invariant. Blank optional labels normalize to no label, while
+blank component names remain invalid.
+
+**Alternatives considered:** Creating a new relationship whenever direction or label changes was
+rejected because it would break ADR references and make ordinary diagram maintenance destructive.
