@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   assertDiagramInvariants,
+  assertCanAddGroupMember,
   calculateGroupBounds,
   fitGroupBoundsAfterLayout,
   componentWriteSchema,
@@ -33,6 +34,16 @@ const grouped = (): SystemGroup => {
   return { id: ids.group, diagramId: ids.diagram, name: ' Finance ', memberComponentIds: [ids.first, ids.second], ...layout, createdAt: timestamp, updatedAt: timestamp };
 };
 
+const groupedDocumentFixture = () => {
+  const outside = component('00000000-0000-0000-0000-000000000108', 'Notifications', 'software-system', 620, 260);
+  const other = component('00000000-0000-0000-0000-000000000109', 'Reporting', 'software-system', 860, 340);
+  const support = component('00000000-0000-0000-0000-000000000110', 'Support', 'software-system', 1080, 420);
+  const firstGroup = grouped();
+  const secondLayout = calculateGroupBounds([other.position, support.position]);
+  const secondGroup: SystemGroup = { id: ids.otherGroup, diagramId: ids.diagram, name: 'Operations', memberComponentIds: [other.id, support.id], ...secondLayout, createdAt: timestamp, updatedAt: timestamp };
+  return { document: { ...base, components: [...base.components, outside, other, support], groups: [firstGroup, secondGroup] }, firstGroup, secondGroup, outside, other, ineligible: base.components.find(item => item.id === ids.person)! };
+};
+
 describe('C4 artifact and system group boundaries', () => {
   it('accepts supported C4 writes and keeps legacy unclassified documents readable', () => {
     expect(componentWriteSchema.safeParse({ ...base.components[0], type: 'person' }).success).toBe(true);
@@ -57,6 +68,20 @@ describe('C4 artifact and system group boundaries', () => {
     expect(constrainMemberPosition(group, { x: -1000, y: 1000 })).toEqual({ x: 100, y: 180 });
     expect(base.components[0].position).toEqual({ x: 100, y: 100 });
     expect(base.relationships[0].sourceComponentId).toBe(ids.person);
+  });
+
+  it('preflights valid, duplicate, conflicting, missing, cross-diagram, and ineligible candidates without mutation', () => {
+    const fixture = groupedDocumentFixture();
+    const before = structuredClone(fixture.document);
+    expect(assertCanAddGroupMember(fixture.document, fixture.firstGroup.id, fixture.outside.id)).toBeNull();
+    expect(assertCanAddGroupMember(fixture.document, fixture.firstGroup.id, ids.first)).toMatchObject({ code: 'already-member', groupId: fixture.firstGroup.id, componentId: ids.first });
+    expect(assertCanAddGroupMember(fixture.document, fixture.firstGroup.id, fixture.other.id)).toMatchObject({ code: 'already-in-other-group', currentGroupId: fixture.secondGroup.id });
+    expect(assertCanAddGroupMember(fixture.document, '00000000-0000-0000-0000-000000000199', fixture.outside.id)?.code).toBe('missing-group');
+    expect(assertCanAddGroupMember(fixture.document, fixture.firstGroup.id, '00000000-0000-0000-0000-000000000198')?.code).toBe('missing-component');
+    expect(assertCanAddGroupMember(fixture.document, fixture.firstGroup.id, fixture.ineligible.id)?.code).toBe('ineligible-component');
+    const crossDiagram = { ...fixture.outside, id: '00000000-0000-0000-0000-000000000197', diagramId: '00000000-0000-0000-0000-000000000196' };
+    expect(assertCanAddGroupMember({ ...fixture.document, components: [...fixture.document.components, crossDiagram] }, fixture.firstGroup.id, crossDiagram.id)?.code).toBe('component-cross-diagram');
+    expect(fixture.document).toEqual(before);
   });
 
   it('rejects cross-diagram members and invalid positive layouts without changing references', () => {

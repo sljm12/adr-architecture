@@ -57,4 +57,17 @@ describe('React Flow system group adapter', () => {
     expect(roundTrip.groups[0].position).toEqual({ x: -944, y: -982 });
     expect(roundTrip.groups[0].size).toEqual({ width: 1516, height: 1306 });
   });
+
+  it('keeps an added member parented while preserving the absolute domain position on round-trip', () => {
+    const candidateId = '00000000-0000-0000-0000-000000000606';
+    const added: DiagramDocument = { ...base, components: [...base.components, { id: candidateId, diagramId, name: 'Notifications', description: null, type: 'software-system', position: { x: 620, y: 260 }, createdAt: timestamp, updatedAt: timestamp }], groups: [{ ...base.groups[0], memberComponentIds: [...base.groups[0].memberComponentIds, candidateId], ...calculateGroupBounds([{ x: 120, y: 130 }, { x: 360, y: 220 }, { x: 620, y: 260 }]) }] };
+    const visual = toReactFlow(added);
+    const candidate = visual.nodes.find(node => node.id === candidateId)!;
+    expect(candidate.parentId).toBe(ids.group);
+    expect(candidate.position).toEqual({ x: 620 - added.groups[0].position.x, y: 260 - added.groups[0].position.y });
+    const roundTrip = fromReactFlow(added, visual.nodes);
+    expect(roundTrip.components.find(component => component.id === candidateId)?.position).toEqual({ x: 620, y: 260 });
+    expect(roundTrip.relationships[0]).toMatchObject({ id: ids.relationship, sourceComponentId: ids.first, targetComponentId: ids.second });
+    expect(roundTrip.groups[0].memberComponentIds).toContain(candidateId);
+  });
 });

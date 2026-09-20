@@ -23,6 +23,8 @@ describe('system group UI accessibility contract', () => {
     expect(workspace).toContain('groupingSelectionActive');
     expect(workspace).toContain('clearCanvasSelection');
     expect(workspace).toContain("next?.kind === 'components' ? next.ids : []");
+    expect(canvas).toContain("kind: 'group-member-candidate'");
+    expect(workspace).toContain('selectedCandidateComponentId');
   });
 
   it('exposes group creation feedback and member actions with confirmation semantics', () => {
@@ -58,6 +60,9 @@ describe('system group UI accessibility contract', () => {
     expect(toolbar).toContain('Selected for grouping:');
     expect(toolbar).toContain('selection-feedback-error');
     expect(inspector).toContain('describeGroupSelection');
+    expect(inspector).toContain('Add component to group');
+    expect(inspector).toContain('Candidate component');
+    expect(inspector).toContain('aria-live');
     expect(store).toContain('Person cannot be grouped with a Software System');
     expect(store).toContain('system groups contain only Software Systems');
   });

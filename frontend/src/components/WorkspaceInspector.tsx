@@ -9,9 +9,9 @@ import { RelationshipAdrSummary } from './RelationshipAdrSummary';
 import { ConfirmDialog } from './ConfirmDialog';
 import { c4ArtifactTypes, getC4ArtifactTypeDescription, getC4ArtifactTypeLabel, isC4ArtifactType, type C4ArtifactType } from '../../../shared/src/index';
 
-export type CanvasSelection = { kind: 'component' | 'relationship' | 'group'; id: string } | { kind: 'components'; ids: string[] } | null;
+export type CanvasSelection = { kind: 'component' | 'relationship' | 'group'; id: string } | { kind: 'components'; ids: string[] } | { kind: 'group-member-candidate'; groupId: string; componentId: string } | null;
 
-export function WorkspaceInspector({ mode, selection, selectedComponentIds = [], onClose, onSelectComponent, onSelectRelationship, onOpenAdr }: { mode: InspectorMode; selection: CanvasSelection; selectedComponentIds?: string[]; onClose: () => void; onSelectComponent?: (componentId: string) => void; onSelectRelationship?: (relationshipId: string) => void; onOpenAdr?: (adrId: string) => void }) {
+export function WorkspaceInspector({ mode, selection, selectedComponentIds = [], onClose, onSelectComponent, onSelectRelationship, onOpenAdr, onSelectGroup }: { mode: InspectorMode; selection: CanvasSelection; selectedComponentIds?: string[]; onClose: () => void; onSelectComponent?: (componentId: string) => void; onSelectRelationship?: (relationshipId: string) => void; onOpenAdr?: (adrId: string) => void; onSelectGroup?: (groupId: string) => void }) {
   const [name, setName] = useState('');
   const [source, setSource] = useState('');
   const [target, setTarget] = useState('');
@@ -30,6 +30,7 @@ export function WorkspaceInspector({ mode, selection, selectedComponentIds = [],
   const [groupName, setGroupName] = useState('');
   const [confirmUngroup, setConfirmUngroup] = useState(false);
   const [groupNotice, setGroupNotice] = useState('');
+  const [lastAddedGroupId, setLastAddedGroupId] = useState<string | null>(null);
 
   const document = useDiagramStore(state => state.document);
   const create = useDiagramStore(state => state.create);
@@ -40,6 +41,7 @@ export function WorkspaceInspector({ mode, selection, selectedComponentIds = [],
   const updateRelationship = useDiagramStore(state => state.updateRelationship);
   const reverseRelationship = useDiagramStore(state => state.reverseRelationship);
   const createGroup = useDiagramStore(state => state.createGroup);
+  const addGroupMember = useDiagramStore(state => state.addGroupMember);
   const renameGroup = useDiagramStore(state => state.renameGroup);
   const removeGroupMember = useDiagramStore(state => state.removeGroupMember);
   const ungroup = useDiagramStore(state => state.ungroup);
@@ -63,14 +65,16 @@ export function WorkspaceInspector({ mode, selection, selectedComponentIds = [],
         setRelationshipEditDirection(relationship.direction);
         setRelationshipEditError('');
       }
-    } else if (selection.kind === 'group') {
-      const group = document.groups.find(item => item.id === selection.id);
+    } else if (selection.kind === 'group' || selection.kind === 'group-member-candidate') {
+      const groupId = selection.kind === 'group' ? selection.id : selection.groupId;
+      const group = document.groups.find(item => item.id === groupId);
       if (group) {
         setGroupName(group.name);
+        if (selection.kind === 'group' && lastAddedGroupId === group.id) return;
         setGroupNotice('');
       }
     }
-  }, [selection?.kind, selection?.id]);
+  }, [selection?.kind, selection && ('id' in selection ? selection.id : selection.kind === 'group-member-candidate' ? `${selection.groupId}:${selection.componentId}` : selection.ids.join(',')), lastAddedGroupId]);
 
   const createDiagram = (event: FormEvent) => {
     event.preventDefault();
@@ -110,6 +114,11 @@ export function WorkspaceInspector({ mode, selection, selectedComponentIds = [],
     : undefined;
   const selectedGroup = selection?.kind === 'group'
     ? document.groups.find(group => group.id === selection.id)
+    : selection?.kind === 'group-member-candidate'
+      ? document.groups.find(group => group.id === selection.groupId)
+    : undefined;
+  const candidateComponent = selection?.kind === 'group-member-candidate'
+    ? document.components.find(component => component.id === selection.componentId)
     : undefined;
   const selectedGroupMembers = selectedGroup?.memberComponentIds
     .map(componentId => document.components.find(component => component.id === componentId))
@@ -167,6 +176,16 @@ export function WorkspaceInspector({ mode, selection, selectedComponentIds = [],
     onClose();
   };
 
+  const addSelectedGroupMember = () => {
+    if (!selectedGroup || !candidateComponent || !addGroupMember(selectedGroup.id, candidateComponent.id)) {
+      setGroupNotice(groupError ?? 'The selected component could not be added to this group.');
+      return;
+    }
+    setLastAddedGroupId(selectedGroup.id);
+    setGroupNotice(`${candidateComponent.name} was added to ${selectedGroup.name}. The boundary was fitted without changing the component.`);
+    onSelectGroup?.(selectedGroup.id);
+  };
+
   const saveGroupName = (event: FormEvent) => {
     event.preventDefault();
     if (!selectedGroup || !renameGroup(selectedGroup.id, groupName)) {
@@ -200,7 +219,7 @@ export function WorkspaceInspector({ mode, selection, selectedComponentIds = [],
   return <aside className={inspectorClassName} aria-label={mode === 'adr' ? 'ADR workspace' : 'Diagram inspector'}><div className="inspector-header"><div><span className="eyebrow">Inspector</span><h2>{heading}</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Close inspector">×</button></div>
     {mode === 'adr' && <div className="adr-workspace-body" aria-live="polite"><AdrList diagramId={document.id} /><AdrEditor components={document.components} relationships={document.relationships} onSelectComponent={onSelectComponent} onSelectRelationship={onSelectRelationship} onOpenAdr={onOpenAdr} /></div>}
     {mode === null && selectedComponent && <section className="artifact-edit-panel" aria-label="Edit component"><span className="eyebrow">Component</span><h3>Edit component</h3><form className="inspector-form artifact-edit-form" onSubmit={saveComponentEdit}><label htmlFor="component-edit-name">Component name</label><input id="component-edit-name" value={componentEditName} onChange={event => { setComponentEditName(event.target.value); setComponentEditError(''); }} autoComplete="off" aria-invalid={Boolean(componentEditError)} />{c4TypeFieldset(componentEditType, type => { setComponentEditType(type); setComponentEditError(''); }, 'C4 artifact type')}{!isC4ArtifactType(selectedComponent.type) && <p className="inspector-meta">Legacy type: Unclassified. Choose a C4 type to classify this component.</p>}{componentEditError && <p className="artifact-edit-error" role="alert">{componentEditError}</p>}<button className="primary-pill" type="submit">Save component</button></form></section>}
-    {mode === null && selectedGroup && <section className="artifact-edit-panel system-group-details" aria-label="System group details"><span className="eyebrow">System group</span><h3>Group details</h3><p className="inspector-copy">This boundary contains Software System members. Moving it preserves each member's relative position.</p><form className="inspector-form artifact-edit-form" onSubmit={saveGroupName}><label htmlFor="group-edit-name">Group name</label><input id="group-edit-name" value={groupName} onChange={event => { setGroupName(event.target.value); setGroupNotice(''); }} autoComplete="off" aria-invalid={Boolean(groupError)} />{groupError && <p className="artifact-edit-error" role="alert">{groupError}</p>}<button className="primary-pill" type="submit">Rename group</button></form><h4>Members</h4><ul className="system-group-members" aria-label={`${selectedGroup.name} members`}>{selectedGroupMembers.map(component => <li key={component.id}><span><strong>{component.name}</strong><small>{getC4ArtifactTypeLabel(component.type)}</small></span><button className="secondary-action" type="button" onClick={() => removeMember(component.id)}>Remove from group</button></li>)}</ul><output className="group-feedback" aria-live="polite">{groupNotice}</output><button className="danger-action" type="button" onClick={() => setConfirmUngroup(true)}>Ungroup</button>{confirmUngroup && <ConfirmDialog title="Ungroup this boundary?" message="The group and its membership will be removed. Components, relationships, ADR links, and positions will be preserved." confirmLabel="Ungroup" onConfirm={confirmGroupRemoval} onCancel={() => setConfirmUngroup(false)} />}</section>}
+    {mode === null && selectedGroup && <section className="artifact-edit-panel system-group-details" aria-label="System group details"><span className="eyebrow">System group</span><h3>Group details</h3><p className="inspector-copy">This boundary contains Software System members. Moving it preserves each member's relative position.</p>{candidateComponent && <div className="group-member-candidate" aria-label="Add component to group candidate"><strong>Candidate component</strong><span>{candidateComponent.name}</span><small>{getC4ArtifactTypeLabel(candidateComponent.type)} · Shift-selected for review</small><div className="artifact-edit-actions"><button className="primary-pill" type="button" onClick={addSelectedGroupMember} aria-label={`Add ${candidateComponent.name} to ${selectedGroup.name}`}>Add component to group</button><button type="button" onClick={() => onSelectGroup?.(selectedGroup.id)}>Cancel</button></div></div>}<form className="inspector-form artifact-edit-form" onSubmit={saveGroupName}><label htmlFor="group-edit-name">Group name</label><input id="group-edit-name" value={groupName} onChange={event => { setGroupName(event.target.value); setGroupNotice(''); }} autoComplete="off" aria-invalid={Boolean(groupError)} />{groupError && <p className="artifact-edit-error" role="alert" aria-live="assertive">{groupError}</p>}<button className="primary-pill" type="submit">Rename group</button></form><h4>Members</h4><ul className="system-group-members" aria-label={`${selectedGroup.name} members`}>{selectedGroupMembers.map(component => <li key={component.id}><span><strong>{component.name}</strong><small>{getC4ArtifactTypeLabel(component.type)}</small></span><button className="secondary-action" type="button" onClick={() => removeMember(component.id)}>Remove from group</button></li>)}</ul><output className="group-feedback" aria-live="polite">{groupNotice}</output><button className="danger-action" type="button" onClick={() => setConfirmUngroup(true)}>Ungroup</button>{confirmUngroup && <ConfirmDialog title="Ungroup this boundary?" message="The group and its membership will be removed. Components, relationships, ADR links, and positions will be preserved." confirmLabel="Ungroup" onConfirm={confirmGroupRemoval} onCancel={() => setConfirmUngroup(false)} />}</section>}
     {mode === null && selectedRelationship && <section className="artifact-edit-panel" aria-label="Edit relationship"><span className="eyebrow">Relationship</span><h3>Edit relationship</h3><form className="inspector-form artifact-edit-form" onSubmit={saveRelationshipEdit}><label htmlFor="relationship-edit-source">Relationship source</label><select id="relationship-edit-source" value={relationshipEditSource} onChange={event => setRelationshipEditSource(event.target.value)}>{document.components.map(component => <option key={component.id} value={component.id}>{component.name}</option>)}</select><label htmlFor="relationship-edit-target">Relationship target</label><select id="relationship-edit-target" value={relationshipEditTarget} onChange={event => setRelationshipEditTarget(event.target.value)}>{document.components.map(component => <option key={component.id} value={component.id}>{component.name}</option>)}</select><label htmlFor="relationship-edit-label">Relationship label</label><input id="relationship-edit-label" value={relationshipEditLabel} onChange={event => setRelationshipEditLabel(event.target.value)} autoComplete="off" /><label htmlFor="relationship-edit-direction">Relationship direction</label><select id="relationship-edit-direction" value={relationshipEditDirection} onChange={event => setRelationshipEditDirection(event.target.value as 'directed' | 'undirected')}><option value="directed">Directed</option><option value="undirected">Undirected</option></select>{relationshipEditError && <p className="artifact-edit-error" role="alert">{relationshipEditError}</p>}<div className="artifact-edit-actions"><button type="button" onClick={reverseSelectedRelationship}>Reverse direction</button><button className="primary-pill" type="submit">Save relationship</button></div></form></section>}
     {mode === null && selection?.kind === 'component' && <ComponentAdrSummary diagramId={document.id} componentId={selection.id} onOpenAdr={onOpenAdr ?? (() => undefined)} />}
     {mode === null && selection?.kind === 'relationship' && selectedRelationship && <RelationshipAdrSummary diagramId={document.id} relationship={selectedRelationship} componentNames={new Map(document.components.map(component => [component.id, component.name]))} onOpenAdr={onOpenAdr ?? (() => undefined)} />}

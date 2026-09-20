@@ -1,0 +1,209 @@
+openapi: 3.0.3
+info:
+  title: ADR Diagram Add Existing Component to Group Contract
+  version: 1.0.0
+  description: >
+    The add-member workflow uses the existing complete-document save contract. The client sends an
+    existing group with one additional existing component ID; no dedicated membership endpoint is
+    introduced.
+paths:
+  /api/diagrams/{diagramId}:
+    put:
+      summary: Replace a diagram document, including group membership
+      description: >
+        Replaces the active diagram atomically. For this feature, a valid request may append one
+        existing eligible component ID to an existing group's memberComponentIds and update the
+        group's fitted position and size. Component IDs, relationships, ADR links, and unrelated
+        groups remain unchanged.
+      parameters:
+        - $ref: '#/components/parameters/DiagramId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiagramDocument'
+      responses:
+        '200':
+          description: The normalized saved document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagramDocument'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+components:
+  parameters:
+    DiagramId:
+      name: diagramId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    NotFound:
+      description: The active diagram was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ValidationError:
+      description: >
+        The document is invalid and no replacement is committed. The detail identifies duplicate
+        membership, existing membership in another group, an ineligible component, a missing item,
+        or a boundary/layout violation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+  schemas:
+    DiagramDocument:
+      type: object
+      required: [id, name, status, createdAt, updatedAt, trashedAt, components, relationships, groups]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+        status:
+          type: string
+          enum: [active, trashed]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+        trashedAt:
+          type: string
+          format: date-time
+          nullable: true
+        components:
+          type: array
+          items:
+            $ref: '#/components/schemas/Component'
+        relationships:
+          type: array
+          items:
+            $ref: '#/components/schemas/Relationship'
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/SystemGroup'
+          default: []
+    Component:
+      type: object
+      required: [id, diagramId, name, type, position, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        diagramId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+        type:
+          type: string
+          description: Existing canonical or legacy component classification; only software-system may be added to a system group.
+        position:
+          $ref: '#/components/schemas/Position'
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+    Relationship:
+      type: object
+      required: [id, diagramId, sourceComponentId, targetComponentId, direction, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        diagramId:
+          type: string
+          format: uuid
+        sourceComponentId:
+          type: string
+          format: uuid
+        targetComponentId:
+          type: string
+          format: uuid
+        direction:
+          type: string
+          enum: [directed, undirected]
+        label:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+    SystemGroup:
+      type: object
+      required: [id, diagramId, name, memberComponentIds, position, size, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        diagramId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+        memberComponentIds:
+          type: array
+          minItems: 2
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+          description: >
+            Existing component IDs. Every member must be a Software System in this diagram and
+            must belong to no other group.
+        position:
+          $ref: '#/components/schemas/Position'
+        size:
+          type: object
+          required: [width, height]
+          properties:
+            width:
+              type: number
+              exclusiveMinimum: 0
+            height:
+              type: number
+              exclusiveMinimum: 0
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+    Position:
+      type: object
+      required: [x, y]
+      properties:
+        x:
+          type: number
+        y:
+          type: number
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+    ValidationError:
+      type: object
+      required: [message, fields]
+      properties:
+        message:
+          type: string
+        fields:
+          type: object
+          additionalProperties:
+            type: string
+          description: Field-addressable details for the rejected complete document.
