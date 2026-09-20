@@ -59,6 +59,47 @@ describe('C4 system group API contract', () => {
     await app.close();
   });
 
+  it('returns 422 and preserves the stored document for duplicate, conflicting, ineligible, and invalid-boundary memberships', async () => {
+    const app = buildApp(); await app.ready();
+    const created = await app.inject({ method: 'POST', url: '/diagrams', payload: { name: 'Rejected memberships' } });
+    const document = created.json();
+    const first = '00000000-0000-0000-0000-000000000231';
+    const second = '00000000-0000-0000-0000-000000000232';
+    const outside = '00000000-0000-0000-0000-000000000233';
+    const fourth = '00000000-0000-0000-0000-000000000234';
+    const person = '00000000-0000-0000-0000-000000000235';
+    const targetGroup = '00000000-0000-0000-0000-000000000236';
+    const currentGroup = '00000000-0000-0000-0000-000000000237';
+    const initial = {
+      ...document,
+      components: [
+        component(first, document.id, 'Billing', 'software-system', 100, 100, document.createdAt),
+        component(second, document.id, 'Ledger', 'software-system', 340, 180, document.createdAt),
+        component(outside, document.id, 'Reporting', 'software-system', 620, 260, document.createdAt),
+        component(fourth, document.id, 'Support', 'software-system', 860, 340, document.createdAt),
+        component(person, document.id, 'Operator', 'person', 20, 20, document.createdAt),
+      ],
+      relationships: [],
+      groups: [
+        { id: targetGroup, diagramId: document.id, name: 'Platform', memberComponentIds: [first, second], position: { x: 68, y: 44 }, size: { width: 484, height: 240 }, createdAt: document.createdAt, updatedAt: document.createdAt },
+        { id: currentGroup, diagramId: document.id, name: 'Operations', memberComponentIds: [outside, fourth], position: { x: 588, y: 204 }, size: { width: 484, height: 240 }, createdAt: document.createdAt, updatedAt: document.createdAt },
+      ],
+    };
+    expect((await app.inject({ method: 'PUT', url: `/diagrams/${document.id}`, payload: initial })).statusCode).toBe(200);
+    const stored = (await app.inject({ method: 'GET', url: `/diagrams/${document.id}` })).json();
+    const invalidDocuments = [
+      { ...initial, groups: [{ ...initial.groups[0], memberComponentIds: [first, second, first] }, initial.groups[1]] },
+      { ...initial, groups: [{ ...initial.groups[0], memberComponentIds: [first, second, outside] }, initial.groups[1]] },
+      { ...initial, groups: [{ ...initial.groups[0], memberComponentIds: [first, second, person] }, initial.groups[1]] },
+      { ...initial, groups: [{ ...initial.groups[0], size: { width: 100, height: 100 } }, initial.groups[1]] },
+    ];
+    for (const invalid of invalidDocuments) {
+      expect((await app.inject({ method: 'PUT', url: `/diagrams/${document.id}`, payload: invalid })).statusCode).toBe(422);
+      expect((await app.inject({ method: 'GET', url: `/diagrams/${document.id}` })).json()).toEqual(stored);
+    }
+    await app.close();
+  });
+
   it('returns field-addressable errors and blocks deletion of grouped components', async () => {
     const app = buildApp(); await app.ready();
     const created = await app.inject({ method: 'POST', url: '/diagrams', payload: { name: 'Validation' } });

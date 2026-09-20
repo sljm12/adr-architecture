@@ -63,7 +63,22 @@ describe('system group UI accessibility contract', () => {
     expect(inspector).toContain('Add component to group');
     expect(inspector).toContain('Candidate component');
     expect(inspector).toContain('aria-live');
+    expect(inspector).toContain('group-member-candidate-error');
+    expect(inspector).toContain('disabled={Boolean(candidateError)}');
+    expect(inspector).toContain('aria-live="assertive"');
+    expect(inspector).toContain('clearGroupError');
     expect(store).toContain('Person cannot be grouped with a Software System');
     expect(store).toContain('system groups contain only Software Systems');
+    expect(store).toContain('already belongs to');
+    expect(store).toContain('cannot be added again');
+  });
+
+  it('keeps a rejected candidate cancellable while preserving the selected group', () => {
+    const inspector = source('../src/components/WorkspaceInspector.tsx');
+    const workspace = source('../src/components/DiagramWorkspace.tsx');
+    expect(inspector).toContain('onSelectGroup?.(selectedGroup.id)');
+    expect(inspector).toContain('>Cancel</button>');
+    expect(workspace).toContain("selection?.kind === 'group-member-candidate'");
+    expect(workspace).toContain('clearCanvasSelection');
   });
 });

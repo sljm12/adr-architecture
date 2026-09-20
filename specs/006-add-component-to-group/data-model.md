@@ -41,7 +41,8 @@ in the existing system_group_members table. The association is valid only when:
 5. The resulting group has unique member IDs and a boundary enclosing every member with the
    established padding.
 
-An invalid attempt is a no-op. A valid attempt appends one ID, fits the group boundary, and is one
+An invalid attempt is a no-op: the document, fitted boundary, undo/redo history, and persisted
+document remain unchanged. A valid attempt appends one ID, fits the group boundary, and is one
 undoable document revision.
 
 ## Transient Add Selection
@@ -80,5 +81,7 @@ No new storage structure is needed:
 - SystemGroup.id, name, layout, and timestamps map to system_groups.
 - Each memberComponentIds entry maps to system_group_members(group_id, component_id).
 - The current complete-document replacement remains the atomic persistence boundary.
-- The existing primary key prevents duplicate rows; domain validation prevents duplicate IDs and
-  cross-group membership before persistence.
+- The existing primary key prevents duplicate rows; domain validation prevents duplicate IDs,
+  cross-group membership, ineligible members, and invalid boundaries before persistence.
+- Invalid complete-document replacements return HTTP 422 and do not replace the stored document;
+  the client can retry the unchanged draft after a save failure.

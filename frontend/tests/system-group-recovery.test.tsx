@@ -9,6 +9,7 @@ const diagramId = '00000000-0000-4000-8000-000000000601';
 const firstId = '00000000-0000-4000-8000-000000000602';
 const secondId = '00000000-0000-4000-8000-000000000603';
 const relationshipId = '00000000-0000-4000-8000-000000000604';
+const outsideId = '00000000-0000-4000-8000-000000000606';
 const timestamp = '2026-01-01T00:00:00.000Z';
 const document: DiagramDocument = {
   id: diagramId, name: 'System context', status: 'active', createdAt: timestamp, updatedAt: timestamp, trashedAt: null,
@@ -48,6 +49,57 @@ describe('system group save and recovery', () => {
     expect(useDiagramStore.getState().document).toMatchObject({ groups: [expect.objectContaining({ id: grouped.groups[0].id, name: 'Finance' })] });
     expect(useDiagramStore.getState().document?.components.map(component => component.id)).toEqual([firstId, secondId]);
     expect(useDiagramStore.getState().document?.relationships[0].id).toBe(relationshipId);
+  });
+
+  it('keeps an added membership draft unchanged across save failure and retry', async () => {
+    const source = {
+      ...structuredClone(document),
+      components: [...structuredClone(document.components), { id: outsideId, diagramId, name: 'Notifications', description: null, type: 'software-system' as const, position: { x: 620, y: 260 }, createdAt: timestamp, updatedAt: timestamp }],
+    };
+    useDiagramStore.getState().open(source);
+    expect(useDiagramStore.getState().createGroup('Platform', [firstId, secondId])).toBe(true);
+    const groupId = useDiagramStore.getState().document!.groups[0].id;
+    expect(useDiagramStore.getState().addGroupMember(groupId, outsideId)).toBe(true);
+    const added = structuredClone(useDiagramStore.getState().document!);
+    let submitted: DiagramDocument | undefined;
+    const save = vi.spyOn(diagramClient, 'save')
+      .mockImplementationOnce(input => { submitted = structuredClone(input); return Promise.reject(new Error('Backend unavailable')); })
+      .mockResolvedValueOnce({ ...added, updatedAt: '2026-01-01T00:02:00.000Z' });
+
+    await useDiagramStore.getState().save();
+    expect(useDiagramStore.getState()).toMatchObject({ status: 'failed', document: added, canUndo: true });
+    await useDiagramStore.getState().retry();
+
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save.mock.calls[1][0]).toEqual(submitted);
+    expect(useDiagramStore.getState().document?.groups[0].memberComponentIds).toEqual([firstId, secondId, outsideId]);
+    expect(useDiagramStore.getState().document?.components.find(component => component.id === outsideId)?.position).toEqual({ x: 620, y: 260 });
+  });
+
+  it('ignores stale responses after undoing an added membership and preserves redo', async () => {
+    const source = {
+      ...structuredClone(document),
+      components: [...structuredClone(document.components), { id: outsideId, diagramId, name: 'Notifications', description: null, type: 'software-system' as const, position: { x: 620, y: 260 }, createdAt: timestamp, updatedAt: timestamp }],
+    };
+    useDiagramStore.getState().open(source);
+    useDiagramStore.getState().createGroup('Platform', [firstId, secondId]);
+    const groupId = useDiagramStore.getState().document!.groups[0].id;
+    useDiagramStore.getState().addGroupMember(groupId, outsideId);
+    const added = structuredClone(useDiagramStore.getState().document!);
+    let resolveSave: ((value: DiagramDocument) => void) | undefined;
+    vi.spyOn(diagramClient, 'save').mockImplementation(() => new Promise(resolve => { resolveSave = resolve; }));
+
+    const pending = useDiagramStore.getState().save();
+    useDiagramStore.getState().undo();
+    expect(useDiagramStore.getState().document?.groups[0].memberComponentIds).toEqual([firstId, secondId]);
+    resolveSave?.(added);
+    await pending;
+
+    expect(useDiagramStore.getState().document?.groups[0].memberComponentIds).toEqual([firstId, secondId]);
+    expect(useDiagramStore.getState().status).toBe('unsaved');
+    expect(useDiagramStore.getState().canRedo).toBe(true);
+    useDiagramStore.getState().redo();
+    expect(useDiagramStore.getState().document?.groups[0].memberComponentIds).toEqual([firstId, secondId, outsideId]);
   });
 
   it('keeps newer group edits and a newly reopened diagram safe from stale save responses', async () => {

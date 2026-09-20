@@ -14,7 +14,8 @@ paths:
         Replaces the active diagram atomically. For this feature, a valid request may append one
         existing eligible component ID to an existing group's memberComponentIds and update the
         group's fitted position and size. Component IDs, relationships, ADR links, and unrelated
-        groups remain unchanged.
+        groups remain unchanged. The response contains the normalized complete document with
+        stable group/component identities and preserved creation timestamps.
       parameters:
         - $ref: '#/components/parameters/DiagramId'
       requestBody:
@@ -53,8 +54,9 @@ components:
     ValidationError:
       description: >
         The document is invalid and no replacement is committed. The detail identifies duplicate
-        membership, existing membership in another group, an ineligible component, a missing item,
-        or a boundary/layout violation.
+        member IDs, existing membership in another group, an ineligible or cross-diagram
+        component, a missing item, or a boundary/layout violation. The previously stored document
+        remains available for retry.
       content:
         application/json:
           schema:

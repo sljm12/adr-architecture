@@ -20,6 +20,7 @@ const sameSelection = (left: CanvasSelection, right: CanvasSelection) => {
 export function DiagramWorkspace() {
   const document = useDiagramStore(state => state.document);
   const status = useDiagramStore(state => state.status);
+  const clearGroupError = useDiagramStore(state => state.clearGroupError);
   const startNew = useDiagramStore(state => state.startNew);
   const save = useDiagramStore(state => state.save);
   const loadSavedDocument = useDiagramStore(state => state.loadSavedDocument);
@@ -42,7 +43,7 @@ export function DiagramWorkspace() {
   const [selectedComponentIds, setSelectedComponentIds] = useState<string[]>([]);
   const [canvasEpoch, setCanvasEpoch] = useState(0);
   const updateSelectedComponentIds = useCallback((nextIds: string[]) => setSelectedComponentIds(current => current.length === nextIds.length && current.every((id, index) => id === nextIds[index]) ? current : nextIds), []);
-  const clearCanvasSelection = useCallback(() => { setSelection(null); setSelectedComponentIds([]); }, []);
+  const clearCanvasSelection = useCallback(() => { clearGroupError(); setSelection(null); setSelectedComponentIds([]); }, [clearGroupError]);
   const startFreshDiagram = useCallback(() => { clearCanvasSelection(); setClosedInspectorMode(null); setInspectorMode(null); setInspectorOpen(true); startNew(); }, [clearCanvasSelection, startNew]);
   const requestNewDiagram = () => { if (!document || status === 'saving' || adrStatus === 'saving') return; if (status === 'unsaved' || status === 'failed' || adrStatus === 'unsaved' || adrStatus === 'failed') { setConfirmNew(true); return; } startFreshDiagram(); };
   const load = async (id: string) => { if (await loadSavedDocument(id)) { clearCanvasSelection(); setClosedInspectorMode(null); setInspectorMode(null); setInspectorOpen(false); useAdrStore.getState().startNew(id); void useAdrStore.getState().loadComponentAdrCounts(id); setCanvasEpoch(value => value + 1); } };
@@ -74,13 +75,13 @@ export function DiagramWorkspace() {
     useAdrStore.getState().startNew();
     await finishDeletion(id);
   };
-  const selectCanvasItem = useCallback((next: CanvasSelection) => { setSelection(current => sameSelection(current, next) ? current : next); updateSelectedComponentIds(next?.kind === 'components' ? next.ids : []); setInspectorMode(null); setClosedInspectorMode(null); setInspectorOpen(true); }, [updateSelectedComponentIds]);
-  const selectLinkedComponent = useCallback((componentId: string) => { setSelectedComponentIds([]); setSelection({ kind: 'component', id: componentId }); setInspectorMode(null); setClosedInspectorMode(null); setInspectorOpen(true); window.requestAnimationFrame(() => globalThis.document.getElementById('component-adr-summary-heading')?.focus()); }, []);
-  const selectLinkedRelationship = useCallback((relationshipId: string) => { setSelectedComponentIds([]); setSelection({ kind: 'relationship', id: relationshipId }); setInspectorMode(null); setClosedInspectorMode(null); setInspectorOpen(true); }, []);
-  const selectGroup = useCallback((groupId: string) => { setSelectedComponentIds([]); setSelection({ kind: 'group', id: groupId }); setInspectorMode(null); setClosedInspectorMode(null); setInspectorOpen(true); }, []);
+  const selectCanvasItem = useCallback((next: CanvasSelection) => { clearGroupError(); setSelection(current => sameSelection(current, next) ? current : next); updateSelectedComponentIds(next?.kind === 'components' ? next.ids : []); setInspectorMode(null); setClosedInspectorMode(null); setInspectorOpen(true); }, [clearGroupError, updateSelectedComponentIds]);
+  const selectLinkedComponent = useCallback((componentId: string) => { clearGroupError(); setSelectedComponentIds([]); setSelection({ kind: 'component', id: componentId }); setInspectorMode(null); setClosedInspectorMode(null); setInspectorOpen(true); window.requestAnimationFrame(() => globalThis.document.getElementById('component-adr-summary-heading')?.focus()); }, [clearGroupError]);
+  const selectLinkedRelationship = useCallback((relationshipId: string) => { clearGroupError(); setSelectedComponentIds([]); setSelection({ kind: 'relationship', id: relationshipId }); setInspectorMode(null); setClosedInspectorMode(null); setInspectorOpen(true); }, [clearGroupError]);
+  const selectGroup = useCallback((groupId: string) => { clearGroupError(); setSelectedComponentIds([]); setSelection({ kind: 'group', id: groupId }); setInspectorMode(null); setClosedInspectorMode(null); setInspectorOpen(true); }, [clearGroupError]);
   const openLinkedAdr = useCallback((adrId: string) => { clearCanvasSelection(); setInspectorMode('adr'); setClosedInspectorMode(null); setInspectorOpen(true); void selectAdr(adrId); }, [clearCanvasSelection, selectAdr]);
-  const openInspector = useCallback((mode: Exclude<InspectorMode, null>) => { setSelection(null); if (mode !== 'group') setSelectedComponentIds([]); setClosedInspectorMode(null); setInspectorMode(mode); setInspectorOpen(true); }, []);
-  const closeInspector = useCallback(() => { setClosedInspectorMode(inspectorMode); setInspectorMode(null); setInspectorOpen(false); }, [inspectorMode]);
+  const openInspector = useCallback((mode: Exclude<InspectorMode, null>) => { clearGroupError(); setSelection(null); if (mode !== 'group') setSelectedComponentIds([]); setClosedInspectorMode(null); setInspectorMode(mode); setInspectorOpen(true); }, [clearGroupError]);
+  const closeInspector = useCallback(() => { if (inspectorMode === 'group' || selection?.kind === 'group-member-candidate') clearCanvasSelection(); else clearGroupError(); setClosedInspectorMode(inspectorMode); setInspectorMode(null); setInspectorOpen(false); }, [clearCanvasSelection, clearGroupError, inspectorMode, selection?.kind]);
   const toggleInspector = useCallback(() => { setInspectorOpen(open => { if (!open && inspectorMode === null && closedInspectorMode !== null) { setInspectorMode(closedInspectorMode); setClosedInspectorMode(null); } return !open; }); }, [closedInspectorMode, inspectorMode]);
   return <div className={`app-shell ${libraryOpen ? 'library-open' : 'library-closed'}`}>
     <a className="skip-link" href="#diagram-workspace">Skip to diagram workspace</a>

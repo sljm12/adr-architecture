@@ -51,6 +51,33 @@ describe('system group persistence compatibility', () => {
     expect(repository.get(diagramId)?.groups[0].memberComponentIds).toContain(outsideId);
   });
 
+  it('rejects invalid memberships without replacing the persisted document', () => {
+    const repository = new DiagramRepository();
+    const service = new DiagramService(repository);
+    repository.create({ ...baseDocument(), groups: [] });
+    const original = service.save(diagramId, baseDocument());
+    const outsideId = '00000000-0000-4000-8000-000000000506';
+    const supportId = '00000000-0000-4000-8000-000000000507';
+    const personId = '00000000-0000-4000-8000-000000000508';
+    const outside = { id: outsideId, diagramId, name: 'Reporting', description: null, type: 'software-system' as const, position: { x: 620, y: 260 }, createdAt: timestamp, updatedAt: timestamp };
+    const support = { id: supportId, diagramId, name: 'Support', description: null, type: 'software-system' as const, position: { x: 860, y: 340 }, createdAt: timestamp, updatedAt: timestamp };
+    const person = { id: personId, diagramId, name: 'Operator', description: null, type: 'person' as const, position: { x: 20, y: 20 }, createdAt: timestamp, updatedAt: timestamp };
+    const secondGroup: SystemGroup = { id: '00000000-0000-4000-8000-000000000509', diagramId, name: 'Operations', memberComponentIds: [outsideId, supportId], ...calculateGroupBounds([outside.position, support.position]), createdAt: timestamp, updatedAt: timestamp };
+    const valid = { ...original, components: [...original.components, outside, support, person], groups: [original.groups[0], secondGroup] };
+    const stored = service.save(diagramId, valid);
+    const target = stored.groups[0];
+    const invalidDocuments = [
+      { ...stored, groups: [{ ...target, memberComponentIds: [firstId, secondId, firstId], ...calculateGroupBounds([stored.components[0].position, stored.components[1].position, stored.components[0].position]) }, stored.groups[1]] },
+      { ...stored, groups: [{ ...target, memberComponentIds: [firstId, secondId, outsideId], ...calculateGroupBounds([stored.components[0].position, stored.components[1].position, outside.position]) }, stored.groups[1]] },
+      { ...stored, groups: [{ ...target, memberComponentIds: [firstId, secondId, personId], ...calculateGroupBounds([stored.components[0].position, stored.components[1].position, person.position]) }, stored.groups[1]] },
+      { ...stored, groups: [{ ...target, size: { width: 100, height: 100 } }, stored.groups[1]] },
+    ];
+    for (const invalid of invalidDocuments) {
+      expect(() => service.save(diagramId, invalid)).toThrow();
+      expect(repository.get(diagramId)).toEqual(stored);
+    }
+  });
+
   it('defaults omitted groups to an empty list for legacy documents', () => {
     const repository = new DiagramRepository();
     const service = new DiagramService(repository);

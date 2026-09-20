@@ -98,6 +98,34 @@ describe('system group diagram store', () => {
     expect(useDiagramStore.getState().document!.groups[0].memberComponentIds).toEqual([ids.first, ids.second, ids.third]);
   });
 
+  it('rejects same-group duplicate and cross-group candidates without changing layout or history', () => {
+    const secondGroupId = '00000000-0000-0000-0000-000000000507';
+    const grouped: DiagramDocument = {
+      ...structuredClone(document),
+      groups: [
+        { id: '00000000-0000-0000-0000-000000000508', diagramId, name: 'Platform', memberComponentIds: [ids.first, ids.second], ...calculateGroupBounds([document.components[0].position, document.components[1].position]), createdAt: timestamp, updatedAt: timestamp },
+        { id: secondGroupId, diagramId, name: 'Operations', memberComponentIds: [ids.third, ids.person], ...calculateGroupBounds([document.components[2].position, document.components[3].position]), createdAt: timestamp, updatedAt: timestamp },
+      ],
+    };
+    // Keep the conflict fixture valid for the domain by making the second member a Software System.
+    grouped.components = grouped.components.map(component => component.id === ids.person ? { ...component, type: 'software-system' } : component);
+    useDiagramStore.getState().open(grouped);
+    const before = structuredClone(useDiagramStore.getState().document!);
+    const targetGroup = before.groups[0];
+
+    expect(useDiagramStore.getState().addGroupMember(targetGroup.id, ids.first)).toBe(false);
+    expect(useDiagramStore.getState().groupError).toMatch(/Billing is already in Platform.*cannot be added again/i);
+    expect(useDiagramStore.getState().document).toEqual(before);
+    expect(useDiagramStore.getState().canUndo).toBe(false);
+    expect(useDiagramStore.getState().canRedo).toBe(false);
+
+    expect(useDiagramStore.getState().addGroupMember(targetGroup.id, ids.third)).toBe(false);
+    expect(useDiagramStore.getState().groupError).toMatch(/Notifications already belongs to Operations.*Platform.*only one group/i);
+    expect(useDiagramStore.getState().document).toEqual(before);
+    expect(useDiagramStore.getState().canUndo).toBe(false);
+    expect(useDiagramStore.getState().canRedo).toBe(false);
+  });
+
   it('moves groups by a shared delta, refits members beyond the boundary, resizes, removes membership explicitly, and preserves references', () => {
     useDiagramStore.getState().open(structuredClone(document));
     expect(useDiagramStore.getState().createGroup('Platform', [ids.first, ids.second, ids.third])).toBe(true);

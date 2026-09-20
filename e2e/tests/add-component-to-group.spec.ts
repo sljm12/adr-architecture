@@ -84,3 +84,25 @@ test('selects an outside component, adds it to the target group, and saves the f
   await expect(page.getByLabel(/System group Platform, 3 Software System members/)).toBeVisible();
   await expect(page.getByLabel(/Component Notifications, Software System/)).toBeVisible();
 });
+
+test('explains duplicate and conflicting candidates without changing membership', async ({ page }) => {
+  const api = await mockCompleteDocumentApi(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: /System context, last saved/ }).click();
+
+  const inspector = page.getByLabel('Diagram inspector');
+  const platform = page.getByLabel(/System group Platform, 2 Software System members/);
+  await platform.locator('.group-boundary-label').click();
+  await page.getByLabel(/Component Billing, Software System/).click({ modifiers: ['Shift'] });
+  await expect(inspector.getByRole('alert')).toHaveText(/Billing is already in Platform.*cannot be added again/i);
+  await expect(inspector.getByRole('button', { name: 'Add Billing to Platform' })).toBeDisabled();
+  await inspector.getByRole('button', { name: 'Cancel' }).click();
+  await expect(inspector.getByText('Candidate component')).not.toBeVisible();
+
+  await page.getByLabel(/System group Platform, 2 Software System members/).locator('.group-boundary-label').click();
+  await page.getByLabel(/Component Reporting, Software System/).click({ modifiers: ['Shift'] });
+  await expect(inspector.getByRole('alert')).toHaveText(/Reporting already belongs to Operations.*Platform.*only one group/i);
+  await expect(inspector.getByRole('button', { name: 'Add Reporting to Platform' })).toBeDisabled();
+  await inspector.getByRole('button', { name: 'Cancel' }).click();
+  expect(api.getLatest().groups).toEqual(initialDocument.groups);
+});

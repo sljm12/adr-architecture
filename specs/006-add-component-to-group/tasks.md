@@ -73,16 +73,16 @@ workflow; US2 adds duplicate and conflicting-membership protection on that workf
 
 ### Tests for User Story 2
 
-- [ ] T017 [US2] Add store tests proving same-group and cross-group candidates return false, expose the required message, leave the document and group boundary unchanged, and do not add undo/redo entries in frontend/tests/system-group-store.test.ts.
-- [ ] T018 [US2] Add UI accessibility tests for duplicate/conflicting live alerts, disabled or rejected add actions, candidate cancellation, and preservation of the selected group in frontend/tests/system-group-ui.test.tsx.
-- [ ] T019 [US2] Add API and persistence tests proving duplicate member IDs, cross-group membership, ineligible members, and invalid boundaries return 422 without replacing the stored document in backend/tests/contract/system-groups.test.ts and backend/tests/persistence/system-groups.test.ts.
-- [ ] T020 [US2] Add Playwright coverage for same-group duplicate feedback, different-group conflict feedback naming the current group, invalid candidate cancellation, and unchanged member counts in e2e/tests/add-component-to-group.spec.ts.
+- [X] T017 [US2] Add store tests proving same-group and cross-group candidates return false, expose the required message, leave the document and group boundary unchanged, and do not add undo/redo entries in frontend/tests/system-group-store.test.ts.
+- [X] T018 [US2] Add UI accessibility tests for duplicate/conflicting live alerts, disabled or rejected add actions, candidate cancellation, and preservation of the selected group in frontend/tests/system-group-ui.test.tsx.
+- [X] T019 [US2] Add API and persistence tests proving duplicate member IDs, cross-group membership, ineligible members, and invalid boundaries return 422 without replacing the stored document in backend/tests/contract/system-groups.test.ts and backend/tests/persistence/system-groups.test.ts.
+- [X] T020 [US2] Add Playwright coverage for same-group duplicate feedback, different-group conflict feedback naming the current group, invalid candidate cancellation, and unchanged member counts in e2e/tests/add-component-to-group.spec.ts.
 
 ### Implementation for User Story 2
 
-- [ ] T021 [US2] Map assertCanAddGroupMember outcomes to exact user-facing groupError messages in frontend/src/state/diagram-store.ts, including the selected group for duplicates and the current group for cross-group conflicts.
-- [ ] T022 [US2] Render actionable role=alert and aria-live feedback, candidate eligibility state, and disabled/rejected confirmation behavior in frontend/src/components/WorkspaceInspector.tsx without clearing the group selection.
-- [ ] T023 [US2] Ensure pane clicks, normal clicks, cancellation, diagram switches, and exits from new-group mode clear the compound candidate without mutating the document in frontend/src/components/DiagramCanvas.tsx and frontend/src/components/DiagramWorkspace.tsx.
+- [X] T021 [US2] Map assertCanAddGroupMember outcomes to exact user-facing groupError messages in frontend/src/state/diagram-store.ts, including the selected group for duplicates and the current group for cross-group conflicts.
+- [X] T022 [US2] Render actionable role=alert and aria-live feedback, candidate eligibility state, and disabled/rejected confirmation behavior in frontend/src/components/WorkspaceInspector.tsx without clearing the group selection.
+- [X] T023 [US2] Ensure pane clicks, normal clicks, cancellation, diagram switches, and exits from new-group mode clear the compound candidate without mutating the document in frontend/src/components/DiagramCanvas.tsx and frontend/src/components/DiagramWorkspace.tsx.
 
 **Checkpoint**: US1 and US2 are both independently verifiable: valid additions work, while duplicate, conflicting, missing, and ineligible attempts are explained and remain no-ops.
 
@@ -92,10 +92,10 @@ workflow; US2 adds duplicate and conflicting-membership protection on that workf
 
 **Purpose**: Verify save/retry behavior, documentation alignment, and the complete feature boundary.
 
-- [ ] T024 [P] Extend save-failure, retry, stale-response, and undo/redo regression coverage for an added membership in frontend/tests/system-group-recovery.test.tsx.
-- [ ] T025 [P] Reconcile the implemented PUT payload, 422 no-mutation behavior, data model, and runnable scenarios in specs/006-add-component-to-group/contracts/openapi.yaml, specs/006-add-component-to-group/data-model.md, and specs/006-add-component-to-group/quickstart.md.
-- [ ] T026 Run the focused shared, frontend, backend, and persistence suites listed in specs/006-add-component-to-group/quickstart.md and fix regressions in the referenced source and test files.
-- [ ] T027 Run the feature Playwright workflow and the full npm test and npm run build commands from package.json, review the feature diff for unrelated changes, and mark completed work in specs/006-add-component-to-group/tasks.md.
+- [X] T024 [P] Extend save-failure, retry, stale-response, and undo/redo regression coverage for an added membership in frontend/tests/system-group-recovery.test.tsx.
+- [X] T025 [P] Reconcile the implemented PUT payload, 422 no-mutation behavior, data model, and runnable scenarios in specs/006-add-component-to-group/contracts/openapi.yaml, specs/006-add-component-to-group/data-model.md, and specs/006-add-component-to-group/quickstart.md.
+- [X] T026 Run the focused shared, frontend, backend, and persistence suites listed in specs/006-add-component-to-group/quickstart.md and fix regressions in the referenced source and test files.
+- [X] T027 Run the feature Playwright workflow and the full npm test and npm run build commands from package.json, review the feature diff for unrelated changes, and mark completed work in specs/006-add-component-to-group/tasks.md.
 
 ---
 

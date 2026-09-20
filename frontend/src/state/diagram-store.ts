@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { assertCanAddGroupMember, calculateGroupBounds, fitGroupBoundsAfterLayout, getC4ArtifactTypeLabel, isC4ArtifactType, translateGroupWithMembers, type C4ArtifactType, type DiagramDocument, type DiagramSummary, type Position, type Relationship, type RelationshipDirection } from '../../../shared/src/index';
+import { assertCanAddGroupMember, calculateGroupBounds, fitGroupBoundsAfterLayout, getC4ArtifactTypeLabel, isC4ArtifactType, translateGroupWithMembers, type C4ArtifactType, type DiagramDocument, type DiagramSummary, type GroupMemberAddReason, type Position, type Relationship, type RelationshipDirection } from '../../../shared/src/index';
 import { diagramClient } from '../api/diagram-client';
 import { BoundedHistory } from './history';
 
@@ -12,6 +12,7 @@ type State = {
   status: SaveStatus;
   error: string | null;
   groupError: string | null;
+  clearGroupError: () => void;
   savedDocuments: DiagramSummary[];
   savedDocumentsStatus: SavedDocumentsStatus;
   savedDocumentsError: string | null;
@@ -91,11 +92,24 @@ const groupCreationError = (document: DiagramDocument, name: string, memberCompo
 };
 export const componentTypeLabel = getC4ArtifactTypeLabel;
 
+export const describeGroupMemberAddError = (document: DiagramDocument, reason: GroupMemberAddReason): string => {
+  const group = document.groups.find(item => item.id === reason.groupId);
+  const component = document.components.find(item => item.id === reason.componentId);
+  const currentGroup = reason.currentGroupId ? document.groups.find(item => item.id === reason.currentGroupId) : undefined;
+  const componentName = component?.name ?? `Component ${reason.componentId}`;
+  const groupName = group?.name ?? `Group ${reason.groupId}`;
+  if (reason.code === 'already-member') return `${componentName} is already in ${groupName}. It cannot be added again.`;
+  if (reason.code === 'already-in-other-group') return `${componentName} already belongs to ${currentGroup?.name ?? `another group (${reason.currentGroupId})`} and cannot be added to ${groupName}. A component can belong to only one group.`;
+  if (reason.code === 'ineligible-component') return `${componentName} is not a Software System and cannot be added to a system group.`;
+  return reason.message;
+};
+
 export const useDiagramStore = create<State>((set, get) => ({
   document: null,
   status: 'idle',
   error: null,
   groupError: null,
+  clearGroupError: () => set({ groupError: null }),
   savedDocuments: [], savedDocumentsStatus: 'idle', savedDocumentsError: null,
   savedDocumentsDeleteStatus: 'idle', savedDocumentsDeleteError: null, savedDocumentsDeleteMessage: null,
   deletedSavedDocumentIds: [],
@@ -186,19 +200,7 @@ export const useDiagramStore = create<State>((set, get) => ({
     }
     const reason = assertCanAddGroupMember(document, groupId, componentId);
     if (reason) {
-      const group = document.groups.find(item => item.id === groupId);
-      const component = document.components.find(item => item.id === componentId);
-      const currentGroup = reason.currentGroupId ? document.groups.find(item => item.id === reason.currentGroupId) : undefined;
-      const componentName = component?.name ?? `Component ${componentId}`;
-      const groupName = group?.name ?? `Group ${groupId}`;
-      const message = reason.code === 'already-member'
-        ? `${componentName} is already in ${groupName}. It cannot be added again.`
-        : reason.code === 'already-in-other-group'
-          ? `${componentName} already belongs to ${currentGroup?.name ?? `another group (${reason.currentGroupId})`} and cannot be added to ${groupName}. A component can belong to only one group.`
-          : reason.code === 'ineligible-component'
-            ? `${componentName} is not a Software System and cannot be added to a system group.`
-            : reason.message;
-      set({ groupError: message });
+      set({ groupError: describeGroupMemberAddError(document, reason) });
       return false;
     }
     const timestamp = now();

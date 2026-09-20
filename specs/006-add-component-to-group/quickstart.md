@@ -6,7 +6,8 @@ component identity, position, relationships, ADR links, or unrelated groups.
 ## Prerequisites
 
 - Node.js and the repository dependencies are installed.
-- The feature branch is 006-add-component-to-group.
+- The feature branch is based on `006-add-component-to-group` (the implementation branch may use a
+  task-specific name such as `feature/spec-006-phase-4-5`).
 - For browser validation, the frontend and backend can be started with npm run dev.
 
 ## Focused automated checks
@@ -56,5 +57,7 @@ Run the feature end-to-end workflow after its Playwright test is added:
 - Invalid, duplicate, conflicting, missing, and ineligible additions do not mutate the document.
 - Stable component/group IDs, relationship endpoints, and ADR component links remain unchanged.
 - The existing complete-document API contract returns 200 for valid documents and 422 with no
-  replacement for invalid group membership.
+  replacement for invalid group membership, duplicate IDs, ineligible members, or invalid
+  boundaries.
+- A failed save leaves the added membership draft and undo/redo history available for retry.
 - The relevant Vitest and Playwright checks pass.
