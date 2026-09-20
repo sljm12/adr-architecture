@@ -76,6 +76,28 @@ describe('system group diagram store', () => {
     expect(useDiagramStore.getState().document!.groups).toHaveLength(1);
   });
 
+  it('adds an existing eligible component once, refits the boundary, and records one undoable revision', () => {
+    useDiagramStore.getState().open(structuredClone(document));
+    expect(useDiagramStore.getState().createGroup('Platform', [ids.first, ids.second])).toBe(true);
+    const before = useDiagramStore.getState().document!;
+    const group = before.groups[0];
+    const beforeComponents = structuredClone(before.components);
+    const beforeRelationships = structuredClone(before.relationships);
+    expect(useDiagramStore.getState().addGroupMember(group.id, ids.third)).toBe(true);
+
+    const added = useDiagramStore.getState().document!;
+    expect(added.groups[0]).toMatchObject({ id: group.id, memberComponentIds: [ids.first, ids.second, ids.third], createdAt: group.createdAt });
+    expect(added.groups[0]).toMatchObject(calculateGroupBounds(added.components.filter(component => [ids.first, ids.second, ids.third].includes(component.id)).map(component => component.position)));
+    expect(added.components).toEqual(beforeComponents);
+    expect(added.relationships).toEqual(beforeRelationships);
+    expect(useDiagramStore.getState().canUndo).toBe(true);
+
+    useDiagramStore.getState().undo();
+    expect(useDiagramStore.getState().document!.groups[0]).toEqual(group);
+    useDiagramStore.getState().redo();
+    expect(useDiagramStore.getState().document!.groups[0].memberComponentIds).toEqual([ids.first, ids.second, ids.third]);
+  });
+
   it('moves groups by a shared delta, refits members beyond the boundary, resizes, removes membership explicitly, and preserves references', () => {
     useDiagramStore.getState().open(structuredClone(document));
     expect(useDiagramStore.getState().createGroup('Platform', [ids.first, ids.second, ids.third])).toBe(true);

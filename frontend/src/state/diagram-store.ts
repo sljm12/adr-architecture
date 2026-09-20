@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { calculateGroupBounds, fitGroupBoundsAfterLayout, getC4ArtifactTypeLabel, isC4ArtifactType, translateGroupWithMembers, type C4ArtifactType, type DiagramDocument, type DiagramSummary, type Position, type Relationship, type RelationshipDirection } from '../../../shared/src/index';
+import { assertCanAddGroupMember, calculateGroupBounds, fitGroupBoundsAfterLayout, getC4ArtifactTypeLabel, isC4ArtifactType, translateGroupWithMembers, type C4ArtifactType, type DiagramDocument, type DiagramSummary, type Position, type Relationship, type RelationshipDirection } from '../../../shared/src/index';
 import { diagramClient } from '../api/diagram-client';
 import { BoundedHistory } from './history';
 
@@ -32,6 +32,7 @@ type State = {
   setComponentType: (componentId: string, type: C4ArtifactType) => boolean;
   updateComponentType: (componentId: string, type: C4ArtifactType) => boolean;
   createGroup: (name: string, memberComponentIds: string[]) => boolean;
+  addGroupMember: (groupId: string, componentId: string) => boolean;
   renameGroup: (groupId: string, name: string) => boolean;
   moveGroup: (groupId: string, position: Position) => boolean;
   moveComponent: (componentId: string, position: Position) => boolean;
@@ -175,6 +176,47 @@ export const useDiagramStore = create<State>((set, get) => ({
         updatedAt: timestamp,
       }],
     }));
+    return true;
+  },
+  addGroupMember: (groupId, componentId) => {
+    const document = get().document;
+    if (!document) {
+      set({ groupError: 'Create or open a diagram before adding a component to a group.' });
+      return false;
+    }
+    const reason = assertCanAddGroupMember(document, groupId, componentId);
+    if (reason) {
+      const group = document.groups.find(item => item.id === groupId);
+      const component = document.components.find(item => item.id === componentId);
+      const currentGroup = reason.currentGroupId ? document.groups.find(item => item.id === reason.currentGroupId) : undefined;
+      const componentName = component?.name ?? `Component ${componentId}`;
+      const groupName = group?.name ?? `Group ${groupId}`;
+      const message = reason.code === 'already-member'
+        ? `${componentName} is already in ${groupName}. It cannot be added again.`
+        : reason.code === 'already-in-other-group'
+          ? `${componentName} already belongs to ${currentGroup?.name ?? `another group (${reason.currentGroupId})`} and cannot be added to ${groupName}. A component can belong to only one group.`
+          : reason.code === 'ineligible-component'
+            ? `${componentName} is not a Software System and cannot be added to a system group.`
+            : reason.message;
+      set({ groupError: message });
+      return false;
+    }
+    const timestamp = now();
+    get().update(current => {
+      const group = current.groups.find(item => item.id === groupId);
+      if (!group) return current;
+      const memberComponentIds = [...group.memberComponentIds, componentId];
+      const members = memberComponentIds.flatMap(memberId => {
+        const member = current.components.find(component => component.id === memberId);
+        return member ? [{ position: member.position }] : [];
+      });
+      return {
+        ...current,
+        groups: current.groups.map(item => item.id === groupId
+          ? { ...item, memberComponentIds, ...fitGroupBoundsAfterLayout(members), updatedAt: timestamp }
+          : item),
+      };
+    });
     return true;
   },
   renameGroup: (groupId, name) => {

@@ -37,6 +37,28 @@ describe('C4 system group API contract', () => {
     await app.close();
   });
 
+  it('accepts a complete-document PUT that adds an existing component to an existing group', async () => {
+    const app = buildApp(); await app.ready();
+    const created = await app.inject({ method: 'POST', url: '/diagrams', payload: { name: 'Add member' } });
+    const document = created.json();
+    const first = '00000000-0000-0000-0000-000000000221';
+    const second = '00000000-0000-0000-0000-000000000222';
+    const outside = '00000000-0000-0000-0000-000000000223';
+    const group = '00000000-0000-0000-0000-000000000224';
+    const initial = {
+      ...document,
+      components: [component(first, document.id, 'Checkout', 'software-system', 100, 100, document.createdAt), component(second, document.id, 'Ledger', 'software-system', 340, 180, document.createdAt), component(outside, document.id, 'Notifications', 'software-system', 620, 260, document.createdAt)],
+      relationships: [],
+      groups: [{ id: group, diagramId: document.id, name: 'Platform', memberComponentIds: [first, second], position: { x: 68, y: 44 }, size: { width: 484, height: 240 }, createdAt: document.createdAt, updatedAt: document.createdAt }],
+    };
+    expect((await app.inject({ method: 'PUT', url: `/diagrams/${document.id}`, payload: initial })).statusCode).toBe(200);
+    const added = await app.inject({ method: 'PUT', url: `/diagrams/${document.id}`, payload: { ...initial, groups: [{ ...initial.groups[0], memberComponentIds: [first, second, outside], position: { x: 68, y: 44 }, size: { width: 764, height: 320 } }] } });
+    expect(added.statusCode).toBe(200);
+    expect(added.json().groups[0]).toMatchObject({ id: group, memberComponentIds: [first, second, outside] });
+    expect(added.json().components).toEqual(expect.arrayContaining([expect.objectContaining({ id: outside, name: 'Notifications' })]));
+    await app.close();
+  });
+
   it('returns field-addressable errors and blocks deletion of grouped components', async () => {
     const app = buildApp(); await app.ready();
     const created = await app.inject({ method: 'POST', url: '/diagrams', payload: { name: 'Validation' } });

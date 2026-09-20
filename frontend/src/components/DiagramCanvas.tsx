@@ -15,6 +15,7 @@ type DiagramCanvasProps = {
   onSelection: (selection: CanvasSelection) => void;
   selectedComponentIds?: string[];
   selectedComponentId?: string | null;
+  selectedCandidateComponentId?: string | null;
   selectedGroupId?: string | null;
   selectedRelationshipId?: string | null;
   onMultiSelectionChange?: (componentIds: string[]) => void;
@@ -24,7 +25,7 @@ type DiagramCanvasProps = {
   onOpenComponentAdrs?: (componentId: string) => void;
 };
 
-export function DiagramCanvas({ onSelection, selectedComponentIds = [], selectedComponentId = null, selectedGroupId = null, selectedRelationshipId = null, onMultiSelectionChange, groupingSelectionActive = false, canvasEpoch = 0, adrCounts = {}, onOpenComponentAdrs }: DiagramCanvasProps) {
+export function DiagramCanvas({ onSelection, selectedComponentIds = [], selectedComponentId = null, selectedCandidateComponentId = null, selectedGroupId = null, selectedRelationshipId = null, onMultiSelectionChange, groupingSelectionActive = false, canvasEpoch = 0, adrCounts = {}, onOpenComponentAdrs }: DiagramCanvasProps) {
   const document = useDiagramStore(state => state.document);
   const update = useDiagramStore(state => state.update);
   const [memberSizes, setMemberSizes] = useState<Record<string, { width: number; height: number }>>({});
@@ -32,9 +33,9 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
   const visual = useMemo(() => document ? toReactFlow(document, sizeMap, adrCounts, onOpenComponentAdrs) : { nodes: [], edges: [] }, [document, sizeMap, adrCounts, onOpenComponentAdrs]);
   const [interactiveNodes, setInteractiveNodes] = useState<Node[]>([]);
   useEffect(() => setInteractiveNodes(visual.nodes), [visual]);
-  const selectedIds = useMemo(() => new Set(selectedComponentIds.length ? selectedComponentIds : selectedComponentId ? [selectedComponentId] : []), [selectedComponentId, selectedComponentIds]);
+  const selectedIds = useMemo(() => new Set(selectedComponentIds.length ? selectedComponentIds : selectedComponentId ? [selectedComponentId] : selectedCandidateComponentId ? [selectedCandidateComponentId] : []), [selectedCandidateComponentId, selectedComponentId, selectedComponentIds]);
   const renderedNodes = interactiveNodes.length || visual.nodes.length === 0 ? interactiveNodes : visual.nodes;
-  const nodes = renderedNodes.map(node => ({ ...node, data: { ...node.data, isSelected: node.type === 'systemGroup' ? node.id === selectedGroupId : selectedIds.has(node.id) } }));
+  const nodes = renderedNodes.map(node => ({ ...node, data: { ...node.data, isSelected: node.type === 'systemGroup' ? node.id === selectedGroupId : selectedIds.has(node.id), isCandidate: node.type === 'component' && node.id === selectedCandidateComponentId } }));
   const edges = visual.edges.map(edge => ({ ...edge, data: { ...edge.data, isSelected: edge.id === selectedRelationshipId } }));
   const selectionSignature = useRef('');
   const suppressNextSelectionChange = useRef(false);
@@ -97,12 +98,17 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
       return;
     }
     const selectedGroup = selectedNodes.find(node => node.type === 'systemGroup');
+    const selectedComponents = selectedNodes.filter(node => node.type === 'component');
     if (selectedGroup) {
       onMultiSelectionChange?.([]);
+      if (selectedComponents.length === 1) {
+        emitSelection({ kind: 'group-member-candidate', groupId: selectedGroup.id, componentId: selectedComponents[0].id }, `group-member-candidate:${selectedGroup.id}:${selectedComponents[0].id}`);
+        return;
+      }
       emitSelection({ kind: 'group', id: selectedGroup.id }, `group:${selectedGroup.id}`);
       return;
     }
-    const componentIds = selectedNodes.filter(node => node.type === 'component').map(node => node.id);
+    const componentIds = selectedComponents.map(node => node.id);
     if (selectedEdges.length > 0 && componentIds.length === 0) {
       onMultiSelectionChange?.([]);
       emitSelection({ kind: 'relationship', id: selectedEdges[0].id }, `relationship:${selectedEdges[0].id}`);
@@ -121,6 +127,13 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
   const onNodeClick = useCallback<NodeMouseHandler>((event, node) => {
     if (groupingSelectionActive) return;
     if (event.shiftKey && node.type !== 'component') return;
+    if (event.shiftKey && selectedGroupId && node.type === 'component') {
+      suppressSelectionChangeOnce();
+      if (node.id === selectedCandidateComponentId) emitSelection({ kind: 'group', id: selectedGroupId }, `group:${selectedGroupId}`);
+      else emitSelection({ kind: 'group-member-candidate', groupId: selectedGroupId, componentId: node.id }, `group-member-candidate:${selectedGroupId}:${node.id}`);
+      onMultiSelectionChange?.([]);
+      return;
+    }
     if (event.shiftKey) {
       suppressSelectionChangeOnce();
       const nextSelected = new Set(selectedIds);
@@ -137,7 +150,7 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
     onMultiSelectionChange?.([]);
     if (node.type === 'systemGroup') emitSelection({ kind: 'group', id: node.id }, `group:${node.id}`);
     else emitSelection({ kind: 'component', id: node.id }, `component:${node.id}`);
-  }, [emitSelection, groupingSelectionActive, onMultiSelectionChange, selectedIds]);
+  }, [emitSelection, groupingSelectionActive, onMultiSelectionChange, selectedCandidateComponentId, selectedGroupId, selectedIds]);
   const onEdgeClick = useCallback<EdgeMouseHandler>((_, edge) => {
     if (groupingSelectionActive) return;
     onMultiSelectionChange?.([]);

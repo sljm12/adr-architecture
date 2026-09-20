@@ -19,8 +19,8 @@ workflow; US2 adds duplicate and conflicting-membership protection on that workf
 
 **Purpose**: Prepare reusable valid and invalid document states for the implementation and tests.
 
-- [ ] T001 [P] Add reusable grouped-document fixtures covering an existing group, an ungrouped eligible component, a same-group candidate, a different-group candidate, and an ineligible component in shared/tests/c4-system-groups.test.ts.
-- [ ] T002 [P] Add a mocked complete-document API state with two groups and an outside component for the add-member browser workflow in e2e/tests/add-component-to-group.spec.ts.
+- [X] T001 [P] Add reusable grouped-document fixtures covering an existing group, an ungrouped eligible component, a same-group candidate, a different-group candidate, and an ineligible component in shared/tests/c4-system-groups.test.ts.
+- [X] T002 [P] Add a mocked complete-document API state with two groups and an outside component for the add-member browser workflow in e2e/tests/add-component-to-group.spec.ts.
 
 ---
 
@@ -30,8 +30,8 @@ workflow; US2 adds duplicate and conflicting-membership protection on that workf
 
 **Critical**: Complete this phase before user-story implementation.
 
-- [ ] T003 Add failing shared-domain tests for valid candidates, same-group duplicates, candidates already in another group, missing items, cross-diagram items, and non-Software-System components in shared/tests/c4-system-groups.test.ts.
-- [ ] T004 Implement assertCanAddGroupMember in shared/src/domain/invariants.ts, confirm it is exposed through shared/src/index.ts, and return stable, actionable validation reasons without changing the document.
+- [X] T003 Add failing shared-domain tests for valid candidates, same-group duplicates, candidates already in another group, missing items, cross-diagram items, and non-Software-System components in shared/tests/c4-system-groups.test.ts.
+- [X] T004 Implement assertCanAddGroupMember in shared/src/domain/invariants.ts, confirm it is exposed through shared/src/index.ts, and return stable, actionable validation reasons without changing the document.
 
 **Checkpoint**: Shared validation distinguishes every supported add-member outcome without mutating a document.
 
@@ -45,21 +45,21 @@ workflow; US2 adds duplicate and conflicting-membership protection on that workf
 
 ### Tests for User Story 1
 
-- [ ] T005 [US1] Add a frontend store test for a successful addGroupMember action that appends one stable component ID, fits the boundary, preserves component positions and relationships, and creates one undoable revision in frontend/tests/system-group-store.test.ts.
-- [ ] T006 [P] [US1] Add React Flow adapter coverage for the post-add parent relationship, relative visual position, absolute domain round-trip, and stable relationship endpoints in frontend/tests/react-flow-groups.test.ts.
-- [ ] T007 [P] [US1] Add UI contract coverage for group-plus-component compound selection, the Add component to group control, accessible labels, and success feedback in frontend/tests/system-group-ui.test.tsx.
-- [ ] T008 [P] [US1] Add an API contract test for a complete-document PUT that adds an existing component to an existing group and returns the normalized membership in backend/tests/contract/system-groups.test.ts.
-- [ ] T009 [P] [US1] Add persistence coverage for round-tripping the added membership while preserving group/component IDs and timestamps in backend/tests/persistence/system-groups.test.ts.
-- [ ] T010 [P] [US1] Add a Playwright happy-path test for selecting a group, Shift-selecting an outside component, confirming the add, checking boundary enclosure, saving, reopening, and using the keyboard-accessible action in e2e/tests/add-component-to-group.spec.ts.
+- [X] T005 [US1] Add a frontend store test for a successful addGroupMember action that appends one stable component ID, fits the boundary, preserves component positions and relationships, and creates one undoable revision in frontend/tests/system-group-store.test.ts.
+- [X] T006 [P] [US1] Add React Flow adapter coverage for the post-add parent relationship, relative visual position, absolute domain round-trip, and stable relationship endpoints in frontend/tests/react-flow-groups.test.ts.
+- [X] T007 [P] [US1] Add UI contract coverage for group-plus-component compound selection, the Add component to group control, accessible labels, and success feedback in frontend/tests/system-group-ui.test.tsx.
+- [X] T008 [P] [US1] Add an API contract test for a complete-document PUT that adds an existing component to an existing group and returns the normalized membership in backend/tests/contract/system-groups.test.ts.
+- [X] T009 [P] [US1] Add persistence coverage for round-tripping the added membership while preserving group/component IDs and timestamps in backend/tests/persistence/system-groups.test.ts.
+- [X] T010 [P] [US1] Add a Playwright happy-path test for selecting a group, Shift-selecting an outside component, confirming the add, checking boundary enclosure, saving, reopening, and using the keyboard-accessible action in e2e/tests/add-component-to-group.spec.ts.
 
 ### Implementation for User Story 1
 
-- [ ] T011 [US1] Implement addGroupMember in frontend/src/state/diagram-store.ts using assertCanAddGroupMember, the existing bounded history update path, and fitGroupBoundsAfterLayout while preserving the candidate component and all existing references.
-- [ ] T012 [US1] Extend CanvasSelection and the workspace-derived selection state for a group-member candidate in frontend/src/components/WorkspaceInspector.tsx and frontend/src/components/DiagramWorkspace.tsx without changing the existing new-group selection list.
-- [ ] T013 [US1] Update Shift-click and selection-change handling in frontend/src/components/DiagramCanvas.tsx so a selected group plus a Shift-selected component produces the compound candidate state while group creation mode continues to use component-only selection.
-- [ ] T014 [US1] Add the group-details candidate summary, Add component to group confirmation action, success state, and post-success group selection behavior in frontend/src/components/WorkspaceInspector.tsx.
-- [ ] T015 [P] [US1] Add accessible selected/candidate cues and stable aria labels for the group and component nodes in frontend/src/components/ComponentNode.tsx and frontend/src/components/SystemGroupNode.tsx.
-- [ ] T016 [P] [US1] Style compound selection, candidate feedback, success feedback, focus states, and 44px inspector actions according to DESIGN.md in frontend/src/styles.css.
+- [X] T011 [US1] Implement addGroupMember in frontend/src/state/diagram-store.ts using assertCanAddGroupMember, the existing bounded history update path, and fitGroupBoundsAfterLayout while preserving the candidate component and all existing references.
+- [X] T012 [US1] Extend CanvasSelection and the workspace-derived selection state for a group-member candidate in frontend/src/components/WorkspaceInspector.tsx and frontend/src/components/DiagramWorkspace.tsx without changing the existing new-group selection list.
+- [X] T013 [US1] Update Shift-click and selection-change handling in frontend/src/components/DiagramCanvas.tsx so a selected group plus a Shift-selected component produces the compound candidate state while group creation mode continues to use component-only selection.
+- [X] T014 [US1] Add the group-details candidate summary, Add component to group confirmation action, success state, and post-success group selection behavior in frontend/src/components/WorkspaceInspector.tsx.
+- [X] T015 [P] [US1] Add accessible selected/candidate cues and stable aria labels for the group and component nodes in frontend/src/components/ComponentNode.tsx and frontend/src/components/SystemGroupNode.tsx.
+- [X] T016 [P] [US1] Style compound selection, candidate feedback, success feedback, focus states, and 44px inspector actions according to DESIGN.md in frontend/src/styles.css.
 
 **Checkpoint**: US1 is independently functional: a valid existing component can be added, the boundary refits, the document can be undone/redone and saved/reopened, and existing references remain intact.
 

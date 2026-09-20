@@ -38,6 +38,19 @@ describe('system group persistence compatibility', () => {
     expect(repository.get(diagramId)?.groups).toEqual(renamed.groups);
   });
 
+  it('round-trips an added membership while preserving component identity and position', () => {
+    const repository = new DiagramRepository();
+    const service = new DiagramService(repository);
+    repository.create({ ...baseDocument(), groups: [] });
+    const original = service.save(diagramId, baseDocument());
+    const outsideId = '00000000-0000-4000-8000-000000000505';
+    const outside = { id: outsideId, diagramId, name: 'Notifications', description: null, type: 'software-system' as const, position: { x: 620, y: 260 }, createdAt: timestamp, updatedAt: timestamp };
+    const added = service.save(diagramId, { ...original, components: [...original.components, outside], groups: [{ ...original.groups[0], memberComponentIds: [...original.groups[0].memberComponentIds, outsideId], ...calculateGroupBounds([...original.components.map(component => component.position), outside.position]) }] });
+    expect(added.groups[0]).toMatchObject({ id: groupId, memberComponentIds: [secondId, firstId, outsideId], createdAt: original.groups[0].createdAt });
+    expect(added.components.find(component => component.id === outsideId)).toMatchObject({ id: outsideId, position: outside.position });
+    expect(repository.get(diagramId)?.groups[0].memberComponentIds).toContain(outsideId);
+  });
+
   it('defaults omitted groups to an empty list for legacy documents', () => {
     const repository = new DiagramRepository();
     const service = new DiagramService(repository);

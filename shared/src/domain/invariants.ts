@@ -1,6 +1,41 @@
 import type { DiagramDocument } from './types';
 import type { ArchitectureDecisionRecord, Component, Relationship } from './types';
 import { fitGroupBoundsAfterLayout, isMemberWithinGroup } from './group-layout';
+
+export type GroupMemberAddReasonCode =
+  | 'missing-group'
+  | 'missing-component'
+  | 'group-cross-diagram'
+  | 'component-cross-diagram'
+  | 'ineligible-component'
+  | 'already-member'
+  | 'already-in-other-group';
+
+export type GroupMemberAddReason = {
+  code: GroupMemberAddReasonCode;
+  groupId: string;
+  componentId: string;
+  currentGroupId?: string;
+  message: string;
+};
+
+/** Returns a stable preflight reason, or null when the component can be added. */
+export function assertCanAddGroupMember(document: DiagramDocument, groupId: string, componentId: string): GroupMemberAddReason | null {
+  const group = document.groups?.find(item => item.id === groupId);
+  if (!group) return { code: 'missing-group', groupId, componentId, message: `Group ${groupId} was not found in this diagram.` };
+  if (group.diagramId !== document.id) return { code: 'group-cross-diagram', groupId, componentId, message: `Group ${groupId} belongs to a different diagram.` };
+
+  const component = document.components.find(item => item.id === componentId);
+  if (!component) return { code: 'missing-component', groupId, componentId, message: `Component ${componentId} was not found in this diagram.` };
+  if (component.diagramId !== document.id) return { code: 'component-cross-diagram', groupId, componentId, message: `Component ${componentId} belongs to a different diagram.` };
+  if (component.type !== 'software-system') return { code: 'ineligible-component', groupId, componentId, message: `Component ${componentId} is not a Software System and cannot join a system group.` };
+  if (group.memberComponentIds.includes(componentId)) return { code: 'already-member', groupId, componentId, message: `Component ${componentId} is already a member of group ${groupId}.` };
+
+  const currentGroup = (document.groups ?? []).find(candidate => candidate.id !== groupId && candidate.memberComponentIds.includes(componentId));
+  if (currentGroup) return { code: 'already-in-other-group', groupId, componentId, currentGroupId: currentGroup.id, message: `Component ${componentId} already belongs to group ${currentGroup.id}.` };
+  return null;
+}
+
 export function assertComponentName(name: string): void { if (!name.trim()) throw new Error('Component name must not be blank'); }
 export function assertRelationshipDirection(direction: string): void { if (direction !== 'directed' && direction !== 'undirected') throw new Error(`Unsupported relationship direction: ${direction}`); }
 export function assertDiagramInvariants(document: DiagramDocument): void {
