@@ -1,6 +1,6 @@
 import type { DiagramDocument } from './types';
 import type { ArchitectureDecisionRecord, Component, Relationship } from './types';
-import { fitGroupBoundsAfterLayout, isMemberWithinGroup } from './group-layout';
+import { fitGroupBoundsAfterLayout, isLessThanOrApproximatelyEqual, isMemberWithinGroup } from './group-layout';
 
 export type GroupMemberAddReasonCode =
   | 'missing-group'
@@ -41,7 +41,7 @@ export function assertRelationshipDirection(direction: string): void { if (direc
 export function assertDiagramInvariants(document: DiagramDocument): void {
   if (!document.name.trim()) throw new Error('Diagram name must not be blank');
   const ids = new Set<string>();
-  for (const component of document.components) { if (!component.id || ids.has(component.id)) throw new Error(`Duplicate component ID: ${component.id}`); ids.add(component.id); if (component.diagramId !== document.id) throw new Error(`Component ${component.id} must belong to diagram ${document.id}`); if (!component.name.trim() || !Number.isFinite(component.position.x) || !Number.isFinite(component.position.y)) throw new Error(`Invalid component: ${component.id}`); assertComponentName(component.name); }
+  for (const component of document.components) { if (!component.id || ids.has(component.id)) throw new Error(`Duplicate component ID: ${component.id}`); ids.add(component.id); if (component.diagramId !== document.id) throw new Error(`Component ${component.id} must belong to diagram ${document.id}`); if (!component.name.trim() || !Number.isFinite(component.position.x) || !Number.isFinite(component.position.y) || !Number.isFinite(component.size.width) || !Number.isFinite(component.size.height) || component.size.width <= 0 || component.size.height <= 0) throw new Error(`Invalid component layout: ${component.id}`); assertComponentName(component.name); }
   const componentIds = new Set(document.components.map(c => c.id));
   for (const relationship of document.relationships) { if (relationship.diagramId !== document.id) throw new Error(`Relationship ${relationship.id} must belong to diagram ${document.id}`); if (!componentIds.has(relationship.sourceComponentId) || !componentIds.has(relationship.targetComponentId)) throw new Error(`Relationship ${relationship.id} references a missing component`); if (relationship.sourceComponentId === relationship.targetComponentId) throw new Error(`Relationship ${relationship.id} cannot connect a component to itself`); assertRelationshipDirection(relationship.direction); }
 
@@ -62,7 +62,7 @@ export function assertDiagramInvariants(document: DiagramDocument): void {
     names.set(normalizedName, group.id);
     if (!Number.isFinite(group.position.x) || !Number.isFinite(group.position.y) || !Number.isFinite(group.size.width) || !Number.isFinite(group.size.height) || group.size.width <= 0 || group.size.height <= 0) throw new Error(`Group ${group.id} must have a positive finite layout`);
     const members = new Set<string>();
-    const memberGeometry: Array<{ position: Component['position'] }> = [];
+    const memberGeometry: Array<{ position: Component['position']; size: Component['size'] }> = [];
     if (group.memberComponentIds.length < 2) throw new Error(`Group ${group.id} must contain at least two Software System members`);
     for (const memberId of group.memberComponentIds) {
       assertUuid(memberId, 'Group member component ID');
@@ -76,15 +76,18 @@ export function assertDiagramInvariants(document: DiagramDocument): void {
       const priorGroup = memberGroups.get(memberId);
       if (priorGroup) throw new Error(`Component ${memberId} cannot belong to more than one group (${priorGroup} and ${group.id})`);
       memberGroups.set(memberId, group.id);
-      memberGeometry.push({ position: member.position });
-      if (!isMemberWithinGroup(group, member.position)) throw new Error(`Group ${group.id} boundary does not enclose member ${memberId}`);
+      memberGeometry.push({ position: member.position, size: member.size });
+      if (!isMemberWithinGroup(group, member.position, member.size)) throw new Error(`Group ${group.id} boundary does not enclose member ${memberId}`);
     }
     const fitted = fitGroupBoundsAfterLayout(memberGeometry);
     const groupRight = group.position.x + group.size.width;
     const groupBottom = group.position.y + group.size.height;
     const fittedRight = fitted.position.x + fitted.size.width;
     const fittedBottom = fitted.position.y + fitted.size.height;
-    if (group.position.x > fitted.position.x || group.position.y > fitted.position.y || groupRight < fittedRight || groupBottom < fittedBottom) {
+    if (!isLessThanOrApproximatelyEqual(group.position.x, fitted.position.x)
+      || !isLessThanOrApproximatelyEqual(group.position.y, fitted.position.y)
+      || !isLessThanOrApproximatelyEqual(fittedRight, groupRight)
+      || !isLessThanOrApproximatelyEqual(fittedBottom, groupBottom)) {
       throw new Error(`Group ${group.id} boundary does not enclose every rendered member box with its label and padding`);
     }
   }

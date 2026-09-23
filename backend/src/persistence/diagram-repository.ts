@@ -45,8 +45,10 @@ export class DiagramRepository implements DiagramRepositoryLike {
   get(id: string) { const document = this.documents.get(id); return document && clone(document); }
   findComponent(id: string) { for (const document of this.documents.values()) { const component = document.components.find(item => item.id === id); if (component) return { id: component.id, diagramId: component.diagramId, name: component.name }; } return undefined; }
   findRelationship(id: string) { for (const document of this.documents.values()) { const relationship = document.relationships.find(item => item.id === id); if (relationship) return { id: relationship.id, diagramId: relationship.diagramId }; } return undefined; }
-  create(document: DiagramDocument) { const normalized = { ...document, groups: normalizedGroups(document) }; this.documents.set(document.id, clone(normalized)); return clone(normalized); }
+  create(input: DiagramDocument) { const document = diagramDocumentSchema.parse(input) as DiagramDocument; assertDiagramInvariants(document); const normalized = { ...document, groups: normalizedGroups(document) }; this.documents.set(document.id, clone(normalized)); return clone(normalized); }
   replace(document: DiagramDocument) {
+    document = diagramDocumentSchema.parse(document) as DiagramDocument;
+    assertDiagramInvariants(document);
     const previous = this.documents.get(document.id);
     if (!previous || previous.status !== 'active') return undefined;
     const updatedAt = new Date().toISOString();
@@ -116,8 +118,8 @@ function validationError(path: (string | number)[], message: string): never {
   throw new z.ZodError([{ code: 'custom', path, message }]);
 }
 
-function validatePersistableDocument(document: DiagramDocument): void {
-  diagramDocumentSchema.parse(document);
+function validatePersistableDocument(input: DiagramDocument): DiagramDocument {
+  const document = diagramDocumentSchema.parse(input) as DiagramDocument;
   assertDiagramInvariants(document);
   for (const component of document.components) {
     if (component.diagramId !== document.id) validationError(['components', component.id, 'diagramId'], 'Component must belong to the diagram');
@@ -125,6 +127,7 @@ function validatePersistableDocument(document: DiagramDocument): void {
   for (const relationship of document.relationships) {
     if (relationship.diagramId !== document.id) validationError(['relationships', relationship.id, 'diagramId'], 'Relationship must belong to the diagram');
   }
+  return document;
 }
 
 function dateValue(value: string, path: string): Date {
@@ -161,6 +164,7 @@ function mapDocument(
       id: component.id, diagramId: component.diagramId, name: component.name,
       description: component.description, type: component.type,
       position: { x: component.x, y: component.y },
+      size: { width: component.width, height: component.height },
       createdAt: iso(component.createdAt), updatedAt: iso(component.updatedAt),
     })),
     relationships: relationshipRows.map(relationship => ({
@@ -199,7 +203,7 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
   async findRelationship(id: string) { const [relationship] = await this.db.select({ id: schema.relationships.id, diagramId: schema.relationships.diagramId }).from(schema.relationships).where(eq(schema.relationships.id, id)).limit(1); return relationship; }
 
   async create(document: DiagramDocument): Promise<DiagramDocument> {
-    validatePersistableDocument(document);
+    document = validatePersistableDocument(document);
     const now = new Date();
     await this.db.transaction(async tx => {
       await tx.insert(schema.diagrams).values({
@@ -212,7 +216,7 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
   }
 
   async replace(document: DiagramDocument): Promise<DiagramDocument | undefined> {
-    validatePersistableDocument(document);
+    document = validatePersistableDocument(document);
     const existing = await this.get(document.id);
     if (!existing || existing.status !== 'active') return undefined;
     const now = new Date();
@@ -290,7 +294,7 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
         return {
           id: component.id, diagramId: document.id, name: component.name.trim(),
           description: component.description, type: component.type,
-          x: component.position.x, y: component.position.y,
+          x: component.position.x, y: component.position.y, width: component.size.width, height: component.size.height,
           createdAt: previous ? dateValue(previous.createdAt, `components.${component.id}.createdAt`) : dateValue(component.createdAt, `components.${component.id}.createdAt`),
           updatedAt: now,
         };
@@ -348,7 +352,7 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
       const previous = existingComponents.get(component.id);
       const values = {
         diagramId: document.id, name: component.name.trim(), description: component.description, type: component.type,
-        x: component.position.x, y: component.position.y, updatedAt: now,
+        x: component.position.x, y: component.position.y, width: component.size.width, height: component.size.height, updatedAt: now,
       };
       if (previous) await tx.update(schema.components).set(values).where(eq(schema.components.id, component.id));
       else await tx.insert(schema.components).values({ id: component.id, ...values, createdAt: dateValue(component.createdAt, `components.${component.id}.createdAt`) });

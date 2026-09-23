@@ -126,3 +126,7 @@ html,body,#root{overflow:hidden}
 .component-node:focus-visible,.system-group-node:focus-visible{outline:3px solid #0071e3;outline-offset:4px}.component-node[aria-selected="true"],.system-group-node[aria-selected="true"]{outline:3px solid #fff;outline-offset:3px}.system-group-node[aria-selected="true"]:focus-visible,.component-node[aria-selected="true"]:focus-visible{outline-color:#0071e3}.group-boundary-label strong{max-width:calc(100% - 92px)}
 @media(max-width:640px){.group-boundary-label{min-height:44px;padding-inline:12px}.selection-feedback{flex-basis:100%;font-size:13px}}
 @media(prefers-reduced-motion:reduce){.primary-pill,.secondary-action,.icon-button,.text-action,.danger-action{transition:none}}
+.export-control{gap:8px;flex-wrap:wrap}
+@media(max-width:640px){.command-bar-actions .export-control .secondary-action:first-child{min-width:0;padding:10px 12px;font-size:13px}.command-bar-actions .export-control .secondary-action:first-child:after{content:none}}
+.save-status.save-failed{max-width:min(32rem,100%);padding:6px 10px;border:1px solid #d9a5a5;border-radius:8px;background:#fff1f1;color:#7d1c1c;overflow-wrap:anywhere}
+.save-failed .status-dot{flex:none;background:#9b1c1c}

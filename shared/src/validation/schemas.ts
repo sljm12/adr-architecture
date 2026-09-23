@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { AdrStatus } from '../domain/types';
+import { DEFAULT_COMPONENT_SIZE } from '../domain/types';
 export const uuidSchema = z.string().uuid();
 export const positionSchema = z.object({x:z.number().finite(), y:z.number().finite()});
 export const componentNameSchema = z.string().trim().min(1, 'Component name is required');
@@ -7,7 +8,8 @@ export const relationshipDirectionSchema = z.enum(['directed','undirected']);
 export const c4ArtifactTypeSchema = z.enum(['person', 'software-system']);
 export const componentTypeSchema = c4ArtifactTypeSchema.nullable();
 /** Complete documents also accept older free-form classifications for compatibility. */
-export const componentSchema = z.object({id:uuidSchema, diagramId:uuidSchema, name:componentNameSchema, description:z.string().nullable(), type:z.string().trim().nullable(), position:positionSchema, createdAt:z.string(), updatedAt:z.string()});
+export const componentSizeSchema = z.object({ width: z.number().finite().positive(), height: z.number().finite().positive() }).default(DEFAULT_COMPONENT_SIZE);
+export const componentSchema = z.object({id:uuidSchema, diagramId:uuidSchema, name:componentNameSchema, description:z.string().nullable(), type:z.string().trim().nullable(), position:positionSchema, size:componentSizeSchema, createdAt:z.string(), updatedAt:z.string()});
 export const componentWriteSchema = componentSchema.extend({ type: c4ArtifactTypeSchema });
 export const relationshipSchema = z.object({id:uuidSchema, diagramId:uuidSchema, sourceComponentId:uuidSchema, targetComponentId:uuidSchema, direction:relationshipDirectionSchema, label:z.string().trim().nullable(), createdAt:z.string(), updatedAt:z.string()});
 export const groupSizeSchema = z.object({ width: z.number().finite().positive(), height: z.number().finite().positive() });
@@ -76,6 +78,7 @@ export const architectureDecisionRecordSchema = adrWriteBaseSchema.extend({
 }).superRefine((value, ctx) => {
   if (value.replacementAdrId === value.id) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['replacementAdrId'], message: 'An ADR cannot replace itself' });
 });
+export const architectureDecisionRecordListSchema = z.array(architectureDecisionRecordSchema);
 
 export const adrSummarySchema = z.object({
   id: uuidSchema,

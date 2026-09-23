@@ -22,7 +22,7 @@ const ids = {
   relationship: '00000000-0000-0000-0000-000000000107',
 };
 const timestamp = '2026-01-01T00:00:00.000Z';
-const component = (id: string, name: string, type: string | null, x: number, y: number, diagramId = ids.diagram) => ({ id, diagramId, name, description: null, type, position: { x, y }, createdAt: timestamp, updatedAt: timestamp });
+const component = (id: string, name: string, type: string | null, x: number, y: number, diagramId = ids.diagram) => ({ id, diagramId, name, description: null, type, position: { x, y }, size: { width: 180, height: 72 }, createdAt: timestamp, updatedAt: timestamp });
 const base: DiagramDocument = {
   id: ids.diagram, name: 'System context', status: 'active', createdAt: timestamp, updatedAt: timestamp, trashedAt: null,
   components: [component(ids.first, 'Billing', 'software-system', 100, 100), component(ids.second, 'Ledger', 'software-system', 340, 180), component(ids.person, 'Operator', 'person', 10, 20)],
@@ -68,6 +68,24 @@ describe('C4 artifact and system group boundaries', () => {
     expect(constrainMemberPosition(group, { x: -1000, y: 1000 })).toEqual({ x: 100, y: 180 });
     expect(base.components[0].position).toEqual({ x: 100, y: 100 });
     expect(base.relationships[0].sourceComponentId).toBe(ids.person);
+  });
+
+  it('accepts fractional member positions at a fitted edge but rejects real overflow', () => {
+    const components = [
+      component(ids.first, 'KV', 'software-system', -470.64516129032256, 0.8222643896268025),
+      component(ids.second, 'TY', 'software-system', -461.6300422354164, 123.6573422292955),
+    ];
+    const group: SystemGroup = {
+      ...grouped(),
+      ...calculateGroupBounds(components),
+    };
+    const document = { ...base, components, relationships: [], groups: [group] };
+
+    expect(() => assertDiagramInvariants(document)).not.toThrow();
+    expect(() => assertDiagramInvariants({
+      ...document,
+      groups: [{ ...group, size: { ...group.size, height: group.size.height - 0.01 } }],
+    })).toThrow(/enclose/i);
   });
 
   it('preflights valid, duplicate, conflicting, missing, cross-diagram, and ineligible candidates without mutation', () => {
@@ -128,5 +146,12 @@ describe('C4 artifact and system group boundaries', () => {
       { position: { x: 300, y: 150 }, size: { width: 180, height: 72 } },
     ]);
     expect(shrunk).toEqual({ position: { x: 78, y: 54 }, size: { width: 434, height: 200 } });
+
+    const resizedComponents = base.components.map(item => item.id === ids.first
+      ? { ...item, size: { width: 600, height: 96 } }
+      : item);
+    const resizedGroup = { ...original, ...fitGroupBoundsAfterLayout(resizedComponents.filter(item => original.memberComponentIds.includes(item.id))) };
+    expect(() => assertDiagramInvariants({ ...base, components: resizedComponents, groups: [resizedGroup] })).not.toThrow();
+    expect(() => assertDiagramInvariants({ ...base, components: resizedComponents, groups: [original] })).toThrow(/enclose/i);
   });
 });

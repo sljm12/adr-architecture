@@ -74,7 +74,7 @@ export function toReactFlow(document:DiagramDocument,sizes?:ComponentSizeMap,adr
   }));
   const componentNodes:Node[]=document.components.map(c=>{
     const groupId=membership.get(c.id); const group=groupId?groups.find(item=>item.id===groupId):undefined;
-    const size=sizes?.get(c.id)??DEFAULT_COMPONENT_SIZE;
+    const size=sizes?.get(c.id)??c.size??DEFAULT_COMPONENT_SIZE;
     const node:Node={id:c.id,position:group?getRelativeMemberPosition(c.position,group.position):c.position,data:{label:c.name},type:'component',style:{width:size.width,height:size.height}};
     node.data={...node.data,id:c.id,adrCount:adrCounts?.[c.id] ?? 0,onOpenComponentAdrs,type:c.type,groupId};
     if(group){node.parentId=group.id;node.extent='parent';node.expandParent=true;}
@@ -92,7 +92,7 @@ export function fromReactFlow(document:DiagramDocument,nodes:Node[]):DiagramDocu
     const node=nodeById.get(component.id); if(!node)return component;
     const group=groupByMember.get(component.id);
     const absolute=group?getAbsoluteMemberPosition(node.position,group.position):node.position;
-    return {...component,position:absolute};
+    return {...component,position:absolute,size:getReactFlowNodeSize(node,component.size??DEFAULT_COMPONENT_SIZE)};
   });
   const groups=groupsWithPositions.map(group=>{
     if(!nodeById.has(group.id))return group;

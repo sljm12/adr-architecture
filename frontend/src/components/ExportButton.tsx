@@ -2,6 +2,34 @@ import { useState } from 'react';
 import { exportClient } from '../api/export-client';
 import { DiagramApiError } from '../api/diagram-client';
 import { useDiagramStore, type SaveStatus } from '../state/diagram-store';
+import { useAdrStore, type AdrDraft, type AdrSaveStatus } from '../state/adr-store';
+import type { DiagramDocument, HtmlExportInput } from '../../../shared/src/index';
+
+export function captureHtmlExportInput(diagram: DiagramDocument, draft: AdrDraft | null): HtmlExportInput {
+  return structuredClone({ diagram, adrs: [], draft });
+}
+
+export function getHtmlExportBlockReason(diagramStatus: SaveStatus, adrStatus: AdrSaveStatus): string | null {
+  if (diagramStatus === 'saving' || adrStatus === 'saving') return 'Wait for diagram or ADR saving to finish before exporting.';
+  return null;
+}
+
+export function getHtmlExportDraft(adrStatus: AdrSaveStatus, draft: AdrDraft | null, diagramId: string): AdrDraft | null {
+  if (adrStatus !== 'unsaved' && adrStatus !== 'failed' && adrStatus !== 'saved') return null;
+  return draft?.diagramId === diagramId ? draft : null;
+}
+
+export async function runHtmlPackageExport(
+  input: HtmlExportInput,
+  download: (snapshot: HtmlExportInput) => Promise<void> = exportClient.downloadHtmlPackage,
+): Promise<{ success: boolean; message: string }> {
+  try {
+    await download(input);
+    return { success: true, message: 'HTML package downloaded.' };
+  } catch (error) {
+    return { success: false, message: error instanceof Error ? error.message : 'HTML package export failed.' };
+  }
+}
 
 export function getExportBlockReason(status: SaveStatus): string | null {
   if (status === 'unsaved') return 'Save changes before exporting. Export uses the last saved diagram.';
@@ -23,6 +51,7 @@ export function formatExportError(error: unknown): string {
 
 export function ExportButton() {
   const [message, setMessage] = useState('');
+  const [htmlMessage, setHtmlMessage] = useState('');
   const document = useDiagramStore(state => state.document);
   const status = useDiagramStore(state => state.status);
 
@@ -43,5 +72,24 @@ export function ExportButton() {
     }
   };
 
-  return <div className="export-control"><button className="primary-pill" type="button" onClick={() => void exportDiagram()} disabled={!document} aria-describedby="export-description export-status">Export Mermaid</button><p id="export-description" className="export-description">Groups export as labeled Mermaid subgraphs. Exact canvas positions are not exported.</p><p id="export-status" className="export-status" role="status" aria-live="polite" aria-atomic="true">{message}</p></div>;
+  const exportHtmlPackage = async () => {
+    const diagramState = useDiagramStore.getState();
+    const adrState = useAdrStore.getState();
+    const currentDiagram = diagramState.document;
+    if (!currentDiagram) return;
+
+    const blockReason = getHtmlExportBlockReason(diagramState.status, adrState.status);
+    if (blockReason) {
+      setHtmlMessage(blockReason);
+      return;
+    }
+
+    const draft = getHtmlExportDraft(adrState.status, adrState.draft, currentDiagram.id);
+    const snapshot = captureHtmlExportInput(currentDiagram, draft);
+    setHtmlMessage('Preparing HTML package…');
+    const result = await runHtmlPackageExport(snapshot);
+    setHtmlMessage(result.message);
+  };
+
+  return <div className="export-control"><button className="secondary-action" type="button" onClick={() => void exportHtmlPackage()} disabled={!document} aria-describedby="html-export-description html-export-status">Export HTML package</button><button className="primary-pill" type="button" onClick={() => void exportDiagram()} disabled={!document} aria-describedby="export-description export-status">Export Mermaid</button><p id="html-export-description" className="export-status">Download an offline, interactive diagram with its linked ADRs.</p><p id="export-description" className="export-description">Groups export as labeled Mermaid subgraphs. Exact canvas positions are not exported.</p><p id="html-export-status" className="export-status" role="status" aria-live="polite" aria-atomic="true">{htmlMessage}</p><p id="export-status" className="export-status" role="status" aria-live="polite" aria-atomic="true">{message}</p></div>;
 }

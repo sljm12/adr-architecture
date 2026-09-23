@@ -32,11 +32,14 @@ describe('diagram artifact editing API', () => {
     document.relationships = [{ id: relationshipId, diagramId: document.id, sourceComponentId: componentA, targetComponentId: componentB, direction: 'directed', label: 'queries', createdAt: document.createdAt, updatedAt: document.updatedAt }];
     const initial = await app.inject({ method: 'PUT', url: `/diagrams/${document.id}`, payload: document });
     expect(initial.statusCode).toBe(200);
-    const edited = { ...initial.json(), components: initial.json().components.map((component: any) => component.id === componentA ? { ...component, name: 'Gateway' } : component), relationships: [{ ...initial.json().relationships[0], sourceComponentId: componentB, targetComponentId: componentA, direction: 'undirected', label: 'sends events' }] };
+    const edited = { ...initial.json(), components: initial.json().components.map((component: any) => component.id === componentA ? { ...component, name: 'Gateway', size: { width: 280, height: 104 } } : component), relationships: [{ ...initial.json().relationships[0], sourceComponentId: componentB, targetComponentId: componentA, direction: 'undirected', label: 'sends events' }] };
     const saved = await app.inject({ method: 'PUT', url: `/diagrams/${document.id}`, payload: edited });
     expect(saved.statusCode).toBe(200);
-    expect(saved.json().components).toEqual(expect.arrayContaining([expect.objectContaining({ id: componentA, name: 'Gateway' }), expect.objectContaining({ id: componentB, name: 'DB' })]));
+    expect(saved.json().components).toEqual(expect.arrayContaining([expect.objectContaining({ id: componentA, name: 'Gateway', size: { width: 280, height: 104 } }), expect.objectContaining({ id: componentB, name: 'DB', size: { width: 180, height: 72 } })]));
     expect(saved.json().relationships).toEqual([expect.objectContaining({ id: relationshipId, sourceComponentId: componentB, targetComponentId: componentA, direction: 'undirected', label: 'sends events' })]);
+    const reopened = await app.inject({ method: 'GET', url: `/diagrams/${document.id}` });
+    expect(reopened.statusCode).toBe(200);
+    expect(reopened.json().components).toEqual(expect.arrayContaining([expect.objectContaining({ id: componentA, size: { width: 280, height: 104 } })]));
     const invalid = { ...saved.json(), components: saved.json().components.map((component: any) => component.id === componentA ? { ...component, name: '   ' } : component) };
     expect((await app.inject({ method: 'PUT', url: `/diagrams/${document.id}`, payload: invalid })).statusCode).toBe(422);
     await app.close();

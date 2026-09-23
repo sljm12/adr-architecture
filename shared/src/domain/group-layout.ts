@@ -1,7 +1,13 @@
-import type { Component, GroupBoundaryLayout, Position, SystemGroup } from './types';
+import { DEFAULT_COMPONENT_SIZE, type Component, type ComponentSize, type GroupBoundaryLayout, type Position, type SystemGroup } from './types';
 
-export const DEFAULT_COMPONENT_SIZE = { width: 180, height: 72 } as const;
 export const DEFAULT_GROUP_PADDING = { left: 32, right: 32, top: 56, bottom: 32 } as const;
+
+/** Allow arithmetic round-off when comparing positions derived from the same bounds. */
+export function isLessThanOrApproximatelyEqual(actual: number, limit: number): boolean {
+  if (!Number.isFinite(actual) || !Number.isFinite(limit)) return false;
+  const tolerance = 16 * Number.EPSILON * Math.max(1, Math.abs(actual), Math.abs(limit));
+  return actual <= limit + tolerance;
+}
 
 type MemberGeometry = Position | { position: Position; size?: { width: number; height: number } };
 
@@ -54,14 +60,17 @@ export function getAbsoluteMemberPosition(position: Position, groupPosition: Pos
 export function isMemberWithinGroup(
   group: Pick<SystemGroup, 'position' | 'size'> | GroupBoundaryLayout,
   position: Position,
-  memberSize = DEFAULT_COMPONENT_SIZE,
+  memberSize: ComponentSize = DEFAULT_COMPONENT_SIZE,
   padding = DEFAULT_GROUP_PADDING,
 ): boolean {
   const minX = group.position.x + padding.left;
   const minY = group.position.y + padding.top;
   const maxX = group.position.x + group.size.width - padding.right - memberSize.width;
   const maxY = group.position.y + group.size.height - padding.bottom - memberSize.height;
-  return position.x >= minX && position.y >= minY && position.x <= maxX && position.y <= maxY;
+  return isLessThanOrApproximatelyEqual(minX, position.x)
+    && isLessThanOrApproximatelyEqual(minY, position.y)
+    && isLessThanOrApproximatelyEqual(position.x, maxX)
+    && isLessThanOrApproximatelyEqual(position.y, maxY);
 }
 
 export const isPositionWithinGroup = isMemberWithinGroup;
@@ -70,7 +79,7 @@ export const isPositionWithinGroup = isMemberWithinGroup;
 export function constrainMemberPosition(
   group: Pick<SystemGroup, 'position' | 'size'> | GroupBoundaryLayout,
   proposed: Position,
-  memberSize = DEFAULT_COMPONENT_SIZE,
+  memberSize: ComponentSize = DEFAULT_COMPONENT_SIZE,
   padding = DEFAULT_GROUP_PADDING,
 ): Position {
   const minX = group.position.x + padding.left;

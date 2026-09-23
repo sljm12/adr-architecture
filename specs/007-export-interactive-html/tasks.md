@@ -16,7 +16,7 @@ description: "Tasks for interactive HTML package export"
 
 **Purpose**: Add only the archive dependency needed by the planned browser ZIP adapter.
 
-- [ ] T001 Add JSZip as a production dependency in `package.json` and `package-lock.json`; retain the existing build and test scripts.
+- [X] T001 Add JSZip as a production dependency in `package.json` and `package-lock.json`; retain the existing build and test scripts.
 
 ---
 
@@ -24,16 +24,16 @@ description: "Tasks for interactive HTML package export"
 
 **Purpose**: Make diagram geometry durable and provide one complete ADR read so every story can use a validated current-state snapshot.
 
-- [ ] T002 [P] Add failing tests for legacy component-size defaults, invalid sizes, stable IDs, and group enclosure in `shared/tests/compatibility.test.ts` and `shared/tests/c4-system-groups.test.ts`.
-- [ ] T003 [P] Add failing migration and save/reopen tests for component width and height in `backend/tests/persistence/diagram-repository.test.ts` and `backend/tests/compatibility.test.ts`.
-- [ ] T004 [P] Add failing contract and repository tests for the full-ADR list, all lifecycle states and links, empty results, and missing/inactive diagrams in `backend/tests/contract/adrs.test.ts` and `backend/tests/persistence/adr-repository.test.ts`.
-- [ ] T005 Implement normalized positive finite component `size` with 180 x 72 legacy defaults in `shared/src/domain/types.ts`, `shared/src/validation/schemas.ts`, `shared/src/domain/invariants.ts`, and `shared/src/domain/group-layout.ts`; preserve component UUIDs and existing document compatibility.
-- [ ] T006 [P] Add the additive component width/height migration and Drizzle mapping in `backend/drizzle/0004_component_dimensions.sql` and `backend/src/persistence/schema.ts`, using defaults for existing rows.
-- [ ] T007 Update component read/write mapping and validation to round-trip normalized sizes in `backend/src/persistence/diagram-repository.ts` and `backend/src/services/diagram-service.ts`, matching `contracts/component-layout.md`.
-- [ ] T008 Update component creation, resize, undo/redo, save, and group fitting to use domain sizes in `frontend/src/state/diagram-store.ts`, `frontend/src/components/DiagramCanvas.tsx`, and `frontend/src/adapters/react-flow/diagram-adapter.ts`; cover visible resize persistence in `frontend/tests/diagram-editing.test.tsx`.
-- [ ] T009 Add a bounded-query `listFull(diagramId)` that returns complete ADRs and link IDs in `backend/src/persistence/adr-repository.ts`, and expose it through `backend/src/services/adr-service.ts` without changing the summary-list method.
-- [ ] T010 Implement `GET /diagrams/:diagramId/adrs/full` with UUID validation and 404 handling in `backend/src/api/adr-routes.ts`; keep `specs/007-export-interactive-html/contracts/openapi.yaml` and `backend/tests/contract/openapi.test.ts` aligned.
-- [ ] T011 [P] Add the validated full-ADR response client method in `frontend/src/api/adr-client.ts`, using the shared ADR schema and surfacing request failures.
+- [X] T002 [P] Add failing tests for legacy component-size defaults, invalid sizes, stable IDs, and group enclosure in `shared/tests/compatibility.test.ts` and `shared/tests/c4-system-groups.test.ts`.
+- [X] T003 [P] Add failing migration and save/reopen tests for component width and height in `backend/tests/persistence/diagram-repository.test.ts` and `backend/tests/compatibility.test.ts`.
+- [X] T004 [P] Add failing contract and repository tests for the full-ADR list, all lifecycle states and links, empty results, and missing/inactive diagrams in `backend/tests/contract/adrs.test.ts` and `backend/tests/persistence/adr-repository.test.ts`.
+- [X] T005 Implement normalized positive finite component `size` with 180 x 72 legacy defaults in `shared/src/domain/types.ts`, `shared/src/validation/schemas.ts`, `shared/src/domain/invariants.ts`, and `shared/src/domain/group-layout.ts`; preserve component UUIDs and existing document compatibility.
+- [X] T006 [P] Add the additive component width/height migration and Drizzle mapping in `backend/drizzle/0004_component_dimensions.sql` and `backend/src/persistence/schema.ts`, using defaults for existing rows.
+- [X] T007 Update component read/write mapping and validation to round-trip normalized sizes in `backend/src/persistence/diagram-repository.ts` and `backend/src/services/diagram-service.ts`, matching `contracts/component-layout.md`.
+- [X] T008 Update component creation, resize, undo/redo, save, and group fitting to use domain sizes in `frontend/src/state/diagram-store.ts`, `frontend/src/components/DiagramCanvas.tsx`, and `frontend/src/adapters/react-flow/diagram-adapter.ts`; cover visible resize persistence in `frontend/tests/diagram-editing.test.tsx`.
+- [X] T009 Add a bounded-query `listFull(diagramId)` that returns complete ADRs and link IDs in `backend/src/persistence/adr-repository.ts`, and expose it through `backend/src/services/adr-service.ts` without changing the summary-list method.
+- [X] T010 Implement `GET /diagrams/:diagramId/adrs/full` with UUID validation and 404 handling in `backend/src/api/adr-routes.ts`; keep `specs/007-export-interactive-html/contracts/openapi.yaml` and `backend/tests/contract/openapi.test.ts` aligned.
+- [X] T011 [P] Add the validated full-ADR response client method in `frontend/src/api/adr-client.ts`, using the shared ADR schema and surfacing request failures.
 
 **Checkpoint**: Existing diagrams normalize dimensions, resizing survives save/reopen, and one read returns all full ADRs. T002-T004 pass; no export files are generated yet.
 
@@ -47,22 +47,22 @@ description: "Tasks for interactive HTML package export"
 
 ### Tests for User Story 1
 
-- [ ] T012 [P] [US1] Add failing snapshot tests for saved/unsaved/failed-save ADR overlays, a new package-local ADR ID, invalid drafts, ownership, duplicate IDs, missing endpoints, link targets, replacement targets, and atomic errors in `shared/tests/html-export-validation.test.ts`.
-- [ ] T013 [P] [US1] Add failing SVG tests for group bounds, resized components, type cues, labels, directed and parallel relationship paths, duplicate names, and XML escaping in `shared/tests/svg-export.test.ts`.
-- [ ] T014 [P] [US1] Add failing frontend tests for current-state capture, saving-state block, ZIP success/error feedback, and absence of save side effects in `frontend/tests/html-export-button.test.tsx`.
-- [ ] T015 [P] [US1] Add a failing download and extracted `file://` navigation scenario for component and relationship selections in `e2e/tests/html-package-export.spec.ts`.
+- [X] T012 [P] [US1] Add failing snapshot tests for saved/unsaved/failed-save ADR overlays, a new package-local ADR ID, invalid drafts, ownership, duplicate IDs, missing endpoints, link targets, replacement targets, and atomic errors in `shared/tests/html-export-validation.test.ts`.
+- [X] T013 [P] [US1] Add failing SVG tests for group bounds, resized components, type cues, labels, directed and parallel relationship paths, duplicate names, and XML escaping in `shared/tests/svg-export.test.ts`.
+- [X] T014 [P] [US1] Add failing frontend tests for current-state capture, saving-state block, ZIP success/error feedback, and absence of save side effects in `frontend/tests/html-export-button.test.tsx`.
+- [X] T015 [P] [US1] Add a failing download and extracted `file://` navigation scenario for component and relationship selections in `e2e/tests/html-package-export.spec.ts`.
 
 ### Implementation for User Story 1
 
-- [ ] T016 [US1] Implement pure draft overlay and complete export-snapshot validation with artifact-kind, UUID, field, and remedy errors in `shared/src/export/html-snapshot.ts`; never infer relationship ADRs from endpoint links.
-- [ ] T017 [US1] Implement domain-based component bounds, group bounds, stable relationship routing, arrowhead coordinates, and view-box calculation in `shared/src/export/svg-layout.ts`; do not import React Flow state.
-- [ ] T018 [US1] Render escaped primitive vector shapes, text, groups, labels, paths, and UUID-based link targets from validated geometry in `shared/src/export/svg-export.ts`.
-- [ ] T019 [P] [US1] Render `index.html` with inline SVG, keyboard-accessible text links, per-artifact detail sections, exact direct ADR title/status lists, and explicit empty states in `shared/src/export/diagram-page.ts`.
-- [ ] T020 [P] [US1] Render a minimal `adrs.html` with full escaped ADR detail sections addressable by UUID in `shared/src/export/adr-page.ts`, so US1 links can open full decisions before the all-ADR catalog is added.
-- [ ] T021 [US1] Build the initial fixed-path file map (`index.html`, `adrs.html`, `diagram.svg`, `styles.css`) from one validated snapshot in `shared/src/export/html-package.ts`, add baseline `:target` and focus styling in `shared/src/export/styles.ts`, and export the entry point from `shared/src/index.ts`; fail before producing any partial package.
-- [ ] T022 [US1] Fetch full ADRs once, merge the frozen editor draft, add the completed file map to JSZip, and download the Blob with a safe filename in `frontend/src/api/export-client.ts`.
-- [ ] T023 [US1] Add a separate HTML package action and clear progress, success, and artifact-specific error states in `frontend/src/components/ExportButton.tsx` and `frontend/src/styles.css`; permit valid unsaved states while retaining Mermaid's saved-state rule and following `DESIGN.md`.
-- [ ] T024 [US1] Run and make green the US1 checks in `shared/tests/html-export-validation.test.ts`, `shared/tests/svg-export.test.ts`, `frontend/tests/html-export-button.test.tsx`, and `e2e/tests/html-package-export.spec.ts`.
+- [X] T016 [US1] Implement pure draft overlay and complete export-snapshot validation with artifact-kind, UUID, field, and remedy errors in `shared/src/export/html-snapshot.ts`; never infer relationship ADRs from endpoint links.
+- [X] T017 [US1] Implement domain-based component bounds, group bounds, stable relationship routing, arrowhead coordinates, and view-box calculation in `shared/src/export/svg-layout.ts`; do not import React Flow state.
+- [X] T018 [US1] Render escaped primitive vector shapes, text, groups, labels, paths, and UUID-based link targets from validated geometry in `shared/src/export/svg-export.ts`.
+- [X] T019 [P] [US1] Render `index.html` with inline SVG, keyboard-accessible text links, per-artifact detail sections, exact direct ADR title/status lists, and explicit empty states in `shared/src/export/diagram-page.ts`.
+- [X] T020 [P] [US1] Render a minimal `adrs.html` with full escaped ADR detail sections addressable by UUID in `shared/src/export/adr-page.ts`, so US1 links can open full decisions before the all-ADR catalog is added.
+- [X] T021 [US1] Build the initial fixed-path file map (`index.html`, `adrs.html`, `diagram.svg`, `styles.css`) from one validated snapshot in `shared/src/export/html-package.ts`, add baseline `:target` and focus styling in `shared/src/export/styles.ts`, and export the entry point from `shared/src/index.ts`; fail before producing any partial package.
+- [X] T022 [US1] Fetch full ADRs once, merge the frozen editor draft, add the completed file map to JSZip, and download the Blob with a safe filename in `frontend/src/api/export-client.ts`.
+- [X] T023 [US1] Add a separate HTML package action and clear progress, success, and artifact-specific error states in `frontend/src/components/ExportButton.tsx` and `frontend/src/styles.css`; permit valid unsaved states while retaining Mermaid's saved-state rule and following `DESIGN.md`.
+- [X] T024 [US1] Run and make green the US1 checks in `shared/tests/html-export-validation.test.ts`, `shared/tests/svg-export.test.ts`, `frontend/tests/html-export-button.test.tsx`, and `e2e/tests/html-package-export.spec.ts`.
 
 **Checkpoint**: US1 is a usable offline interactive export. Component and relationship selections show only direct ADRs, and every shown ADR opens in full.
 

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { assertCanAddGroupMember, calculateGroupBounds, fitGroupBoundsAfterLayout, getC4ArtifactTypeLabel, isC4ArtifactType, translateGroupWithMembers, type C4ArtifactType, type DiagramDocument, type DiagramSummary, type GroupMemberAddReason, type Position, type Relationship, type RelationshipDirection } from '../../../shared/src/index';
-import { diagramClient } from '../api/diagram-client';
+import { assertCanAddGroupMember, calculateGroupBounds, DEFAULT_COMPONENT_SIZE, fitGroupBoundsAfterLayout, getC4ArtifactTypeLabel, isC4ArtifactType, translateGroupWithMembers, type C4ArtifactType, type DiagramDocument, type DiagramSummary, type GroupMemberAddReason, type Position, type Relationship, type RelationshipDirection } from '../../../shared/src/index';
+import { DiagramApiError, diagramClient } from '../api/diagram-client';
 import { BoundedHistory } from './history';
 
 export type SaveStatus = 'idle' | 'unsaved' | 'saving' | 'saved' | 'failed';
@@ -58,6 +58,16 @@ const history = new BoundedHistory<DiagramDocument>();
 const copy = (document: DiagramDocument): DiagramDocument => ({ ...structuredClone(document), groups: document.groups ?? [] });
 const historyState = () => ({ canUndo: history.canUndo, canRedo: history.canRedo });
 const now = () => new Date().toISOString();
+const saveErrorMessage = (error: unknown): string => {
+  if (error instanceof DiagramApiError) {
+    const fields = error.details.fields;
+    if (fields && typeof fields === 'object' && !Array.isArray(fields)) {
+      const detail = Object.values(fields).find(value => typeof value === 'string' && value.trim());
+      if (detail) return `${error.message}: ${detail}`;
+    }
+  }
+  return error instanceof Error ? error.message : 'Save failed';
+};
 const summary = (document: DiagramDocument): DiagramSummary => ({ id: document.id, name: document.name, status: document.status, createdAt: document.createdAt, updatedAt: document.updatedAt });
 const replaceSummary = (items: DiagramSummary[], next: DiagramSummary) => items.some(item => item.id === next.id) ? items.map(item => item.id === next.id ? next : item) : [...items, next];
 const normalizedGroupName = (name: string) => name.trim().toLocaleLowerCase();
@@ -149,6 +159,7 @@ export const useDiagramStore = create<State>((set, get) => ({
       components: [...current.components, {
         id: crypto.randomUUID(), diagramId: current.id, name: name.trim(), description: description?.trim() || null, type,
         position: { x: 80 + current.components.length * 180, y: 100 + (current.components.length % 3) * 120 },
+        size: { ...DEFAULT_COMPONENT_SIZE },
         createdAt: timestamp, updatedAt: timestamp,
       }],
     }));
@@ -210,7 +221,7 @@ export const useDiagramStore = create<State>((set, get) => ({
       const memberComponentIds = [...group.memberComponentIds, componentId];
       const members = memberComponentIds.flatMap(memberId => {
         const member = current.components.find(component => component.id === memberId);
-        return member ? [{ position: member.position }] : [];
+        return member ? [{ position: member.position, size: member.size }] : [];
       });
       return {
         ...current,
@@ -269,7 +280,7 @@ export const useDiagramStore = create<State>((set, get) => ({
         const members=group.memberComponentIds.flatMap(memberId=>{
           const member=current.components.find(item=>item.id===memberId);
           if(!member)return [];
-          return [{ position: memberId===componentId ? position : member.position }];
+          return [{ position: memberId===componentId ? position : member.position, size: member.size }];
         });
         return { ...group, ...fitGroupBoundsAfterLayout(members), updatedAt: now() };
       }),
@@ -279,16 +290,16 @@ export const useDiagramStore = create<State>((set, get) => ({
   resizeComponent: (componentId, size) => {
     const document = get().document;
     const component = document?.components.find(item => item.id === componentId);
-    const group = document?.groups.find(item => item.memberComponentIds.includes(componentId));
-    if (!document || !component || !group || !Number.isFinite(size.width) || !Number.isFinite(size.height) || size.width <= 0 || size.height <= 0) return false;
+    if (!document || !component || !Number.isFinite(size.width) || !Number.isFinite(size.height) || size.width <= 0 || size.height <= 0) return false;
     get().update(current => ({
       ...current,
+      components: current.components.map(item => item.id === componentId ? { ...item, size: { ...size }, updatedAt: now() } : item),
       groups: current.groups.map(item => {
-        if (item.id !== group.id) return item;
+        if (!item.memberComponentIds.includes(componentId)) return item;
         const members=item.memberComponentIds.flatMap(memberId=>{
           const member=current.components.find(candidate=>candidate.id===memberId);
           if(!member)return [];
-          return [{ position: member.position, size: memberId===componentId ? size : undefined }];
+          return [{ position: member.position, size: memberId===componentId ? size : member.size }];
         });
         return { ...item, ...fitGroupBoundsAfterLayout(members), updatedAt: now() };
       }),
@@ -313,7 +324,7 @@ export const useDiagramStore = create<State>((set, get) => ({
         const memberComponentIds=item.memberComponentIds.filter(id => id !== componentId);
         const members=memberComponentIds.flatMap(memberId=>{
           const member=current.components.find(candidate=>candidate.id===memberId);
-          return member ? [{ position: member.position }] : [];
+          return member ? [{ position: member.position, size: member.size }] : [];
         });
         return { ...item, memberComponentIds, ...fitGroupBoundsAfterLayout(members), updatedAt: now() };
       }),
@@ -407,7 +418,7 @@ export const useDiagramStore = create<State>((set, get) => ({
       }
     } catch (error) {
       if (get().document === documentAtSaveStart) {
-        set({ status: 'failed', error: error instanceof Error ? error.message : 'Save failed' });
+        set({ status: 'failed', error: saveErrorMessage(error) });
       }
     }
   },

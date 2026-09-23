@@ -21,8 +21,8 @@ const cleanup = async (pool: Pool) => {
 const document: DiagramDocument = {
   id: diagramId, name: 'Production topology', status: 'active', createdAt: timestamp, updatedAt: timestamp, trashedAt: null,
   components: [
-    { id: componentA, diagramId, name: 'API', description: 'Public edge', type: 'service', position: { x: 120, y: 80 }, createdAt: timestamp, updatedAt: timestamp },
-    { id: componentB, diagramId, name: 'Database', description: null, type: 'store', position: { x: 420, y: 260 }, createdAt: timestamp, updatedAt: timestamp },
+    { id: componentA, diagramId, name: 'API', description: 'Public edge', type: 'service', position: { x: 120, y: 80 }, size: { width: 240, height: 88 }, createdAt: timestamp, updatedAt: timestamp },
+    { id: componentB, diagramId, name: 'Database', description: null, type: 'store', position: { x: 420, y: 260 }, size: { width: 210, height: 80 }, createdAt: timestamp, updatedAt: timestamp },
   ],
   relationships: [{ id: relationshipId, diagramId, sourceComponentId: componentA, targetComponentId: componentB, direction: 'directed', label: 'queries', createdAt: timestamp, updatedAt: timestamp }], groups: [],
 };
@@ -45,7 +45,7 @@ describe.skipIf(!enabled)('PostgreSQL diagram repository', () => {
     expect(loaded).toMatchObject({ id: diagramId, name: document.name, status: 'active', trashedAt: null });
     expect(loaded?.components).toEqual(expect.arrayContaining(document.components.map(component => expect.objectContaining({
       id: component.id, diagramId: component.diagramId, name: component.name, description: component.description,
-      type: component.type, position: component.position,
+      type: component.type, position: component.position, size: component.size,
     }))));
     expect(loaded?.relationships).toEqual(expect.arrayContaining(document.relationships.map(relationship => expect.objectContaining({
       id: relationship.id, diagramId: relationship.diagramId, sourceComponentId: relationship.sourceComponentId,
@@ -57,11 +57,11 @@ describe.skipIf(!enabled)('PostgreSQL diagram repository', () => {
   });
 
   it('replaces children transactionally while retaining stable artifact IDs', async () => {
-    const updated = { ...document, name: 'Renamed topology', components: document.components.map(component => component.id === componentA ? { ...component, name: 'Gateway', position: { x: 900, y: 700 } } : component) };
+    const updated = { ...document, name: 'Renamed topology', components: document.components.map(component => component.id === componentA ? { ...component, name: 'Gateway', position: { x: 900, y: 700 }, size: { width: 300, height: 104 } } : component) };
     await repository!.replace(updated);
     const loaded = await repository!.get(diagramId);
     expect(loaded?.name).toBe('Renamed topology');
-    expect(loaded?.components.find(component => component.id === componentA)).toMatchObject({ id: componentA, name: 'Gateway', position: { x: 900, y: 700 } });
+    expect(loaded?.components.find(component => component.id === componentA)).toMatchObject({ id: componentA, name: 'Gateway', position: { x: 900, y: 700 }, size: { width: 300, height: 104 } });
     expect(loaded?.relationships[0].sourceComponentId).toBe(componentA);
   });
 

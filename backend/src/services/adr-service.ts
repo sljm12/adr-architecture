@@ -1,4 +1,4 @@
-import { assertAdrComponentOwnership, assertAdrRelationshipOwnership, assertAdrReplacement, adrComponentsWriteSchema, adrRelationshipsWriteSchema, adrWriteSchema, type AdrComponentsWritePayload, type AdrRelationshipsWritePayload, type AdrWritePayload, type ArchitectureDecisionRecord, type AdrSummary, type Component, type ComponentAdrSummary, type Relationship, type RelationshipAdrSummary } from '../../../shared/src/index';
+import { adrListPathSchema, assertAdrComponentOwnership, assertAdrRelationshipOwnership, assertAdrReplacement, adrComponentsWriteSchema, adrRelationshipsWriteSchema, adrWriteSchema, type AdrComponentsWritePayload, type AdrRelationshipsWritePayload, type AdrWritePayload, type ArchitectureDecisionRecord, type AdrSummary, type Component, type ComponentAdrSummary, type Relationship, type RelationshipAdrSummary } from '../../../shared/src/index';
 import type { AdrRepositoryLike } from '../persistence/adr-repository';
 import type { DiagramRepositoryLike, MaybePromise } from '../persistence/diagram-repository';
 import { ApiValidationError, DependencyConflictError } from '../api/errors';
@@ -13,6 +13,7 @@ export class AdrService {
   constructor(private readonly adrs: AdrRepositoryLike, private readonly diagrams: DiagramRepositoryLike) {}
 
   async list(diagramId: string): Promise<AdrSummary[]> { await this.diagram(diagramId); return this.adrs.list(diagramId); }
+  async listFull(diagramId: string): Promise<ArchitectureDecisionRecord[]> { const { diagramId: validId } = adrListPathSchema.parse({ diagramId }); await this.diagram(validId); return this.adrs.listFull(validId); }
   async componentAdrCounts(diagramId: string) { await this.diagram(diagramId); return this.adrs.componentAdrCounts(diagramId); }
   async load(id: string): Promise<ArchitectureDecisionRecord> { const adr = await this.adrs.get(id); if (!adr) throw new AdrNotFoundError('ADR not found'); return adr; }
 

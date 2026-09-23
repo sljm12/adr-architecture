@@ -1,4 +1,4 @@
-import { and, asc, count, eq } from 'drizzle-orm';
+import { and, asc, count, eq, inArray } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { AdrDependencyBlocker, AdrSummary, ArchitectureDecisionRecord, AdrWritePayload, ComponentAdrCount, ComponentAdrSummary, ComponentReference, RelationshipAdrSummary, RelationshipReference } from '../../../shared/src/index';
 import { architectureDecisionRecordSchema, adrComponentsWriteSchema, adrRelationshipsWriteSchema, adrWriteSchema, assertAdrInvariants } from '../../../shared/src/index';
@@ -9,6 +9,7 @@ export type AdrDeleteResult = { deleted: true } | { deleted: false; blockers: Ad
 
 export interface AdrRepositoryLike {
   list(diagramId: string): MaybePromise<AdrSummary[]>;
+  listFull(diagramId: string): MaybePromise<ArchitectureDecisionRecord[]>;
   get(id: string): MaybePromise<ArchitectureDecisionRecord | undefined>;
   create(diagramId: string, payload: AdrWritePayload): MaybePromise<ArchitectureDecisionRecord>;
   update(id: string, payload: AdrWritePayload): MaybePromise<ArchitectureDecisionRecord | undefined>;
@@ -42,6 +43,7 @@ export class AdrRepository implements AdrRepositoryLike {
   registerAdr(adr: ArchitectureDecisionRecord): void { assertAdrInvariants(adr); this.records.set(adr.id, clone(adr)); this.diagrams.add(adr.diagramId); }
 
   list(diagramId: string) { return [...this.records.values()].filter(adr => adr.diagramId === diagramId).sort(byUpdatedAtThenId).map(summaryOf); }
+  listFull(diagramId: string) { return [...this.records.values()].filter(adr => adr.diagramId === diagramId).sort(byUpdatedAtThenId).map(clone); }
   listByComponent(diagramId: string, componentId: string) {
     const component = this.components.get(componentId);
     if (component && component.diagramId !== diagramId) return undefined;
@@ -77,6 +79,24 @@ const mapAdr = (row: typeof schema.adrs.$inferSelect, componentIds: string[], re
 export class PostgresAdrRepository implements AdrRepositoryLike {
   constructor(private readonly db: PostgresDatabase) {}
   async list(diagramId: string): Promise<AdrSummary[]> { const rows = await this.db.select().from(schema.adrs).where(eq(schema.adrs.diagramId, diagramId)).orderBy(asc(schema.adrs.updatedAt), asc(schema.adrs.id)); return Promise.all(rows.map(async row => summaryOf(await this.loadRow(row)))); }
+  async listFull(diagramId: string): Promise<ArchitectureDecisionRecord[]> {
+    const rows = await this.db.select().from(schema.adrs).where(eq(schema.adrs.diagramId, diagramId)).orderBy(asc(schema.adrs.updatedAt), asc(schema.adrs.id));
+    if (!rows.length) return [];
+    const ids = rows.map(row => row.id);
+    const [componentLinks, relationshipLinks] = await Promise.all([
+      this.db.select({ adrId: schema.adrComponentLinks.adrId, componentId: schema.adrComponentLinks.componentId })
+        .from(schema.adrComponentLinks).where(inArray(schema.adrComponentLinks.adrId, ids))
+        .orderBy(asc(schema.adrComponentLinks.createdAt), asc(schema.adrComponentLinks.componentId)),
+      this.db.select({ adrId: schema.adrRelationshipLinks.adrId, relationshipId: schema.adrRelationshipLinks.relationshipId })
+        .from(schema.adrRelationshipLinks).where(inArray(schema.adrRelationshipLinks.adrId, ids))
+        .orderBy(asc(schema.adrRelationshipLinks.createdAt), asc(schema.adrRelationshipLinks.relationshipId)),
+    ]);
+    const componentsByAdr = new Map<string, string[]>();
+    const relationshipsByAdr = new Map<string, string[]>();
+    for (const link of componentLinks) componentsByAdr.set(link.adrId, [...(componentsByAdr.get(link.adrId) ?? []), link.componentId]);
+    for (const link of relationshipLinks) relationshipsByAdr.set(link.adrId, [...(relationshipsByAdr.get(link.adrId) ?? []), link.relationshipId]);
+    return rows.map(row => mapAdr(row, componentsByAdr.get(row.id) ?? [], relationshipsByAdr.get(row.id) ?? []));
+  }
   async listByComponent(diagramId: string, componentId: string): Promise<ComponentAdrSummary[] | undefined> {
     const [component] = await this.db.select({ id: schema.components.id }).from(schema.components).where(and(eq(schema.components.id, componentId), eq(schema.components.diagramId, diagramId))).limit(1);
     if (!component) return undefined;

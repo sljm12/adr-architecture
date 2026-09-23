@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DiagramDocument } from '../../shared/src/index';
-import { diagramClient } from '../src/api/diagram-client';
+import { DiagramApiError, diagramClient } from '../src/api/diagram-client';
 import { useDiagramStore } from '../src/state/diagram-store';
 
 const document: DiagramDocument = {
@@ -12,8 +12,8 @@ const document: DiagramDocument = {
 const editableDocument: DiagramDocument = {
   ...document,
   components: [
-    { id: '00000000-0000-0000-0000-000000000002', diagramId: document.id, name: 'API', description: null, type: null, position: { x: 0, y: 0 }, createdAt: document.createdAt, updatedAt: document.updatedAt },
-    { id: '00000000-0000-0000-0000-000000000003', diagramId: document.id, name: 'DB', description: null, type: null, position: { x: 200, y: 0 }, createdAt: document.createdAt, updatedAt: document.updatedAt },
+    { id: '00000000-0000-0000-0000-000000000002', diagramId: document.id, name: 'API', description: null, type: null, position: { x: 0, y: 0 }, size: { width: 180, height: 72 }, createdAt: document.createdAt, updatedAt: document.updatedAt },
+    { id: '00000000-0000-0000-0000-000000000003', diagramId: document.id, name: 'DB', description: null, type: null, position: { x: 200, y: 0 }, size: { width: 180, height: 72 }, createdAt: document.createdAt, updatedAt: document.updatedAt },
   ],
   relationships: [{ id: '00000000-0000-0000-0000-000000000004', diagramId: document.id, sourceComponentId: '00000000-0000-0000-0000-000000000002', targetComponentId: '00000000-0000-0000-0000-000000000003', direction: 'directed', label: 'queries', createdAt: document.createdAt, updatedAt: document.updatedAt }],
 };
@@ -78,6 +78,22 @@ describe('explicit diagram saving', () => {
     await useDiagramStore.getState().save();
     expect(save).toHaveBeenCalledTimes(2);
     expect(useDiagramStore.getState().status).toBe('saved');
+  });
+
+  it('shows the specific validation reason returned for a failed save', async () => {
+    vi.spyOn(diagramClient, 'save').mockRejectedValueOnce(new DiagramApiError('Validation failed', 422, {
+      fields: { 'groups[0].size': 'The group boundary does not enclose TY.' },
+    }));
+    reset();
+    useDiagramStore.getState().update(current => ({ ...current, name: 'Edited system' }));
+
+    await useDiagramStore.getState().save();
+
+    expect(useDiagramStore.getState()).toMatchObject({
+      status: 'failed',
+      error: 'Validation failed: The group boundary does not enclose TY.',
+    });
+    expect(useDiagramStore.getState().document?.name).toBe('Edited system');
   });
 
   it('does not lose a newer component or relationship edit while an older save is pending', async () => {

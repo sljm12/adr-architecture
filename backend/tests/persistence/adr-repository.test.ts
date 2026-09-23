@@ -109,6 +109,19 @@ describe('ADR repository', () => {
     ]);
   });
 
+  it('returns complete ADRs, all lifecycle states, and direct link IDs in one full-list operation', () => {
+    const repository = new AdrRepository();
+    const linked = completeAdrFixture({ id: adrFixtureIds.adr, componentIds: [adrFixtureIds.componentA], relationshipIds: ['00000000-0000-0000-0000-000000000231'] });
+    const superseded = completeAdrFixture({ id: adrFixtureIds.replacementAdr, status: 'superseded', replacementAdrId: '00000000-0000-0000-0000-000000000234' });
+    const unlinked = completeAdrFixture({ id: '00000000-0000-0000-0000-000000000235', status: 'rejected', componentIds: [], relationshipIds: [] });
+    repository.registerAdr(linked);
+    repository.registerAdr(superseded);
+    repository.registerAdr(unlinked);
+
+    expect(repository.listFull(adrFixtureIds.diagram)).toEqual([linked, superseded, unlinked]);
+    expect(repository.listFull(adrFixtureIds.otherDiagram)).toEqual([]);
+  });
+
   it('blocks replacement-target deletion until references are repaired, then removes the ADR and its own links', () => {
     const repository = new AdrRepository();
     repository.registerDiagram(adrFixtureIds.diagram);

@@ -3,7 +3,9 @@ export type DiagramStatus = 'active' | 'trashed';
 export type RelationshipDirection = 'directed' | 'undirected';
 export type C4ArtifactType = 'person' | 'software-system';
 export interface Position { x: number; y: number }
-export interface Component { id: UUID; diagramId: UUID; name: string; description: string | null; type: C4ArtifactType | string | null; position: Position; createdAt: string; updatedAt: string }
+export interface ComponentSize { width: number; height: number }
+export const DEFAULT_COMPONENT_SIZE = { width: 180, height: 72 } as const satisfies ComponentSize;
+export interface Component { id: UUID; diagramId: UUID; name: string; description: string | null; type: C4ArtifactType | string | null; position: Position; size: ComponentSize; createdAt: string; updatedAt: string }
 export interface Relationship { id: UUID; diagramId: UUID; sourceComponentId: UUID; targetComponentId: UUID; direction: RelationshipDirection; label: string | null; createdAt: string; updatedAt: string }
 export interface Diagram { id: UUID; name: string; status: DiagramStatus; createdAt: string; updatedAt: string; trashedAt: string | null }
 export interface GroupBoundaryLayout { position: Position; size: { width: number; height: number } }

@@ -4,6 +4,10 @@ import { AdrComponentNotFoundError, AdrDiagramNotFoundError, AdrNotFoundError, A
 import { sendError } from './errors';
 
 export function registerAdrRoutes(app: FastifyInstance, service: AdrService): void {
+  app.get<{ Params: { diagramId: string } }>('/diagrams/:diagramId/adrs/full', async (request, reply) => {
+    try { return reply.send(await service.listFull(request.params.diagramId)); }
+    catch (error) { if (error instanceof AdrDiagramNotFoundError) return reply.code(404).send({ message: error.message }); return sendError(reply, error); }
+  });
   app.get<{ Params: { diagramId: string } }>('/diagrams/:diagramId/adrs', async (request, reply) => {
     try { return reply.send(await service.list(request.params.diagramId)); }
     catch (error) { if (error instanceof AdrDiagramNotFoundError) return reply.code(404).send({ message: error.message }); return sendError(reply, error); }

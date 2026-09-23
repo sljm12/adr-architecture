@@ -22,9 +22,9 @@ export const adrDiagramFixture: Diagram = {
 };
 
 export const adrComponentFixtures: Component[] = [
-  { id: adrFixtureIds.componentA, diagramId: adrFixtureIds.diagram, name: 'API gateway', description: null, type: 'service', position: { x: 80, y: 100 }, createdAt: adrFixtureTimestamp, updatedAt: adrFixtureTimestamp },
-  { id: adrFixtureIds.componentB, diagramId: adrFixtureIds.diagram, name: 'Payments database', description: null, type: 'store', position: { x: 320, y: 100 }, createdAt: adrFixtureTimestamp, updatedAt: adrFixtureTimestamp },
-  { id: adrFixtureIds.otherComponent, diagramId: adrFixtureIds.otherDiagram, name: 'Other diagram component', description: null, type: null, position: { x: 0, y: 0 }, createdAt: adrFixtureTimestamp, updatedAt: adrFixtureTimestamp },
+  { id: adrFixtureIds.componentA, diagramId: adrFixtureIds.diagram, name: 'API gateway', description: null, type: 'software-system', position: { x: 80, y: 100 }, size: { width: 180, height: 72 }, createdAt: adrFixtureTimestamp, updatedAt: adrFixtureTimestamp },
+  { id: adrFixtureIds.componentB, diagramId: adrFixtureIds.diagram, name: 'Payments database', description: null, type: 'software-system', position: { x: 320, y: 100 }, size: { width: 180, height: 72 }, createdAt: adrFixtureTimestamp, updatedAt: adrFixtureTimestamp },
+  { id: adrFixtureIds.otherComponent, diagramId: adrFixtureIds.otherDiagram, name: 'Other diagram component', description: null, type: null, position: { x: 0, y: 0 }, size: { width: 180, height: 72 }, createdAt: adrFixtureTimestamp, updatedAt: adrFixtureTimestamp },
 ];
 
 export const completeAdrFixture = (overrides: Partial<ArchitectureDecisionRecord> = {}): ArchitectureDecisionRecord => ({

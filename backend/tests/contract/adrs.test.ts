@@ -90,6 +90,44 @@ describe('ADR API contract', () => {
     await app.close();
   });
 
+  it('returns the complete diagram ADR set in every lifecycle state with direct component and relationship links', async () => {
+    const app = buildApp(); await app.ready();
+    const diagram = (await app.inject({ method: 'POST', url: '/diagrams', payload: { name: 'Full ADR export' } })).json();
+    const componentA = { id: '00000000-0000-0000-0000-000000000091', diagramId: diagram.id, name: 'API', description: null, type: 'software-system', position: { x: 0, y: 0 }, createdAt: diagram.createdAt, updatedAt: diagram.updatedAt };
+    const componentB = { ...componentA, id: '00000000-0000-0000-0000-000000000092', name: 'Database', position: { x: 260, y: 0 } };
+    const relationship = { id: '00000000-0000-0000-0000-000000000093', diagramId: diagram.id, sourceComponentId: componentA.id, targetComponentId: componentB.id, direction: 'directed' as const, label: 'queries', createdAt: diagram.createdAt, updatedAt: diagram.updatedAt };
+    await app.inject({ method: 'PUT', url: `/diagrams/${diagram.id}`, payload: { ...diagram, components: [componentA, componentB], relationships: [relationship] } });
+
+    const replacement = (await app.inject({ method: 'POST', url: `/diagrams/${diagram.id}/adrs`, payload: { ...completeAdrPayload, title: 'Replacement', status: 'accepted' } })).json();
+    const draft = (await app.inject({ method: 'POST', url: `/diagrams/${diagram.id}/adrs`, payload: { ...completeAdrPayload, title: 'Draft decision' } })).json();
+    const rejected = (await app.inject({ method: 'POST', url: `/diagrams/${diagram.id}/adrs`, payload: { ...completeAdrPayload, title: 'Rejected decision', status: 'rejected' } })).json();
+    const superseded = (await app.inject({ method: 'POST', url: `/diagrams/${diagram.id}/adrs`, payload: { ...completeAdrPayload, title: 'Superseded decision', status: 'superseded', replacementAdrId: replacement.id } })).json();
+    await app.inject({ method: 'PUT', url: `/adrs/${draft.id}/components`, payload: { componentIds: [componentA.id] } });
+    await app.inject({ method: 'PUT', url: `/adrs/${rejected.id}/relationships`, payload: { relationshipIds: [relationship.id] } });
+
+    const response = await app.inject({ method: 'GET', url: `/diagrams/${diagram.id}/adrs/full` });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: draft.id, title: draft.title, status: 'draft', context: completeAdrPayload.context, componentIds: [componentA.id], relationshipIds: [] }),
+      expect.objectContaining({ id: replacement.id, status: 'accepted', componentIds: [], relationshipIds: [] }),
+      expect.objectContaining({ id: superseded.id, status: 'superseded', replacementAdrId: replacement.id }),
+      expect.objectContaining({ id: rejected.id, status: 'rejected', componentIds: [], relationshipIds: [relationship.id] }),
+    ]));
+    expect((await app.inject({ method: 'GET', url: `/diagrams/${diagram.id}/adrs` })).json()[0]).not.toHaveProperty('context');
+    await app.close();
+  });
+
+  it('returns an empty full list and reports invalid, missing, and inactive diagram IDs', async () => {
+    const app = buildApp(); await app.ready();
+    const diagram = (await app.inject({ method: 'POST', url: '/diagrams', payload: { name: 'Empty full list' } })).json();
+    expect((await app.inject({ method: 'GET', url: `/diagrams/${diagram.id}/adrs/full` })).json()).toEqual([]);
+    expect((await app.inject({ method: 'GET', url: '/diagrams/not-a-uuid/adrs/full' })).statusCode).toBe(422);
+    expect((await app.inject({ method: 'GET', url: '/diagrams/00000000-0000-0000-0000-000000000099/adrs/full' })).statusCode).toBe(404);
+    await app.inject({ method: 'DELETE', url: `/diagrams/${diagram.id}` });
+    expect((await app.inject({ method: 'GET', url: `/diagrams/${diagram.id}/adrs/full` })).statusCode).toBe(404);
+    await app.close();
+  });
+
   it('replaces relationship links independently, returns relationship summaries, and rejects invalid links', async () => {
     const app = buildApp(); await app.ready();
     const first = (await app.inject({ method: 'POST', url: '/diagrams', payload: { name: 'Payments' } })).json();

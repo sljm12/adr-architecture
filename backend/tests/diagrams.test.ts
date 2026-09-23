@@ -1,5 +1,5 @@
 import { describe,expect,it } from 'vitest'; import { buildApp } from '../src/api/app'; import { DiagramRepository } from '../src/persistence/diagram-repository'; import type { DiagramDocument } from '../../../shared/src/index';
-const d:DiagramDocument={id:'d',name:'x',status:'active',createdAt:'n',updatedAt:'n',trashedAt:null,components:[],relationships:[],groups:[]}; describe('repository',()=>it('preserves document IDs on replacement',()=>{const r=new DiagramRepository();r.create(d);const saved=r.replace({...d,name:'renamed'});expect(saved.id).toBe('d');expect(r.get('d')?.name).toBe('renamed');}));
+const diagramId='00000000-0000-4000-8000-000000000010'; const d:DiagramDocument={id:diagramId,name:'x',status:'active',createdAt:'n',updatedAt:'n',trashedAt:null,components:[],relationships:[],groups:[]}; describe('repository',()=>it('preserves document IDs on replacement',()=>{const r=new DiagramRepository();r.create(d);const saved=r.replace({...d,name:'renamed'});expect(saved.id).toBe(diagramId);expect(r.get(diagramId)?.name).toBe('renamed');}));
 describe('diagram summary API', () => {
   it('returns the immutable creation timestamp in active summaries and retains it after edits', async () => {
     const repository = new DiagramRepository();

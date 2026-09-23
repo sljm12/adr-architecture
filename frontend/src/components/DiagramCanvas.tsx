@@ -28,9 +28,7 @@ type DiagramCanvasProps = {
 export function DiagramCanvas({ onSelection, selectedComponentIds = [], selectedComponentId = null, selectedCandidateComponentId = null, selectedGroupId = null, selectedRelationshipId = null, onMultiSelectionChange, groupingSelectionActive = false, canvasEpoch = 0, adrCounts = {}, onOpenComponentAdrs }: DiagramCanvasProps) {
   const document = useDiagramStore(state => state.document);
   const update = useDiagramStore(state => state.update);
-  const [memberSizes, setMemberSizes] = useState<Record<string, { width: number; height: number }>>({});
-  const sizeMap = useMemo(() => new Map(Object.entries(memberSizes)), [memberSizes]);
-  const visual = useMemo(() => document ? toReactFlow(document, sizeMap, adrCounts, onOpenComponentAdrs) : { nodes: [], edges: [] }, [document, sizeMap, adrCounts, onOpenComponentAdrs]);
+  const visual = useMemo(() => document ? toReactFlow(document, undefined, adrCounts, onOpenComponentAdrs) : { nodes: [], edges: [] }, [document, adrCounts, onOpenComponentAdrs]);
   const [interactiveNodes, setInteractiveNodes] = useState<Node[]>([]);
   useEffect(() => setInteractiveNodes(visual.nodes), [visual]);
   const selectedIds = useMemo(() => new Set(selectedComponentIds.length ? selectedComponentIds : selectedComponentId ? [selectedComponentId] : selectedCandidateComponentId ? [selectedCandidateComponentId] : []), [selectedCandidateComponentId, selectedComponentId, selectedComponentIds]);
@@ -74,13 +72,6 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
     const dimensionChanges = changes.filter(change => change.type === 'dimensions' && change.resizing !== undefined && change.dimensions && currentNodes.some(node => node.id === change.id && node.type === 'component'));
     setInteractiveNodes(nextNodes);
     if (!dimensionChanges.length) return;
-    setMemberSizes(current => {
-      const next = { ...current };
-      for (const change of dimensionChanges) {
-        if (change.type === 'dimensions' && change.dimensions) next[change.id] = { width: change.dimensions.width, height: change.dimensions.height };
-      }
-      return next;
-    });
     if (dimensionChanges.some(change => change.type === 'dimensions' && change.resizing !== false)) return;
     const resizedNodes = nextNodes.map(node => {
       const change = dimensionChanges.find(item => item.id === node.id);
