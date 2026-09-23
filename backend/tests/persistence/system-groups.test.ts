@@ -22,6 +22,24 @@ const baseDocument = (): DiagramDocument => {
 };
 
 describe('system group persistence compatibility', () => {
+  it('saves a newly fitted group with fractional positions', () => {
+    const repository = new DiagramRepository();
+    const service = new DiagramService(repository);
+    const original = baseDocument();
+    repository.create({ ...original, groups: [] });
+    const components = original.components.map((component, index) => ({
+      ...component,
+      position: index === 0
+        ? { x: -470.64516129032256, y: 0.8222643896268025 }
+        : { x: -461.6300422354164, y: 123.6573422292955 },
+    }));
+    const group = { ...original.groups[0], ...calculateGroupBounds(components) };
+
+    const saved = service.save(diagramId, { ...original, components, groups: [group] });
+    expect(saved.groups).toHaveLength(1);
+    expect(repository.get(diagramId)?.groups[0].id).toBe(groupId);
+  });
+
   it('round-trips groups in memory while preserving identity, positions, and normalized names', () => {
     const repository = new DiagramRepository();
     const service = new DiagramService(repository);
