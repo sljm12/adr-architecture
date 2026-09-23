@@ -1,0 +1,88 @@
+openapi: 3.0.3
+info:
+  title: ADR Diagram API - HTML Package Export Source
+  version: 1.0.0
+  description: >-
+    Read-only aggregate for the browser's current-state package export. Existing
+    GET /diagrams/{diagramId}/adrs continues to return summaries. The existing
+    diagram read/write contract also gains component size as described in
+    component-layout.md.
+paths:
+  /diagrams/{diagramId}/adrs/full:
+    get:
+      summary: Read every full ADR belonging to an active diagram
+      description: >-
+        Returns content and component/relationship links for all lifecycle states,
+        including unlinked ADRs. The browser overlays its frozen current ADR draft
+        before building the package. This request does not save or export files.
+      parameters:
+        - name: diagramId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Complete ADR records; an empty array is valid
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Adr' }
+        '404':
+          description: Diagram was not found or is not active
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: Invalid diagram ID
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+components:
+  schemas:
+    Adr:
+      type: object
+      required:
+        - id
+        - diagramId
+        - title
+        - context
+        - decision
+        - consequences
+        - alternativesOrConstraints
+        - status
+        - replacementAdrId
+        - componentIds
+        - relationshipIds
+        - createdAt
+        - updatedAt
+      properties:
+        id: { type: string, format: uuid }
+        diagramId: { type: string, format: uuid }
+        title: { type: string, minLength: 1 }
+        context: { type: string, minLength: 1 }
+        decision: { type: string, minLength: 1 }
+        consequences: { type: string, minLength: 1 }
+        alternativesOrConstraints: { type: string, nullable: true }
+        status:
+          type: string
+          enum: [draft, accepted, superseded, rejected]
+        replacementAdrId: { type: string, format: uuid, nullable: true }
+        componentIds:
+          type: array
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        relationshipIds:
+          type: array
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string }
+        fields:
+          type: object
+          additionalProperties: { type: string }
