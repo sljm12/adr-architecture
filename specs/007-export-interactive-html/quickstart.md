@@ -33,3 +33,12 @@ For manual browser validation, start the app with `npm run dev` and open `http:/
 - Frontend tests cover unsaved and failed-save snapshots, a saving-state block, download feedback, and no save side effects. Playwright covers the extracted package using a local file URL, keyboard navigation, all-ADR browsing, CSS recoloring, and representative SVG content.
 
 The feature is ready for review when these checks pass and the package contents match [package-format.md](contracts/package-format.md) for all representative and failure cases.
+
+## Implementation validation record
+
+Run on 2026-09-24 for Phases 4–6:
+
+- `npm run build` passed. Vite reported its existing non-blocking warning for a minified chunk over 500 kB.
+- `npm test` ran 242 tests: 235 passed, 6 skipped, and 1 failed. The remaining failure is the untouched `frontend/tests/save-controls.test.tsx` source-text assertion for `role="status"`; the current component assigns the status role conditionally.
+- `npm run test:e2e -- --workers=1` passed all 43 browser tests, including ZIP download, offline navigation, keyboard focus, CSS recoloring, and the 100/200/100 scale case. The default six-worker run had one transient timeout in the existing performance scenario; that file passed alone and the serial suite passed.
+- PostgreSQL-backed persistence checks were skipped by the test suite, so migration 0004 was not exercised against a live PostgreSQL database in this run.

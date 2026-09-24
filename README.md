@@ -44,6 +44,7 @@ the additive migrations in order with your PostgreSQL migration runner:
 psql "$DATABASE_URL" -f backend/drizzle/0001_initial.sql
 psql "$DATABASE_URL" -f backend/drizzle/0002_adrs.sql
 psql "$DATABASE_URL" -f backend/drizzle/0003_system_groups.sql
+psql "$DATABASE_URL" -f backend/drizzle/0004_component_dimensions.sql
 ```
 
 Migration `0003_system_groups.sql` adds `system_groups` and normalized
@@ -67,6 +68,20 @@ the downloaded `.mmd` file in a Mermaid-compatible previewer such as Mermaid Liv
 the complete domain document first; invalid content produces an actionable message and no file.
 Person and Software System nodes use distinct Mermaid shapes, and each system group is emitted as a
 labeled `subgraph`. Mermaid preserves group meaning and membership, but not exact canvas positions.
+
+## Interactive HTML package
+
+Choose **Export HTML package** to download the active diagram and all of its ADRs as a ZIP. Extract
+the ZIP and open `index.html` directly to browse the diagram offline. The package also includes
+`adrs.html`, an editable `diagram.svg`, and one UUID-named Markdown file per ADR under `adrs/`.
+Its links are relative, so the extracted folder can be moved as a unit. Edit `--component-outline`
+and `--component-fill` near the top of `styles.css` to recolor component shapes in the HTML pages.
+The exact package paths and navigation contract are documented in
+[`package-format.md`](specs/007-export-interactive-html/contracts/package-format.md).
+
+Component width and height are stored with the diagram and default to 180 by 72 when an older
+document is read. Apply `backend/drizzle/0004_component_dimensions.sql` before running against an
+existing PostgreSQL database so saved resizes are retained.
 
 ## C4 system groups
 

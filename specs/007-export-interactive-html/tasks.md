@@ -76,14 +76,14 @@ description: "Tasks for interactive HTML package export"
 
 ### Tests for User Story 2
 
-- [ ] T025 [P] [US2] Add failing catalog tests for every status, zero ADRs, unlinked records, full content, timestamps, replacement ADRs, duplicate titles, and component/relationship back-links in `shared/tests/adr-page-export.test.ts`.
-- [ ] T026 [P] [US2] Add a failing offline browser scenario that opens the catalog, reaches an unlinked ADR, and follows both component and relationship references back in `e2e/tests/html-package-adrs.spec.ts`.
+- [X] T025 [P] [US2] Add failing catalog tests for every status, zero ADRs, unlinked records, full content, timestamps, replacement ADRs, duplicate titles, and component/relationship back-links in `shared/tests/adr-page-export.test.ts`.
+- [X] T026 [P] [US2] Add a failing offline browser scenario that opens the catalog, reaches an unlinked ADR, and follows both component and relationship references back in `e2e/tests/html-package-adrs.spec.ts`.
 
 ### Implementation for User Story 2
 
-- [ ] T027 [US2] Extend `shared/src/export/adr-page.ts` with the complete all-ADR list, status labels, full context/decision/consequence/alternative fields, dates, replacement references, and UUID-disambiguated diagram links.
-- [ ] T028 [US2] Connect `index.html` to the dedicated catalog and preserve relative cross-page anchors in `shared/src/export/diagram-page.ts` and `shared/src/export/html-package.ts`, including the no-ADR state.
-- [ ] T029 [US2] Run and make green the US2 checks in `shared/tests/adr-page-export.test.ts` and `e2e/tests/html-package-adrs.spec.ts` without regressing the US1 tests.
+- [X] T027 [US2] Extend `shared/src/export/adr-page.ts` with the complete all-ADR list, status labels, full context/decision/consequence/alternative fields, dates, replacement references, and UUID-disambiguated diagram links.
+- [X] T028 [US2] Connect `index.html` to the dedicated catalog and preserve relative cross-page anchors in `shared/src/export/diagram-page.ts` and `shared/src/export/html-package.ts`, including the no-ADR state.
+- [X] T029 [US2] Run and make green the US2 checks in `shared/tests/adr-page-export.test.ts` and `e2e/tests/html-package-adrs.spec.ts` without regressing the US1 tests.
 
 **Checkpoint**: The catalog works from the extracted ZIP even when no ADR has a diagram link.
 
@@ -97,16 +97,16 @@ description: "Tasks for interactive HTML package export"
 
 ### Tests for User Story 3
 
-- [ ] T030 [P] [US3] Add failing manifest, standalone SVG, Markdown escaping/content, UUID filename, and CSS color-token tests in `shared/tests/html-package-portability.test.ts`.
-- [ ] T031 [P] [US3] Add a failing extracted-package scenario for `diagram.svg`, Markdown files, CSS recoloring, relocation, and intact keyboard navigation in `e2e/tests/html-package-portability.spec.ts`.
+- [X] T030 [P] [US3] Add failing manifest, standalone SVG, Markdown escaping/content, UUID filename, and CSS color-token tests in `shared/tests/html-package-portability.test.ts`.
+- [X] T031 [P] [US3] Add a failing extracted-package scenario for `diagram.svg`, Markdown files, CSS recoloring, relocation, and intact keyboard navigation in `e2e/tests/html-package-portability.spec.ts`.
 
 ### Implementation for User Story 3
 
-- [ ] T032 [P] [US3] Generate one safe Markdown file per ADR with decision fields, status, dates, replacement and artifact UUID references, and explicit unlinked state in `shared/src/export/adr-markdown.ts`.
-- [ ] T033 [P] [US3] Complete standalone `diagram.svg` generation with editable vector primitives, explicit view box, full labels/grouping, and embedded default styling in `shared/src/export/svg-export.ts`.
-- [ ] T034 [P] [US3] Define documented `--component-outline` and `--component-fill` variables, readable default colors, focus styles, and `:target` detail visibility in `shared/src/export/styles.ts`, consistent with `DESIGN.md`.
-- [ ] T035 [US3] Emit the final `contracts/package-format.md` manifest from `shared/src/export/html-package.ts`, including `diagram.svg`, `styles.css`, and `adrs/<uuid>.md` for every ADR; keep paths relative and authored names out of paths.
-- [ ] T036 [US3] Run and make green the US3 checks in `shared/tests/html-package-portability.test.ts` and `e2e/tests/html-package-portability.spec.ts` without regressing US1 or US2.
+- [X] T032 [P] [US3] Generate one safe Markdown file per ADR with decision fields, status, dates, replacement and artifact UUID references, and explicit unlinked state in `shared/src/export/adr-markdown.ts`.
+- [X] T033 [P] [US3] Complete standalone `diagram.svg` generation with editable vector primitives, explicit view box, full labels/grouping, and embedded default styling in `shared/src/export/svg-export.ts`.
+- [X] T034 [P] [US3] Define documented `--component-outline` and `--component-fill` variables, readable default colors, focus styles, and `:target` detail visibility in `shared/src/export/styles.ts`, consistent with `DESIGN.md`.
+- [X] T035 [US3] Emit the final `contracts/package-format.md` manifest from `shared/src/export/html-package.ts`, including `diagram.svg`, `styles.css`, and `adrs/<uuid>.md` for every ADR; keep paths relative and authored names out of paths.
+- [X] T036 [US3] Run and make green the US3 checks in `shared/tests/html-package-portability.test.ts` and `e2e/tests/html-package-portability.spec.ts` without regressing US1 or US2.
 
 **Checkpoint**: All requested files are reusable independently and CSS color changes leave navigation intact.
 
@@ -116,10 +116,10 @@ description: "Tasks for interactive HTML package export"
 
 **Purpose**: Confirm completeness, accessibility, scale, documentation, and compatibility across the full feature.
 
-- [ ] T037 [P] Add a 100-component, 200-relationship, 100-ADR export scenario with package completeness and timing assertions in `shared/tests/html-package-scale.test.ts` and `e2e/tests/html-package-export.spec.ts`.
-- [ ] T038 [P] Document HTML ZIP use, offline extraction, CSS variables, and component-size migration in `README.md` and `backend/.env.example`, referring to `specs/007-export-interactive-html/contracts/package-format.md`.
-- [ ] T039 Verify unsafe text, broken-link errors, keyboard focus, visible status feedback, empty diagrams, and no silent omission against `specs/007-export-interactive-html/quickstart.md`; close gaps in `shared/tests/html-export-validation.test.ts` and `e2e/tests/html-package-export.spec.ts`.
-- [ ] T040 Run `npm run build`, `npm test`, and `npm run test:e2e` from `package.json`, complete `specs/007-export-interactive-html/quickstart.md`, and record any remaining validation limits in `specs/007-export-interactive-html/quickstart.md`.
+- [X] T037 [P] Add a 100-component, 200-relationship, 100-ADR export scenario with package completeness and timing assertions in `shared/tests/html-package-scale.test.ts` and `e2e/tests/html-package-export.spec.ts`.
+- [X] T038 [P] Document HTML ZIP use, offline extraction, CSS variables, and component-size migration in `README.md` and `backend/.env.example`, referring to `specs/007-export-interactive-html/contracts/package-format.md`.
+- [X] T039 Verify unsafe text, broken-link errors, keyboard focus, visible status feedback, empty diagrams, and no silent omission against `specs/007-export-interactive-html/quickstart.md`; close gaps in `shared/tests/html-export-validation.test.ts` and `e2e/tests/html-package-export.spec.ts`.
+- [X] T040 Run `npm run build`, `npm test`, and `npm run test:e2e` from `package.json`, complete `specs/007-export-interactive-html/quickstart.md`, and record any remaining validation limits in `specs/007-export-interactive-html/quickstart.md`.
 
 ---
 

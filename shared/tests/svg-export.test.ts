@@ -33,4 +33,16 @@ describe('domain-based SVG rendering', () => {
     expect(svg).toContain(`href="#component-${exportIds.systemB}"`);
     expect(svg.match(/href="#component-/g)).toHaveLength(3);
   });
+
+  it('keeps every word in long and non-Latin component labels without an ellipsis', () => {
+    const diagram = exportDiagramFixture();
+    diagram.components[0].name = `${'Architecture service label '.repeat(6)}数据库`;
+    const svg = renderDiagramSvg(diagram);
+    const componentName = svg.match(/<text class="component-name"[^>]*>(.*?)<\/text>/s)?.[1] ?? '';
+
+    expect(componentName).toContain('Architecture service label');
+    expect(componentName.match(/<tspan\b/g)).toHaveLength(7);
+    expect(componentName).toContain('数据库');
+    expect(svg).not.toContain('…');
+  });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HtmlExportError, validateHtmlExportSnapshot } from '../src/export/html-snapshot';
+import { buildHtmlPackage } from '../src/export/html-package';
 import { exportAdrFixture, exportAdrsFixture, exportDiagramFixture, exportIds, exportTimestamp } from './html-export-fixtures';
 
 describe('interactive HTML export snapshot validation', () => {
@@ -30,6 +31,22 @@ describe('interactive HTML export snapshot validation', () => {
       diagram: exportDiagramFixture(), adrs: exportAdrsFixture(), capturedAt: exportTimestamp,
       draft: { ...exportAdrFixture(), id: undefined, title: ' ' },
     })).toThrow(expect.objectContaining({ artifactKind: 'ADR', field: 'title' }));
+  });
+
+  it('keeps hostile authored text visible as text across HTML, SVG, and Markdown files', () => {
+    const diagram = exportDiagramFixture();
+    diagram.components[0].name = '<img src=x onerror=alert(1)>';
+    diagram.relationships[0].label = '</text><script>alert(1)</script>';
+    const adr = exportAdrFixture({ title: '<script>unsafe title</script>', context: 'Text <b>only</b> & safe.' });
+    const files = buildHtmlPackage({ diagram, adrs: [adr], capturedAt: exportTimestamp });
+
+    expect(files['index.html']).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(files['adrs.html']).toContain('&lt;script&gt;unsafe title&lt;/script&gt;');
+    expect(files['diagram.svg']).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(files['index.html']).not.toMatch(/<script\b|<img\b|<b\b/i);
+    expect(files['adrs.html']).not.toMatch(/<script\b|<img\b|<b\b/i);
+    expect(files[`adrs/${adr.id}.md`]).not.toContain('<script');
+    expect(files[`adrs/${adr.id}.md`]).toContain('&lt;b&gt;only&lt;/b&gt;');
   });
 
   it.each([

@@ -8,24 +8,26 @@ function displayType(type: string | null): string {
   return type === 'person' ? 'Person' : type === 'software-system' ? 'Software System' : 'Unclassified';
 }
 
-function wrappedLines(value: string, width: number, maxLines = 3): string[] {
+function wrappedLines(value: string, width: number): string[] {
   const maxCharacters = Math.max(12, Math.floor((width - 28) / 8));
   const words = value.split(/\s+/);
   const lines: string[] = [];
   let line = '';
   for (const word of words) {
-    const next = line ? `${line} ${word}` : word;
-    if (next.length > maxCharacters && line) {
-      lines.push(line);
-      line = word;
-    } else line = next;
+    const characters = Array.from(word);
+    const pieces = characters.length > maxCharacters
+      ? Array.from({ length: Math.ceil(characters.length / maxCharacters) }, (_, index) => characters.slice(index * maxCharacters, (index + 1) * maxCharacters).join(''))
+      : [word];
+    for (const piece of pieces) {
+      const next = line ? `${line} ${piece}` : piece;
+      if (next.length > maxCharacters && line) {
+        lines.push(line);
+        line = piece;
+      } else line = next;
+    }
   }
   if (line) lines.push(line);
-  if (lines.length <= maxLines) return lines;
-  const visible = lines.slice(0, maxLines);
-  const last = visible[maxLines - 1];
-  visible[maxLines - 1] = `${last.slice(0, Math.max(1, maxCharacters - 1))}…`;
-  return visible;
+  return lines;
 }
 
 function componentMarkup(component: Component, rect: { x: number; y: number; width: number; height: number }): string {
@@ -37,10 +39,10 @@ function componentMarkup(component: Component, rect: { x: number; y: number; wid
   const shape = isPerson
     ? `<ellipse class="component-shape component-person-shape" cx="${formatSvgNumber(cx)}" cy="${formatSvgNumber(cy)}" rx="${formatSvgNumber(rect.width / 2)}" ry="${formatSvgNumber(rect.height / 2)}"/>`
     : `<rect class="component-shape component-${escapeMarkup(type)}-shape" x="${formatSvgNumber(rect.x)}" y="${formatSvgNumber(rect.y)}" width="${formatSvgNumber(rect.width)}" height="${formatSvgNumber(rect.height)}" rx="8"/>`;
-  const typeY = cy - (component.name.includes(' ') ? 14 : 8);
-  const nameY = typeY + 26;
   const lines = wrappedLines(component.name, rect.width);
-  const nameMarkup = lines.map((line, index) => `<tspan x="${formatSvgNumber(cx)}" dy="${index === 0 ? 0 : 19}">${escapeMarkup(line)}</tspan>`).join('');
+  const nameY = cy - ((lines.length - 1) * 8) + 8;
+  const typeY = nameY - 18;
+  const nameMarkup = lines.map((line, index) => `<tspan x="${formatSvgNumber(cx)}" dy="${index === 0 ? 0 : 16}">${escapeMarkup(line)}</tspan>`).join('');
   return `<a href="#component-${component.id}" class="diagram-component-link" tabindex="0" aria-label="Component ${escapeMarkup(component.name)}, ${typeLabel}"><g id="visual-component-${component.id}" class="diagram-component component-type-${escapeMarkup(type)}" data-artifact-id="${component.id}"><title>${escapeMarkup(component.name)} — ${typeLabel}</title>${shape}<text class="component-type-label" x="${formatSvgNumber(cx)}" y="${formatSvgNumber(typeY)}" text-anchor="middle">${typeLabel}</text><text class="component-name" x="${formatSvgNumber(cx)}" y="${formatSvgNumber(nameY)}" text-anchor="middle">${nameMarkup}</text></g></a>`;
 }
 

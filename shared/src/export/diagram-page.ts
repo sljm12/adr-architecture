@@ -15,6 +15,15 @@ function adrLinks(adrs: ArchitectureDecisionRecord[]): string {
 }
 
 export function renderDiagramPage(snapshot: HtmlExportSnapshot): string {
+  let html = renderDiagramPageLegacy(snapshot);
+  html = html.replace('>Browse all ADRs</a>', `>Browse all ADRs (${snapshot.adrs.length})</a>`);
+  if (snapshot.adrs.length === 0) {
+    html = html.replace('<div class="diagram-panel">', '<p class="empty-state">No ADRs are included in this package.</p><div class="diagram-panel">');
+  }
+  return html;
+}
+
+function renderDiagramPageLegacy(snapshot: HtmlExportSnapshot): string {
   const { diagram } = snapshot;
   const componentIndex = diagram.components.length
     ? `<section><h3>Components</h3><ul>${diagram.components.map(component => `<li><a href="#component-${component.id}">${escapeMarkup(component.name)}</a></li>`).join('')}</ul></section>`
