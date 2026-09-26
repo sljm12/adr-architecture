@@ -60,5 +60,6 @@ describe('portable HTML package files', () => {
     expect(styles).toContain('fill:var(--component-fill)');
     expect(styles).toContain('a:focus-visible');
     expect(styles).toContain('.artifact-detail:target');
+    expect(styles).toContain('.empty-value{color:#7a7a7a;font-style:italic}');
   });
 });

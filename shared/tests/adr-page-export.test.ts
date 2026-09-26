@@ -35,7 +35,8 @@ describe('all-ADR HTML page', () => {
     expect(page).toContain(`href="index.html#component-${exportIds.systemA}">Payments &lt;Core&gt; (${exportIds.systemA})</a>`);
     expect(page).toContain(`href="index.html#relationship-${exportIds.relationship}">writes &lt;events&gt; (${exportIds.relationship})</a>`);
     expect(page).toContain('This ADR is not linked to a diagram artifact.');
-    expect(page).toContain('None recorded.');
+    expect(page).toContain('<span class="empty-value">Not specified.</span>');
+    expect(page).not.toContain('<span class="empty-state">');
   });
 
   it('renders a useful empty catalog when the diagram has no ADRs', () => {
