@@ -79,6 +79,28 @@ and `--component-fill` near the top of `styles.css` to recolor component shapes 
 The exact package paths and navigation contract are documented in
 [`package-format.md`](specs/007-export-interactive-html/contracts/package-format.md).
 
+## Command line diagram list and export
+
+Run the CLI from the repository checkout with Node.js dependencies installed. It reads saved data
+from the REST API and defaults to `http://localhost:3000`; set `ADR_DIAGRAM_API_URL` to another
+absolute HTTP or HTTPS service URL when needed.
+
+```text
+npm run cli -- --help
+npm run cli -- diagrams list
+npm run cli -- diagrams list --name payments
+npm run cli -- diagrams list --format json
+npm run cli -- diagrams export 00000000-0000-4000-8000-000000000001 --output .\architecture.zip
+```
+
+The list shows each diagram's stable UUID, name, and timestamps. Name filtering ignores case, and
+JSON output is an array suitable for scripts. Export uses the persisted diagram and its full ADR set
+to create the same portable package as the browser exporter. The output path must end in `.zip`,
+its parent directory must already exist, and an existing file is never replaced.
+
+Successful commands exit with status `0`. Service, validation, and file errors exit with status `1`;
+invalid command syntax exits with status `2`. Diagnostics are written to standard error.
+
 Component width and height are stored with the diagram and default to 180 by 72 when an older
 document is read. Apply `backend/drizzle/0004_component_dimensions.sql` before running against an
 existing PostgreSQL database so saved resizes are retained.

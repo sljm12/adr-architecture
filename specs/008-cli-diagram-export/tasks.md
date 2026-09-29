@@ -24,7 +24,7 @@ description: "Dependency-ordered implementation tasks for CLI Diagram Export"
 
 **Purpose**: Add the CLI project to the existing TypeScript build and local run workflow.
 
-- [ ] T001 Create the strict ESM CLI project config and root build/run references in `cli/package.json`, `cli/tsconfig.json`, `package.json`, and `tsconfig.json`.
+- [X] T001 Create the strict ESM CLI project config and root build/run references in `cli/package.json`, `cli/tsconfig.json`, `package.json`, and `tsconfig.json`.
 
 ---
 
@@ -34,8 +34,8 @@ description: "Dependency-ordered implementation tasks for CLI Diagram Export"
 
 **Checkpoint**: Both story implementations can use one validated API client configured for the existing service.
 
-- [ ] T002 Add API-client contract tests for configured URLs, list/document/full-ADR GET requests, HTTP and network failures, and invalid payloads in `cli/tests/api-client.test.ts`.
-- [ ] T003 Implement `ADR_DIAGRAM_API_URL` configuration, read-only GET requests, error handling, and shared-schema validation in `cli/src/api-client.ts`.
+- [X] T002 Add API-client contract tests for configured URLs, list/document/full-ADR GET requests, HTTP and network failures, and invalid payloads in `cli/tests/api-client.test.ts`.
+- [X] T003 Implement `ADR_DIAGRAM_API_URL` configuration, read-only GET requests, error handling, and shared-schema validation in `cli/src/api-client.ts`.
 
 ---
 
@@ -47,12 +47,12 @@ description: "Dependency-ordered implementation tasks for CLI Diagram Export"
 
 ### Tests for User Story 1
 
-- [ ] T004 [P] [US1] Add list-command tests for summary fields, duplicate names, name filtering, empty results, and table/JSON output in `cli/tests/diagrams-command.test.ts`.
+- [X] T004 [P] [US1] Add list-command tests for summary fields, duplicate names, name filtering, empty results, and table/JSON output in `cli/tests/diagrams-command.test.ts`.
 
 ### Implementation for User Story 1
 
-- [ ] T005 [P] [US1] Implement active-summary listing, trimmed case-insensitive name filtering, empty-state behavior, and table/JSON rendering in `cli/src/diagrams-command.ts` and `cli/src/output.ts`.
-- [ ] T006 [P] [US1] Wire `diagrams list` with `--name` and `--format` into the CLI dispatcher in `cli/src/main.ts`.
+- [X] T005 [P] [US1] Implement active-summary listing, trimmed case-insensitive name filtering, empty-state behavior, and table/JSON rendering in `cli/src/diagrams-command.ts` and `cli/src/output.ts`.
+- [X] T006 [P] [US1] Wire `diagrams list` with `--name` and `--format` into the CLI dispatcher in `cli/src/main.ts`.
 
 **Checkpoint**: `npm run cli -- diagrams list` and its filtered/JSON forms work without export functionality.
 
@@ -66,12 +66,12 @@ description: "Dependency-ordered implementation tasks for CLI Diagram Export"
 
 ### Tests for User Story 2
 
-- [ ] T007 [P] [US2] Add export-command tests for persisted-state inputs, all ADR states and links, ZIP manifest/content, validation failures, missing diagrams, output collisions, failed writes, and absence of API mutation requests in `cli/tests/export-command.test.ts`.
+- [X] T007 [P] [US2] Add export-command tests for persisted-state inputs, all ADR states and links, ZIP manifest/content, validation failures, missing diagrams, output collisions, failed writes, and absence of API mutation requests in `cli/tests/export-command.test.ts`.
 
 ### Implementation for User Story 2
 
-- [ ] T008 [P] [US2] Fetch the saved diagram and full ADR list, validate and pass them to `buildHtmlPackage`, then create the compatible ZIP with JSZip in `cli/src/export-command.ts`.
-- [ ] T009 [US2] Write the generated ZIP to the requested `.zip` path using exclusive creation, report the path only after completion, and clean up an incomplete file on failure in `cli/src/export-command.ts` and wire `diagrams export <id> --output <path>` in `cli/src/main.ts`.
+- [X] T008 [P] [US2] Fetch the saved diagram and full ADR list, validate and pass them to `buildHtmlPackage`, then create the compatible ZIP with JSZip in `cli/src/export-command.ts`.
+- [X] T009 [US2] Write the generated ZIP to the requested `.zip` path using exclusive creation, report the path only after completion, and clean up an incomplete file on failure in `cli/src/export-command.ts` and wire `diagrams export <id> --output <path>` in `cli/src/main.ts`.
 
 **Checkpoint**: A known diagram UUID can be exported as a complete offline package; invalid content and unsafe destinations fail clearly.
 
@@ -85,12 +85,12 @@ description: "Dependency-ordered implementation tasks for CLI Diagram Export"
 
 ### Tests for User Story 3
 
-- [ ] T010 [P] [US3] Add CLI contract tests for global and command help, standard-output/standard-error behavior, and success/failure/usage exit results in `cli/tests/cli-help.test.ts`.
+- [X] T010 [P] [US3] Add CLI contract tests for global and command help, standard-output/standard-error behavior, and success/failure/usage exit results in `cli/tests/cli-help.test.ts`.
 
 ### Implementation for User Story 3
 
-- [ ] T011 [P] [US3] Complete built-in help for list, filter, export, configuration, and common errors, and map successful, operational, and usage outcomes to the documented process results in `cli/src/main.ts`.
-- [ ] T012 [P] [US3] Add a CLI usage section with service configuration, list/export examples, JSON output, and failure behavior to `README.md`.
+- [X] T011 [P] [US3] Complete built-in help for list, filter, export, configuration, and common errors, and map successful, operational, and usage outcomes to the documented process results in `cli/src/main.ts`.
+- [X] T012 [P] [US3] Add a CLI usage section with service configuration, list/export examples, JSON output, and failure behavior to `README.md`.
 
 **Checkpoint**: A first-time user can follow built-in help, and scripts can safely parse list output and detect operation results.
 
@@ -100,7 +100,7 @@ description: "Dependency-ordered implementation tasks for CLI Diagram Export"
 
 **Purpose**: Verify the complete CLI against the package and end-to-end validation contract.
 
-- [ ] T013 Run the root build and Vitest suite, then follow the success and failure scenarios in `specs/008-cli-diagram-export/quickstart.md` and resolve any failures in the corresponding `cli/` source or test files.
+- [X] T013 Run the root build and Vitest suite, then follow the success and failure scenarios in `specs/008-cli-diagram-export/quickstart.md` and resolve any failures in the corresponding `cli/` source or test files.
 
 ---
 
@@ -187,3 +187,4 @@ The MVP includes both P1 stories: diagram discovery and ZIP export. User Story 1
 - `[P]` tasks use separate files and have no unfinished prerequisites; dispatcher edits remain sequential.
 - `[US1]`, `[US2]`, and `[US3]` map to user stories in `spec.md`.
 - Export must use saved API data and shared package validation; never substitute browser memory or drop unsupported artifacts.
+- Validation: the root build and all 19 CLI tests pass. The full Vitest run reported unrelated failures: PostgreSQL tests could not connect to `localhost:5432`, several pre-existing API tests timed out, and `frontend/tests/save-controls.test.tsx` failed its source-contract assertion. CLI help and usage-error scenarios were also exercised successfully.

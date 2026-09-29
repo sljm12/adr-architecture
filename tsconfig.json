@@ -1,1 +1,1 @@
-{"files": [], "references": [{"path":"./shared"},{"path":"./backend"},{"path":"./frontend"}]}
+{"files": [], "references": [{"path":"./shared"},{"path":"./backend"},{"path":"./frontend"},{"path":"./cli"}]}
