@@ -1,6 +1,7 @@
 # ADR Diagram
 
-ADR Diagram is a browser-based editor for structured software architecture diagrams. Components,
+![Alt text](images/logo.png)
+C4ADR (Pronouced Ceeee-Adder, bad pun in know) is a browser-based editor for structured software architecture diagrams. Components,
 relationships, ADR links, and system groups have stable UUIDs, changes can be explicitly saved
 through the REST API, and validated diagrams can be downloaded as Mermaid files.
 
