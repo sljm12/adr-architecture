@@ -1,0 +1,8 @@
+{
+  "name": "@adr-diagram/cli",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b"
+  }
+}
