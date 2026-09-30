@@ -1,0 +1,424 @@
+openapi: 3.0.3
+info:
+  title: ADR Diagram API - C4 Container Diagrams
+  version: 1.0.0
+  description: >-
+    Feature additions to the existing REST contract. Paths are backend paths; the Vite
+    browser proxy prefixes them with /api. General diagrams remain compatible.
+    All graph mutations lock the source parent before affected children and validate dependencies
+    within the same transaction. This is a design contract, not an implemented API.
+paths:
+  /diagrams:
+    get:
+      summary: List active general and container diagrams with source scope
+      responses:
+        '200':
+          description: Existing array result, extended with kind and scope
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/DiagramSummary' } }
+  /diagrams/trash:
+    get:
+      summary: List recoverable diagrams with the same scope metadata
+      responses:
+        '200':
+          description: Trashed summaries; container owner associations remain reserved
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/DiagramSummary' } }
+  /diagrams/{diagramId}:
+    parameters:
+      - $ref: '#/components/parameters/DiagramId'
+    get:
+      summary: Load an active resolved diagram
+      description: >-
+        Container source/owner metadata is resolved in a consistent read snapshot. A child of
+        an inactive parent cannot be loaded for editing. Missing contextual references return
+        an actionable conflict instead of an incomplete valid diagram.
+      responses:
+        '200': { $ref: '#/components/responses/Document' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    put:
+      summary: Validate and save a complete diagram transactionally
+      description: >-
+        Path/document IDs must match. Kind and scope identities are immutable.
+        Omitted new fields normalize for legacy general diagrams only. Child writes require
+        kind container, scope and boundary. External display fields are resolved from sources,
+        not written to parent artifacts. Container groups must be empty. Omitted components
+        and relationships undergo the same ADR, hierarchy, source and local dependency checks
+        as DELETE. Status and trash metadata cannot be changed through this route.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DiagramWrite' }
+      responses:
+        '200': { $ref: '#/components/responses/Document' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      summary: Move a diagram and its affected active children to recoverable trash
+      description: >-
+        Success remains 204. For a parent with active children, confirmedDiagramIds must equal
+        the full affected set from trash-impact, including the root. A changed set produces
+        TRASH_IMPACT_CHANGED and no writes. Legacy bodyless deletion remains valid when no
+        child will be affected. Every UI entry point requires confirmation. One batch marks
+        only currently active children; unrelated and previously trashed children are untouched.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [confirmedDiagramIds]
+              properties:
+                confirmedDiagramIds:
+                  type: array
+                  uniqueItems: true
+                  items: { type: string, format: uuid }
+      responses:
+        '204': { description: Entire confirmed affected set moved to trash atomically }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /diagrams/{diagramId}/components/{componentId}/container-diagram:
+    parameters:
+      - $ref: '#/components/parameters/DiagramId'
+      - $ref: '#/components/parameters/ComponentId'
+    get:
+      summary: Inspect canonical container diagram availability
+      description: >-
+        Resolve an ordinary Software System or external Software System occurrence to its
+        source. The supplied component must belong to the supplied active diagram. A missing
+        child returns availability none, not 404. No artifact is created by GET.
+      responses:
+        '200':
+          description: Canonical source and child state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContainerAvailability' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    post:
+      summary: Create or open the canonical child diagram
+      description: >-
+        No request body. The owner must already be persisted, its parent active, its role
+        element and type software-system. The transaction creates one complete empty child
+        with a default name, boundary and no components/relationships/groups. Retries return
+        the same existing active child. A trashed canonical child returns 409 RESTORE_REQUIRED
+        with its summary; this route never restores or replaces it implicitly.
+      responses:
+        '201': { $ref: '#/components/responses/Document' }
+        '200': { $ref: '#/components/responses/Document' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /diagrams/{diagramId}/container-context:
+    parameters:
+      - $ref: '#/components/parameters/DiagramId'
+    get:
+      summary: Resolve source scope and external participant choices
+      description: >-
+        Container diagrams only. Returns current parent Person/Software System elements
+        excluding the owner. Used by the participant picker and by browser draft export.
+        Sources already included remain listed so their metadata can resolve existing
+        occurrences; the picker disables duplicate choices. No positions or parent
+        relationships are copied. An inactive or invalid source graph cannot produce
+        a successful context.
+      responses:
+        '200':
+          description: Consistent source metadata snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [scope, sources, capturedAt]
+                properties:
+                  scope: { $ref: '#/components/schemas/ContainerScope' }
+                  sources:
+                    type: array
+                    items: { $ref: '#/components/schemas/SourceElement' }
+                  capturedAt: { type: string, format: date-time }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /diagrams/{diagramId}/trash-impact:
+    parameters:
+      - $ref: '#/components/parameters/DiagramId'
+    get:
+      summary: Preview active diagrams affected by trash
+      responses:
+        '200':
+          description: Exact ID set to display and confirm before deletion
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [diagramId, affectedDiagramIds, affectedDiagrams]
+                properties:
+                  diagramId: { type: string, format: uuid }
+                  affectedDiagramIds:
+                    type: array
+                    uniqueItems: true
+                    items: { type: string, format: uuid }
+                  affectedDiagrams:
+                    type: array
+                    items: { $ref: '#/components/schemas/DiagramSummary' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /diagrams/{diagramId}/restore:
+    parameters:
+      - $ref: '#/components/parameters/DiagramId'
+    post:
+      summary: Restore a diagram and exactly its parent-trash batch
+      description: >-
+        Existing response shape remains a resolved diagram. Restoring a parent restores
+        children with its batch/root marker only. Restoring a child independently requires
+        an active parent and valid sources. Validation failures roll back the entire batch.
+        Clients refresh active/trash lists after success.
+      responses:
+        '200': { $ref: '#/components/responses/Document' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /diagrams/{diagramId}/components/{componentId}/dependencies:
+    parameters:
+      - $ref: '#/components/parameters/DiagramId'
+      - $ref: '#/components/parameters/ComponentId'
+    get:
+      summary: Inspect local and cross-diagram deletion blockers
+      responses:
+        '200':
+          description: Retain existing relationshipCount and add blocker collections
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [relationshipCount, groupIds, blockers, diagramBlockers]
+                properties:
+                  relationshipCount: { type: integer, minimum: 0 }
+                  groupIds: { type: array, items: { type: string, format: uuid } }
+                  blockers: { type: array, items: { $ref: '#/components/schemas/AdrBlocker' } }
+                  diagramBlockers: { type: array, items: { $ref: '#/components/schemas/DiagramBlocker' } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /diagrams/{diagramId}/components/{componentId}:
+    parameters:
+      - $ref: '#/components/parameters/DiagramId'
+      - $ref: '#/components/parameters/ComponentId'
+    delete:
+      summary: Remove a component or occurrence only after dependency checks
+      description: >-
+        Owners with active or recoverable children and sources with occurrences cannot
+        be removed. Local relationship/group and ADR blockers retain existing semantics.
+        No automatic detachment, relationship deletion or ADR unlink occurs.
+      responses:
+        '200':
+          description: Existing removal envelope
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [document, relationshipCount]
+                properties:
+                  document: { $ref: '#/components/schemas/DiagramDocument' }
+                  relationshipCount: { type: integer, minimum: 0 }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+components:
+  parameters:
+    DiagramId: { name: diagramId, in: path, required: true, schema: { type: string, format: uuid } }
+    ComponentId: { name: componentId, in: path, required: true, schema: { type: string, format: uuid } }
+  responses:
+    Document:
+      description: Complete source-resolved diagram; stable IDs and server-managed timestamps
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/DiagramDocument' }
+    NotFound:
+      description: Target component/diagram does not exist or is not available in the active graph
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    Conflict:
+      description: Dependency, immutable ownership, inactive parent, changed trash impact or restoration required
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    ValidationError:
+      description: Invalid artifact fields or C4 role/endpoint/scope rules
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+  schemas:
+    Position:
+      type: object
+      required: [x, y]
+      properties: { x: { type: number }, y: { type: number } }
+      description: Finite absolute diagram coordinates
+    Size:
+      type: object
+      required: [width, height]
+      properties:
+        width: { type: number, minimum: 0, exclusiveMinimum: true }
+        height: { type: number, minimum: 0, exclusiveMinimum: true }
+    Boundary:
+      type: object
+      nullable: true
+      required: [position, size]
+      properties:
+        position: { $ref: '#/components/schemas/Position' }
+        size: { $ref: '#/components/schemas/Size' }
+      description: Non-null for container; null for general; no endpoint identity
+    ContainerScope:
+      type: object
+      required: [parentDiagramId, softwareSystemId, parentDiagramName, softwareSystemName, softwareSystemDescription]
+      properties:
+        parentDiagramId: { type: string, format: uuid }
+        softwareSystemId: { type: string, format: uuid }
+        parentDiagramName: { type: string }
+        softwareSystemName: { type: string }
+        softwareSystemDescription: { type: string, nullable: true }
+      description: IDs immutable; display fields are resolved from authoritative parent data
+    Scope:
+      oneOf:
+        - $ref: '#/components/schemas/ContainerScope'
+        - $ref: '#/components/schemas/NullValue'
+      description: Null for general; non-null for container
+    NullValue:
+      type: object
+      nullable: true
+      enum: [null]
+    SourceElement:
+      type: object
+      required: [id, diagramId, name, description, type]
+      properties:
+        id: { type: string, format: uuid }
+        diagramId: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        type: { type: string, enum: [person, software-system] }
+    Component:
+      type: object
+      required: [id, diagramId, name, description, type, position, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        diagramId: { type: string, format: uuid }
+        role: { type: string, enum: [element, container, external], default: element }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, nullable: true }
+        type: { type: string, nullable: true }
+        technology: { type: string, nullable: true, maxLength: 200, default: null }
+        sourceComponentId: { type: string, format: uuid, nullable: true, default: null }
+        position: { $ref: '#/components/schemas/Position' }
+        size: { $ref: '#/components/schemas/Size' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      description: >-
+        Role-specific validation is mandatory. General elements retain legacy nullable/free-form
+        classifications. Containers require role container, type container, nonblank name,
+        description and technology, null source. External occurrences require role external,
+        a valid source UUID, null technology, and source-derived person/software-system details.
+        Read responses always include normalized role, technology, sourceComponentId and size;
+        omitted role/size/new fields are accepted only for legacy general inputs.
+    Relationship:
+      type: object
+      required: [id, diagramId, sourceComponentId, targetComponentId, direction, label, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        diagramId: { type: string, format: uuid }
+        sourceComponentId: { type: string, format: uuid }
+        targetComponentId: { type: string, format: uuid }
+        direction: { type: string, enum: [directed, undirected] }
+        label: { type: string, nullable: true }
+        protocol: { type: string, nullable: true, maxLength: 200, default: null }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      description: Container relationships require directed, nonblank label and at least one internal endpoint
+    DiagramWrite:
+      type: object
+      required: [id, name, status, createdAt, updatedAt, trashedAt, components, relationships]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        status: { type: string, enum: [active, trashed] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        trashedAt: { type: string, format: date-time, nullable: true }
+        kind: { type: string, enum: [general, container], default: general }
+        scope: { $ref: '#/components/schemas/Scope' }
+        boundary: { $ref: '#/components/schemas/Boundary' }
+        components: { type: array, items: { $ref: '#/components/schemas/Component' } }
+        relationships: { type: array, items: { $ref: '#/components/schemas/Relationship' } }
+        groups:
+          type: array
+          default: []
+          items:
+            $ref: '../../003-c4-system-groups/contracts/openapi.yaml#/components/schemas/SystemGroup'
+      description: >-
+        Complete artifact write. Container writes must explicitly supply kind/scope/boundary,
+        empty groups and valid container/external roles. General defaults preserve old clients.
+        Unknown feature fields and invalid scope/role combinations are rejected, not stripped.
+        Timestamps are accepted for round trips but original creation and new update times are server-managed.
+    DiagramDocument:
+      allOf:
+        - $ref: '#/components/schemas/DiagramWrite'
+        - type: object
+          required: [kind, scope, boundary, groups]
+      description: Fully normalized response with source-resolved scope and occurrence details
+    DiagramSummary:
+      type: object
+      required: [id, name, status, createdAt, updatedAt, kind, scope]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        status: { type: string, enum: [active, trashed] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        kind: { type: string, enum: [general, container] }
+        scope: { $ref: '#/components/schemas/Scope' }
+    ContainerAvailability:
+      type: object
+      required: [parentDiagramId, softwareSystemId, availability, diagram]
+      properties:
+        parentDiagramId: { type: string, format: uuid }
+        softwareSystemId: { type: string, format: uuid }
+        availability: { type: string, enum: [none, active, trashed] }
+        diagram:
+          oneOf:
+            - $ref: '#/components/schemas/DiagramSummary'
+            - $ref: '#/components/schemas/NullValue'
+    AdrBlocker:
+      type: object
+      required: [adrId, title, reason]
+      properties:
+        adrId: { type: string, format: uuid }
+        title: { type: string }
+        reason: { type: string }
+    DiagramBlocker:
+      type: object
+      required: [diagramId, name, status, reason, nextAction]
+      properties:
+        diagramId: { type: string, format: uuid }
+        name: { type: string }
+        status: { type: string, enum: [active, trashed] }
+        componentId: { type: string, format: uuid }
+        sourceComponentId: { type: string, format: uuid }
+        reason: { type: string }
+        nextAction: { type: string }
+    ApiError:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string }
+        code:
+          type: string
+          enum: [RESTORE_REQUIRED, PARENT_INACTIVE, DIAGRAM_REFERENCE_BROKEN, DIAGRAM_DEPENDENCY, IMMUTABLE_SCOPE, TRASH_IMPACT_CHANGED, EMPTY_CONTAINER_MERMAID]
+        fields: { type: object, additionalProperties: { type: string } }
+        componentId: { type: string, format: uuid }
+        relationshipCount: { type: integer, minimum: 0 }
+        groupIds: { type: array, items: { type: string, format: uuid } }
+        blockers: { type: array, items: { $ref: '#/components/schemas/AdrBlocker' } }
+        diagramBlockers: { type: array, items: { $ref: '#/components/schemas/DiagramBlocker' } }
+        diagram: { $ref: '#/components/schemas/DiagramSummary' }
