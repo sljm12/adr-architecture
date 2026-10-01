@@ -2,6 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-09-30
+**Updated**: 2026-10-01
 **Feature**: [spec.md](../spec.md)
 
 **Marker Semantics**: Completion means the specification has passed requirements-quality review, not that the feature has been implemented.
@@ -43,3 +44,7 @@
 - Accessibility is covered by FR-002, FR-021, and SC-004/SC-007; measurable creation, modeling, and readability outcomes are defined in SC-001–SC-004.
 - Scope choices are explicit in Assumptions, including one canonical child per Software System, source-linked external participants, and exclusion of deeper C4 levels and recursive exports.
 - This review validates the specification only. Implementation and its automated checks remain for later phases.
+- Review repeated on 2026-10-01 after the requested update: all 16 requirements-quality criteria pass; no unresolved clarification markers or template placeholders remain in the specification.
+- Application/Datastore-only component creation and type editing are covered by User Story 2 scenarios 1 and 8, FR-007/FR-024, SC-009, and navigation edge cases. Existing parent participants remain covered by the separate inclusion workflow in FR-009.
+- Saving a child under its originating parent, retaining its own name and level, preserving parent content, and avoiding top-level or duplicate entries are covered by User Story 3 scenarios 6–9, FR-011/FR-023, SC-010, and save/retry edge cases. Assumptions define parent ownership independently of later entry points.
+- Plan/design artifacts were reconciled on 2026-10-01. The existing tasks still require reconciliation before implementation; their previous validation does not establish coverage of this update.

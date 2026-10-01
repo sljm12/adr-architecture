@@ -12,7 +12,7 @@ Every exporter consumes a validated, resolved domain document. Owner and source 
 
 Browser HTML export retains its existing unsaved draft behavior. Capture an immutable local diagram/ADR draft snapshot, fetch container-context for the same child/source scope, overlay current owner/source display metadata, validate IDs and fields, then generate the ZIP. A failed context lookup leaves editor state untouched and produces no successful incomplete package. Local unsaved additions to the child may reference eligible parent sources returned in the context. A source lookup never saves or changes either diagram.
 
-CLI export uses the source-resolved persisted GET document and saved ADRs through its existing client. Shared schemas must retain kind, scope, boundary, roles, technologies, protocols and source identities, rather than stripping the new fields.
+CLI export uses the source-resolved persisted GET document and saved ADRs through its existing client. Shared schemas must retain kind, scope, boundary, roles, containerType, technologies, protocols and source identities, rather than stripping the new fields. Preserve the child's own name and canonical parent/owner IDs in the snapshot; list grouping does not change package scope.
 
 ## Required content by format
 
@@ -21,13 +21,15 @@ CLI export uses the source-resolved persisted GET document and saved ADRs throug
 | Diagram level and current owning system | Title/comment and labeled system subgraph | Title/accessible description and boundary heading | Heading and scope details |
 | Internal container membership | Nodes inside one system subgraph | Rectangles inside one boundary | Same SVG plus artifact details |
 | Empty child | Actionable unsupported-export error | Empty labeled boundary | Diagram with empty-state details |
-| Name, Container type, responsibilities, technology | Escaped multiline node labels | Wrapped full labels, never silently omitted | SVG and textual artifact details |
+| Name, Application/Datastore type, responsibilities, technology | Escaped multiline node labels | Wrapped full labels, never silently omitted | SVG and textual artifact details |
 | External Person/Software System | Nodes outside system subgraph | Outside boundary with current type/name | Source identity and detail sections |
 | Directed interaction and optional protocol | Arrow and escaped description/protocol label | Arrow and full label | SVG and relationship details |
 | IDs and source associations | Stable generated IDs and scope/source comments | Stable artifact IDs/data metadata | Stable anchors, source/scope details |
 | ADR lifecycle/content/links | Existing Mermaid scope; no new ADR promises | Existing SVG scope; no new ADR promises | Existing complete ADR and local links contract |
 
 New fields must be escaped and validated for every format, including owner name, responsibility, technology, protocol and source descriptions. Reject unsupported control characters and invalid references before creating a file. Long content wraps; SVG viewBox/layout must include the boundary, components and relationship labels. The same complete content must be available in printable/textual HTML details.
+
+Internal subtype labels derive from validated `containerType`, independently of the underlying `type: container` abstraction and source-derived external types. An internal container with missing subtype fails export with its artifact ID and a remedy to choose Application or Datastore in the editor. The migration compatibility default is applied to persisted legacy rows before deployment; exporters never invent a category or omit an artifact. Keep general/free-form classification compatibility and the existing package paths.
 
 Mermaid remains a semantic export and does not preserve exact canvas positions. Use the existing supported flowchart/subgraph grammar rather than adding experimental C4 rendering dependencies. Define internal nodes within the owning-system subgraph, then external nodes and all relationships after its end. Use traditional quoted labels, generated line-break separators and individually escaped user fields. See the [official flowchart syntax](https://mermaid.js.org/syntax/flowchart.html).
 
@@ -37,7 +39,8 @@ Parent/general exports remain single-diagram exports. Show a concise scope note 
 
 ## Validation scenarios
 
-- One empty child and one populated child with application/data-store containers, both external types, metadata and protocols.
+- One empty child and one populated child with Application and Datastore labels, persisted containerType values, both external types, metadata and protocols.
+- Subtype changed in an unsaved browser draft versus saved CLI content; missing/unsupported internal subtype rejected with a correction action; source participants retain Person/Software System labels.
 - Every new label field with quotes, angle brackets, ampersands, line breaks, Unicode and unsupported controls.
 - Source rename/reclassification reflected without changing occurrence layout or UUIDs.
 - Browser unsaved child/ADR export captures the draft; CLI exports only saved content.

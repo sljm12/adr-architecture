@@ -4,6 +4,8 @@
 
 **Decisions**: [research.md](./research.md)
 
+**Updated**: 2026-10-01
+
 ## Domain representation
 
 The shared domain remains independent of React Flow. Existing diagram, component, relationship, ADR and link UUIDs remain stable. All coordinates are absolute diagram coordinates. API timestamps are ISO 8601 strings; PostgreSQL stores timestamptz.
@@ -26,22 +28,25 @@ The shared domain remains independent of React Flow. Existing diagram, component
 - A general parent and an ordinary element of type software-system are required. External occurrences resolve to that source, never become owners themselves.
 - Parent/system display names follow the source on load/context refresh; child diagram name remains independently editable after its initial default.
 - The owner association is unique across active and trashed children. A child cannot own another child through an internal container.
+- Saving always targets the child's own ID and retains its own name, kind, boundary and parent/owner IDs. Names and later navigation entry points never determine ownership. Source display refresh must not substitute a parent/owner name for the child's name.
 
 **BoundaryLayout**: position {x, y} and positive finite size {width, height}. It has no separate artifact ID. Its React Flow ID is synthesized from the child diagram UUID, excluded from component collections, and cannot be a relationship or ADR target.
 
 ### Component roles
 
-Extend Component with `role` (element/container/external), `technology` (string or null) and `sourceComponentId` (UUID or null).
+Extend Component with `role` (element/container/external), `containerType` (application/datastore or null), `technology` (string or null) and `sourceComponentId` (UUID or null). `ContainerType` is distinct from the existing Person/Software System C4 type union used for eligible source elements.
 
 | Role | Diagram kind | Type and fields | Identity and layout |
 | --- | --- | --- | --- |
-| element | general | Existing nullable/free-form type remains readable; supported new writes use person/software-system. Technology and source are null. | Existing component UUID and behavior. |
-| container | container | type container; nonblank name (max 200), responsibility in description, and technology (max 200); source null. | New local component UUID; inside system boundary. |
-| external | container | Source is a parent element of type person/software-system; local technology null. Name, description and type are read-only source projections. | New local occurrence UUID, distinct from source UUID; local position/size outside boundary. |
+| element | general | Existing nullable/free-form type remains readable; supported new writes use person/software-system. containerType, technology and source are null. | Existing component UUID and behavior. |
+| container | container | type container; required containerType application or datastore; nonblank name (max 200), responsibility in description, and technology (max 200); source null. | New local component UUID; inside system boundary. |
+| external | container | Source is a parent element of type person/software-system; local containerType and technology null. Name, description and type are read-only source projections. | New local occurrence UUID, distinct from source UUID; local position/size outside boundary. |
 
 An external occurrence references exactly one ordinary source element in the owning parent; source chains, other-parent sources, the owner itself, and duplicate (diagramId, sourceComponentId) pairs are invalid. Source Person/Software System reclassification is allowed when otherwise valid; source reclassification to an unsupported type is blocked while occurrences depend on it. An owner cannot change away from Software System while its child exists.
 
 For existing database columns that require names, the server may maintain an external name/description/type cache on write. Every load/context/export resolves current source values; cache contents never override sources. Child PUT does not edit parent details. An existing occurrence's role and source reference are immutable: replace it explicitly using the normal dependency safeguards.
+
+Application and Datastore are the only internal creation/edit choices. The selected containerType is independent of name and technology; changing it preserves role, type, ID, ownership, endpoints and ADR links and participates in normal history. Parent Person/Software System commands cannot create internal child components. Creation forms default to application; invalid/missing subtype on an internal write is rejected before any partial artifact is persisted.
 
 ### Relationships
 
@@ -60,6 +65,8 @@ No new ADR hierarchy or link table is required. Existing ADRs remain diagram-own
 ### Resolved summaries and source context
 
 Extend DiagramSummary with kind and nullable resolved scope (parentDiagramId, parentDiagramName, softwareSystemId, softwareSystemName, softwareSystemDescription). Creation/update dates keep their existing meaning. CLI and frontend shared response validation must retain these fields.
+
+List transport remains a flat array. Frontend groups active children under the parent UUID, uses resolved parent metadata when a parent summary is absent, and retains contextual headings for child-only filter matches. This is a display projection, not another persisted hierarchy. Save summary upserts target the child ID only; successful child save cannot create or replace a parent entry.
 
 Container availability response: canonical parent/system IDs, availability none/active/trashed, and child summary or null. GET is read-only; POST create-or-open owns mutation.
 
@@ -81,7 +88,7 @@ Restore preserves all artifact UUIDs, timestamps other than updatedAt/trashedAt,
 
 ## PostgreSQL migration design
 
-Add `backend/drizzle/0005_c4_container_diagrams.sql` during implementation. It is additive and should be applied after migrations 0001–0004. No SQL migration is generated by this planning command.
+`backend/drizzle/0005_c4_container_diagrams.sql` is already implemented, additive and applied after migrations 0001–0004. Preserve it. The original scope/role/provenance design is recorded below; the revised subtype requires a new `backend/drizzle/0006_container_component_types.sql`. No SQL migration is generated or applied by this planning command.
 
 ### diagrams
 
@@ -103,6 +110,14 @@ Add `backend/drizzle/0005_c4_container_diagrams.sql` during implementation. It i
 - Index source_component_id for dependency lookup.
 - Local CHECKs enforce role-specific source/technology requirements and container type/description rules. Cross-row parent/source rules are checked under the graph lock.
 
+### Forward subtype migration (0006)
+
+- Add nullable container_type text. Backfill only rows with role container to application; ordinary/external rows remain null. This explicit compatibility default adds a category to formerly generic containers without changing their original type or inferring meaning from metadata. Authors can select Datastore for existing data stores afterward.
+- Replace the named components_c4_role_check transactionally and mirror it in Drizzle schema. Retain all existing role rules and add: container rows require non-null application/datastore; element/external rows require null. Express the non-null requirement explicitly because SQL CHECK does not reject a null-valued predicate alone. See [PostgreSQL CHECK constraints](https://www.postgresql.org/docs/current/ddl-constraints.html#DDL-CONSTRAINTS-CHECK-CONSTRAINTS).
+- Do not regenerate 0005, reclassify general free-form types, rewrite UUIDs or update artifact timestamps as a side effect of backfill. Preserve sizes, boundaries, source/owner associations, endpoints, ADR content and links for active and trashed diagrams.
+- Include containerType in database-to-domain mapping, inserts and ID-preserving update diffs, as well as memory repository behavior. Apply 0006 before deploying runtime schemas that require subtype.
+- Validate both an upgrade from populated 0005 data and a clean install through 0006; invalid role/subtype combinations fail while new application/datastore rows round-trip.
+
 ### relationships
 
 - protocol nullable varchar(200); no changes to existing UUID endpoints.
@@ -111,6 +126,7 @@ Add `backend/drizzle/0005_c4_container_diagrams.sql` during implementation. It i
 ### Existing data and API compatibility
 
 - Existing rows receive kind general, role element, null source/technology/protocol/provenance and no boundary. Legacy free-form types remain exactly as stored.
+- General/legacy omission of containerType normalizes to null. Post-migration responses always include the field. Internal child writes must explicitly provide application/datastore; old child payloads missing it fail with a field-level correction rather than lose metadata. External/general payloads cannot use an internal subtype.
 - Omitted new fields normalize only for general/legacy documents. A PUT of an existing container that omits its required scope/kind must fail; it must never demote it to general.
 - Existing groups retain their representation and fitting rules. Container diagrams cannot contain SystemGroups.
 - Reject unknown feature fields/kinds/roles on writes instead of stripping unrecognized architecture content. Server-derived display fields may be echoed but are resolved again.
@@ -124,6 +140,8 @@ Add `backend/drizzle/0005_c4_container_diagrams.sql` during implementation. It i
 3. Contextual backend validation: canonical owner/source lookup, immutability, active state, source-parent membership, source metadata resolution and dependency blockers.
 4. Repository transaction: lock source parent first; lock affected children in UUID order; reread; validate previous/incoming diff and ADR blockers; apply ID-preserving changes and return a resolved document. Failed writes roll back all rows.
 5. Database constraints backstop ownership, source existence and duplicate associations.
+
+Before registering a successful frontend save, verify response diagram ID, normalized own name, kind and parent/owner IDs match the captured request. Preserve newer draft edits according to the existing revision guard. Response mismatch or failure must leave the draft, child identity and original scope available for retry without writing parent content or publishing a misleading list entry.
 
 A full-document PUT cannot bypass DELETE protections. Omitted ADR-linked artifacts or owner/source components return 409 blockers rather than dropping links. Valid new source/owner associations are never checked in a separate transaction from their insertion.
 

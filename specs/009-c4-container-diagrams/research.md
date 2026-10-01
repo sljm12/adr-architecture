@@ -2,9 +2,11 @@
 
 **Date**: 2026-09-30
 
+**Updated**: 2026-10-01
+
 **Feature**: [spec.md](./spec.md)
 
-## Repository findings
+## Initial repository findings (2026-09-30)
 
 The existing stack and storage remain the implementation base. Research inspected the shared types, schemas, invariants and exporters; the frontend adapter, canvas, inspector, diagram/ADR stores and navigation; the PostgreSQL repository, services, routes and migrations; and DESIGN.md. Two research agents independently reviewed persistence/recovery and editor/export integration.
 
@@ -18,6 +20,19 @@ Concrete risks:
 - Current relationships permit missing labels and undirected connections. Child validation must be stricter while general diagrams retain their behavior.
 - SVG and HTML hardcode the old types, HTML rejects new types, and Mermaid drops responsibilities and technology.
 - Keyboard node movement must commit to domain state; the existing canvas persists positions through drag-stop handling only.
+
+These findings describe the original planning baseline. Foundation and US1 implementation now exists, including 0005, graph write guards and child APIs; see [validation.md](./validation.md) for the recorded implementation outcomes.
+
+## Revision repository findings (2026-10-01)
+
+Two research agents reviewed the current subtype path and the save/list path independently for the amended specification.
+
+- `shared/src/validation/schemas.ts`, `shared/src/domain/invariants.ts` and `backend/drizzle/0005_c4_container_diagrams.sql` require internal role container and type container. There is no persisted Application/Datastore distinction. `C4ArtifactType` and its helpers also drive eligible parent-source lookup, so widening them would risk making internal containers source participants.
+- `frontend/src/components/WorkspaceInspector.tsx` still offers parent Person/Software System creation/edit fields, and `frontend/src/state/diagram-store.ts` has generic component creation without container role/responsibility/technology. Child-specific authoring remains unfinished US2 work.
+- `frontend/src/api/diagram-client.ts` PUTs the complete document to its own ID; store summary registration retains kind/scope, and the adapter spreads original diagram metadata. Backend immutable-scope guards already reject changed kind/parent/owner. No literal "Parent Diagram" assignment was found, so the report is a regression contract rather than a confirmed backend name conversion.
+- `frontend/src/components/SavedDiagramList.tsx` renders summaries as a flat list without level/owner/parent metadata, while `frontend/src/state/diagram-list.ts` filters/sorts individual summaries. This is the confirmed hierarchy gap.
+- The toolbar shows the owner name for a child but needs a separate child-name display and guarded parent return action. Existing save response acceptance needs identity/scope checks before editor/list registration.
+- `shared/src/export/html-snapshot.ts` rejects internal type container through general-only type validation; SVG/HTML/Mermaid labels need role-aware subtype propagation as part of the already-planned child export work.
 
 ## Decisions
 
@@ -119,10 +134,37 @@ Concrete risks:
 
 **Alternatives considered**: A new storage abstraction, collaboration infrastructure, state library or diagram editor is unnecessary.
 
+### 13. Persist an internal subtype without changing the C4 abstraction
+
+**Decision**: Add `ContainerType = application | datastore` and `component.containerType`. Internal containers keep role container and type container and require one subtype; general elements and external occurrences use null. Forms and readable labels expose Application and Datastore. General C4 type/source helpers remain Person/Software System only.
+
+**Rationale**: This separates the existing C4 container abstraction from the requested user-facing choice, retains current source/owner eligibility and allows subtype changes without replacing an artifact or breaking links. A new forward migration 0006 adds the field, backfills existing generic internal rows to application, then replaces the named role CHECK. Drizzle documents named constraints and applying only unapplied migrations; 0005 is already applied and must remain intact. [Named PostgreSQL constraints](https://github.com/drizzle-team/drizzle-orm-docs/blob/main/src/content/docs/pg/indexes-constraints.mdx), [PostgreSQL migrations](https://github.com/drizzle-team/drizzle-orm-docs/blob/main/src/content/docs/pg/migrations.mdx).
+
+**Compatibility assumption**: Existing generic containers contain no prior subtype value to preserve. Application is the explicit migration and new-form default; authors can change existing data stores to Datastore. Change only the new field, preserving old type, names, UUIDs, timestamps, geometry and ADR/relationship links. Do not infer categories from labels/technology. New internal writes missing subtype are rejected rather than defaulted. Record this default in migration/release guidance.
+
+**Alternatives considered**: Replacing type container with application/datastore duplicates the role distinction and changes the established constraint/type consumers. Name-based inference is unreliable. Keeping a permanent third generic choice violates the specification. Leaving old subtypes null and requiring classification before any save/export adds an upgrade interruption and leaves existing artifacts incomplete; the explicit compatibility default keeps them valid.
+
+### 14. Preserve canonical child save identity across all entry points
+
+**Decision**: Retain the existing PUT route and backend immutable-scope checks. Capture and preserve child ID/name/kind/parent/owner/boundary through editing/history/serialization. Verify response ID, normalized own name, kind and parent/owner IDs before accepting saved state or summaries, using the existing save revision guard. Failed responses keep drafts and retry the same child. Parent return uses the child's persisted parent ID through guarded loading.
+
+**Rationale**: Backend ownership is already canonical. The latest navigation origin, source names and list labels must not reassign the child or replace parent content. Source hydration changes display metadata while the child's own editable name remains independent. Regression coverage is needed for repeated save, save-before-navigation, list reopen, refresh and failed retry.
+
+**Alternatives considered**: Recreating the child on save produces duplicates. Saving to the clicked parent ID overwrites the overview. Another child-save endpoint duplicates the existing transaction contract without addressing the confirmed list problem.
+
+### 15. Group library entries by canonical parent while preserving filter semantics
+
+**Decision**: Keep the existing flat summary API and derive nested groups by `scope.parentDiagramId` in frontend list helpers. Filter each diagram by its own name/date, count matches only, and retain parent context for matching children. Sort parent groups and child siblings with existing comparators/UUID tie breakers. An unavailable parent summary uses resolved scope metadata for context and is not a reason to promote a child.
+
+**Rationale**: This implements "saved under the parent" without altering storage identity or introducing another API shape. Native nested lists preserve independent keyboard open/delete actions. Duplicate parent/system names remain safe because grouping uses IDs. A contextual heading does not inflate search result counts.
+
+**Alternatives considered**: A flat list with only a scope badge does not satisfy the requested placement. Name-based grouping merges unrelated architecture. A nested response contract would unnecessarily change frontend/CLI compatibility.
+
 ## Documentation lookup record
 
 - Drizzle: Context7 resolved `/drizzle-team/drizzle-orm-docs`, then fetched transactions, PostgreSQL schema/constraints and conflict documentation outside the sandbox. The first PowerShell `npx` invocation was blocked by execution policy; `npx.cmd` succeeded. No quota failure occurred.
 - React Flow: Context7 resolved `/websites/reactflow_dev` and fetched interaction, node and accessibility references outside the sandbox.
 - Mermaid: Context7 resolved `/mermaid-js/mermaid` and fetched flowchart guidance. An additional query hit Windows argument quoting; official source inspection supplied the empty-subgraph evidence without exceeding the three-command limit.
 - Additional primary sources: PostgreSQL locking/constraints above and the [C4 container](https://c4model.com/diagrams/container) and [Software System](https://c4model.com/abstractions/software-system) references supplied in the specification.
+- Revision lookup on 2026-10-01: Context7 resolved Drizzle ORM to `/drizzle-team/drizzle-orm-docs` and fetched named CHECK constraints and migration guidance outside the sandbox. PowerShell blocked npx.ps1; npx.cmd succeeded without quota failure. The documentation establishes constraint/migration mechanisms; subtype/backfill choices and save/list rules are project design inferences from the amended requirements and repository review.
 - No unresolved technical or product clarifications remain. Source citations establish the mechanisms; the schema, lock protocol and workflow choices are feature-specific design decisions.

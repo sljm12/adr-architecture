@@ -1,6 +1,6 @@
 # Quickstart Validation: C4 Container Diagrams
 
-This guide validates the feature after implementation. Planning does not add the migration, endpoints, tests or UI yet. Use [plan.md](./plan.md) for the requirement matrix, [data-model.md](./data-model.md) for artifact rules, and [contracts/openapi.yaml](./contracts/openapi.yaml) for endpoint shapes.
+This guide validates the complete revised feature after implementation. Foundation and entry-point work, including migration 0005, already exists; see [validation.md](./validation.md) for recorded results. The 2026-10-01 plan update adds no runtime changes or executed implementation checks. Migration 0006 and the revised subtype/save/list behavior remain implementation work. Use [plan.md](./plan.md) for the requirement matrix, [data-model.md](./data-model.md) for artifact rules, and [contracts/openapi.yaml](./contracts/openapi.yaml) for endpoint shapes.
 
 ## Prerequisites
 
@@ -22,11 +22,12 @@ psql $env:DATABASE_URL -v ON_ERROR_STOP=1 -f backend/drizzle/0002_adrs.sql
 psql $env:DATABASE_URL -v ON_ERROR_STOP=1 -f backend/drizzle/0003_system_groups.sql
 psql $env:DATABASE_URL -v ON_ERROR_STOP=1 -f backend/drizzle/0004_component_dimensions.sql
 psql $env:DATABASE_URL -v ON_ERROR_STOP=1 -f backend/drizzle/0005_c4_container_diagrams.sql
+psql $env:DATABASE_URL -v ON_ERROR_STOP=1 -f backend/drizzle/0006_container_component_types.sql
 npm.cmd run build
 npm.cmd run dev
 ```
 
-For an existing validation database, apply only pending migrations in order through its migration runner. The 0005 migration is a planned implementation artifact. Seed an older database before 0005 and verify its IDs, timestamps, groups, relationships and ADR links remain unchanged.
+For an existing validation database, apply only pending migrations in order through its migration runner. Preserve applied 0005; 0006 is a planned implementation artifact. Seed an older database before 0005 and verify its IDs, timestamps, groups, relationships and ADR links remain unchanged. Separately seed a 0005 database with active and trashed children containing generic internal containers, then apply 0006. Verify only their new containerType is backfilled to application, all existing IDs/timestamps/type/details/layout/links persist, and general/external subtypes remain null. Application is the compatibility default; authors can change an existing data store to Datastore afterward.
 
 Open http://localhost:5173; API health is http://localhost:3000/health. Keep DATABASE_URL available to backend/test processes.
 
@@ -44,6 +45,8 @@ Vitest must include shared schema/layout/export, frontend state/adapter/UI, back
 
 Database coverage must exercise concurrent creation, creation versus parent mutation/trash, rollback, source references, whole-document dependency bypass, exact restore batches and ADR writes versus trash. Include existing general/group/ADR/CLI regressions in npm test. Browser checks cover both entry points, external source navigation, dirty diagram/ADR decisions, keyboard movement and recovery. Broaden browser checks when affected flows require it.
 
+For this revision, include subtype schema/role rejection, memory/PostgreSQL round trips, 0005-to-0006 compatibility, stale parent form selections, child identity/scope save response checks, repeated-save retry and grouped list filters/counts. Recorded earlier checks do not establish SC-009/SC-010; capture new implementation results separately.
+
 ## End-to-end validation
 
 ### 1. Prepare a parent
@@ -60,9 +63,11 @@ Expected: one canonical child per source ID, reopened thereafter. A Person/group
 
 ### 3. Model containers and external participants
 
-Add Web application (customer interface, React), Payments service (orchestration, TypeScript) and Payments data store (transaction records, PostgreSQL). Add directed interactions with descriptions and one protocol. Include Customer and Ledger from the parent and connect each to an internal container.
+Use Add component and verify exactly Application and Datastore are offered. Create Web application (Application; customer interface, React), Payments service (Application; orchestration, TypeScript) and Payments data store (Datastore; transaction records, PostgreSQL). Add directed interactions with descriptions and one protocol. Use Include external participant to include Customer and Ledger from the parent and connect each to an internal container.
 
 Expected: internal containers enclosed, people/systems outside, responsibilities/technology/protocol readable. Missing text, unsupported roles, owner-as-external, duplicate sources and external-to-external/boundary links fail clearly without partial artifacts. Parent positions and relationships are not copied or changed.
+
+Expected for SC-009: Software System, Person and Unclassified are unavailable as internal types. Edit a subtype, undo/redo, save/reopen and confirm the chosen value and ID persist. Return to the parent, select Person/Software System in the creation form, then reenter the child: only Application/Datastore remain and stale parent form values cannot create an artifact. Invalid store commands and REST payloads missing subtype or using person/software-system fail without a partial artifact or history change. Existing external inclusion remains available.
 
 ### 4. Check geometry and history
 
@@ -75,6 +80,14 @@ Expected: internal bounds fit; overlapping externals move outside with clearance
 Link ADRs to a container and relationship using existing lifecycle workflows. Leave diagram/ADR edits unsaved. Navigate through parent link, library and an external Software System's Create/Open action; exercise Save, Discard, Cancel and a failed save. Rename sources in the parent and reopen the child.
 
 Expected: canceled/failed navigation preserves work; saves finish before switching; discarded unsaved owners cannot create orphan children. Current source names appear with unchanged occurrence IDs/layout and ADR links. External Software System actions open the source's canonical child. Child library entries show their level, owner and parent.
+
+### 5a. Verify child save placement and list filtering
+
+Give the child its own name, edit it and save twice. Confirm each write uses PUT with the same child UUID and retains kind container and the original scope IDs. Compare saved parent content before/after. Return through the guarded parent action; rename the parent and owner, refresh/reopen the child from the library and save again. Repeat with identical owner/child names under two distinct parents. Simulate a failed save then retry, and inject a wrong-ID/name/kind/scope save response in the frontend regression fixture.
+
+Expected for SC-010: the same named child remains beneath its originating parent, with Container diagram, owner and parent labels; no duplicate/top-level parent entry appears, no automatic "Parent Diagram" name is assigned, and parent architecture content remains unchanged. Wrong responses leave the draft intact and are not registered as a saved summary. Save-before-navigation uses the same child path.
+
+Filter by a child-only name/date match and then by a parent-only match. Check result counts, clear filters and use only the keyboard to open/delete a child. Expected: matching children retain contextual parent headings even when the parent does not match; headings do not inflate counts, nonmatching children do not appear as matches, and clearing filters restores the nested hierarchy. Sorting remains deterministic and duplicate names do not merge parents. A temporarily unavailable parent summary retains parent context without promoting the child.
 
 ### 6. Verify dependency safeguards
 
@@ -97,7 +110,7 @@ npm.cmd run cli -- diagrams list --format json
 npm.cmd run cli -- diagrams export <saved-child-uuid> --output .\payments-containers.zip
 ```
 
-Choose a nonexistent output file. Expected: scope/boundary, roles, metadata, protocols and local ADR links are retained. Browser HTML reflects its captured draft; CLI uses saved content. Empty child SVG/HTML retains its boundary; Mermaid reports EMPTY_CONTAINER_MERMAID with alternatives and produces no file. Invalid references/unsupported content fail clearly. Parent exports identify single-diagram scope and unbundled children. See [export-contract.md](./contracts/export-contract.md).
+Choose a nonexistent output file. Expected: the child's own name and canonical scope/boundary, roles, Application/Datastore labels and containerType, metadata, protocols and local ADR links are retained. Browser HTML reflects its captured draft, including a changed subtype; CLI uses saved content. Empty child SVG/HTML retains its boundary; Mermaid reports EMPTY_CONTAINER_MERMAID with alternatives and produces no file. Invalid references/unsupported or missing subtype fail clearly. Parent exports identify single-diagram scope and unbundled children. See [export-contract.md](./contracts/export-contract.md).
 
 ## Usability and compatibility evidence
 

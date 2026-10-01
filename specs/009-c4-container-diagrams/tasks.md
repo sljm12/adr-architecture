@@ -8,6 +8,10 @@
 
 **Organization**: Setup, shared foundations, four user-story increments in specification priority order, then cross-cutting validation. This is an existing application: retain its stack, migrations, package format, general diagrams, groups, and ADR workflows.
 
+**Updated**: 2026-10-02 against the revised plan/contracts for FR-007, FR-011, FR-023, FR-024, SC-009, and SC-010. Preserve completed T001–T028 and their recorded evidence in [validation.md](./validation.md); that evidence does not establish the revised subtype/save/list requirements. All remaining tasks are unchecked and renumbered in execution order. Original pending T029–T040 become T029–T047, T041–T048 become T048–T060, T049–T072 become T061–T084, and T073–T078 become T085–T090.
+
+**Status**: 90 tasks: 28 previously completed, 62 outstanding. Migration 0005 remains unchanged; subtype work uses a forward 0006 migration. The prior combined browser run was inconclusive and the full feature browser gate remains outstanding in T088.
+
 ## Format: `[ID] [P?] [Story] Description`
 
 - `[P]` means tasks can run concurrently with other marked tasks in the same stated batch, in different files, after their prerequisites are complete. It does not waive phase dependencies.
@@ -76,53 +80,67 @@
 
 **Checkpoint**: US1 is demonstrable with saved/empty children and prepared external fixtures. Full Restore entry-point integration is completed in US4; the MVP checkpoint is not a release waiver for recovery or export safety.
 
+**Revision prerequisite**: The shared subtype extension is assigned to US2, the earliest story needing it. Complete T029–T041 before later stories consume revised component schemas. Do not reopen completed foundation tasks or treat their old fixtures as proof of subtype compatibility.
+
 ## Phase 4: User Story 2 — Describe Containers and Communication (Priority: P1)
 
-**Goal**: Author complete C4 container content with readable metadata, source-linked externals, deterministic geometry, and ordinary undo/redo.
+**Goal**: Author Application/Datastore containers with readable metadata, source-linked externals, deterministic geometry, and ordinary undo/redo. Extend the completed shared foundation with the subtype required by this story and later persistence/export work.
 
-**Independent Test**: Model a web application, service, and data store with responsibilities/technology, directed interactions, and a parent Person and Software System outside the boundary. Move/resize containers, displace an overlapping external, undo/redo, and save/reopen. Check stable IDs, clear errors, readable labels, persistent keyboard geometry, and unchanged parent layout/relationships.
+**Independent Test**: On a prepared child, verify exactly Application and Datastore in add/edit controls; model a web application, service, and data store with responsibilities/technology and directed interactions. Include a parent Person and Software System outside the boundary. Change a subtype, move/resize, undo/redo, save/reopen, and verify IDs, subtype, links, complete labels, and unchanged parent content. Switch from a parent Person/Software System form and confirm its draft cannot carry into child creation.
 
 ### Tests for User Story 2
 
-- [ ] T029 [P] [US2] Add child save/source-context contract and database round-trip cases in `backend/tests/contract/container-editing.test.ts` and `backend/tests/persistence/container-editing.test.ts` for required metadata/protocol, read-only source projection, owner/duplicate/other-parent/source-chain rejection, invalid external-to-external/boundary endpoints, invalid geometry, and no partial writes.
-- [ ] T030 [P] [US2] Add atomic add/edit/move/resize/remove, relationship validation, bounded history, UUID retention, fitted boundary, displaced external, and invalid-command no-dirty/no-history cases in `frontend/tests/container-diagram-store.test.ts`.
-- [ ] T031 [P] [US2] Add adapter boundary exclusion, roles/metadata/protocol, absolute positions, and pointer/keyboard geometry round-trip cases in `frontend/tests/react-flow-container.test.ts`.
-- [ ] T032 [P] [US2] Add container form, source picker, duplicate-source explanation, read-only external details, directed relationship form, long metadata, and invalid connection feedback cases in `frontend/tests/container-diagram-ui.test.tsx`.
-- [ ] T033 [US2] Extend `e2e/tests/container-diagrams.spec.ts` with three-container modeling, parent-source inclusion, optional protocol, keyboard/pointer movement and resizing, external-clearance rejection, boundary displacement with one-step undo/redo, and save/reopen assertions before implementing the corresponding editor behavior.
+- [ ] T029 [P] [US2] Extend `shared/tests/container-diagrams.test.ts` and `shared/tests/compatibility.test.ts` with application/datastore role rules, missing/null/unsupported subtype rejection, general/external null normalization, old child write rejection, unchanged legacy free-form types, and owner/source helpers that still accept only parent Person/Software System elements.
+- [ ] T030 [P] [US2] Extend `backend/tests/persistence/container-migration.test.ts` for clean install through 0006 and populated 0005-to-0006 upgrade: seed active/trashed generic containers, general/free-form elements, external occurrences, relationships and ADR links; assert application backfill only for internal rows, null for other roles, explicit NOT NULL subtype CHECK behavior, unchanged IDs/type/timestamps/details/layout/links, and both new subtype round trips.
+- [ ] T031 [P] [US2] Add child PUT/source-context contract and memory/PostgreSQL round-trip cases in `backend/tests/contract/container-editing.test.ts` and `backend/tests/persistence/container-editing.test.ts` for both subtypes, stable subtype changes, required metadata/protocol, missing/unsupported subtype and forbidden internal Person/Software System types, read-only sources, owner/duplicate/other-parent/source-chain rejection, invalid geometry/endpoints, rollback, and no parent writes.
+- [ ] T032 [P] [US2] Add atomic add/edit/subtype/move/resize/remove, relationship validation, bounded history, UUID/ADR endpoint retention, fitted boundary/displaced external, and rejected generic parent commands/no-dirty/no-history cases in `frontend/tests/container-diagram-store.test.ts`.
+- [ ] T033 [P] [US2] Add boundary exclusion, subtype/role/metadata/protocol retention, child own-name/kind/scope preservation, absolute positions, and pointer/keyboard geometry round-trip cases in `frontend/tests/react-flow-container.test.ts`.
+- [ ] T034 [P] [US2] Add exactly-two-choice add/edit forms, Application default, persisted Datastore selection, document/role switch draft reset, separate source picker/read-only external details, duplicate sources, long labels, directed relationships, and invalid-command feedback cases in `frontend/tests/container-diagram-ui.test.tsx`.
+- [ ] T035 [US2] Extend `e2e/tests/container-diagrams.spec.ts` with Application/Datastore-only creation/editing, subtype undo/redo/save/reopen, stale parent form selection, three-container modeling, external inclusion, optional protocol, keyboard/pointer geometry, clearance rejection, and one-step boundary/displacement undo before implementing the editor behavior.
 
 ### Implementation for User Story 2
 
-- [ ] T034 [US2] Add validated container/external/relationship commands in `frontend/src/state/diagram-store.ts` and extend `frontend/src/state/history.ts` so complete metadata, node sizing, fitting, and external displacement commit as one bounded domain snapshot; failed commands leave document/history unchanged, and IDs survive undo/redo.
-- [ ] T035 [US2] Complete child edit validation and persistence in `backend/src/services/diagram-service.ts`, `backend/src/services/container-context.ts`, and `backend/src/persistence/diagram-repository.ts`, resolving current eligible sources under the graph transaction, overwriting display caches, retaining local layout, and rejecting invalid incoming geometry instead of repairing it on save.
-- [ ] T036 [US2] Route completed pointer drag/resize and keyboard node movement through the same domain command in `frontend/src/components/DiagramCanvas.tsx` and `frontend/src/adapters/react-flow/diagram-adapter.ts`; group pointer gestures, persist keyboard changes, restore rejected external geometry, and keep boundary/ADR focus behavior (depends on T034).
-- [ ] T037 [US2] Render wrapped complete Container/Person/Software System metadata and relationship protocol in `frontend/src/components/ComponentNode.tsx`, `frontend/src/components/RelationshipEdge.tsx`, and `frontend/src/styles.css`; grow domain node dimensions when needed before fitting the boundary, preserving accessible badges and avoiding clipped content (depends on T036).
-- [ ] T038 [US2] Add atomic Add/Edit container forms and container-specific toolbar/inspector modes in `frontend/src/components/DiagramToolbar.tsx` and `frontend/src/components/WorkspaceInspector.tsx`, requiring name/responsibilities/technology and hiding general-diagram group/type commands in child views (depends on T037).
-- [ ] T039 [US2] Add the Include external participant picker and read-only source inspector using fresh context in `frontend/src/components/WorkspaceInspector.tsx` and `frontend/src/state/diagram-store.ts`; exclude the owner, disable already-included sources, distinguish duplicate labels by IDs, and create local occurrence identities/layout without copying parent relationships (depends on T038).
-- [ ] T040 [US2] Add directed-only child interaction creation/editing with required description and optional protocol in `frontend/src/components/DiagramCanvas.tsx`, `frontend/src/components/WorkspaceInspector.tsx`, and `frontend/src/state/diagram-store.ts`; reject unsupported connections before persisting an edge and retain existing confirmed removal/blocker behavior; verify T029–T033 (depends on T039).
+- [ ] T036 [US2] Add ContainerType and nullable component.containerType to `shared/src/domain/types.ts`, role-aware subtype label/validation helpers to `shared/src/domain/c4.ts`, role rules to `shared/src/domain/invariants.ts` and `shared/src/validation/schemas.ts`, and public exports to `shared/src/index.ts`; keep C4ArtifactType/source eligibility unchanged, require explicit internal subtype, normalize omission only for general legacy input, and update `shared/tests/container-fixtures.ts` and `shared/tests/html-export-fixtures.ts` with valid subtypes without changing identities (depends on T029–T035 test authoring).
+- [ ] T037 [US2] Add `backend/drizzle/0006_container_component_types.sql` and mirror it in `backend/src/persistence/schema.ts`: nullable container_type, backfill role container only to application without timestamp/type changes, replace components_c4_role_check transactionally retaining prior rules, explicitly require non-null application/datastore for containers and null for element/external, and preserve applied 0005 (depends on T036).
+- [ ] T038 [US2] Round-trip containerType through memory/PostgreSQL reads, inserts and ID-preserving updates in `backend/src/persistence/diagram-repository.ts`; retain scope/boundary/source fields and creation times, and verify clean-install/upgrade compatibility and rejection constraints from T030 against an isolated validation schema (depends on T037).
+- [ ] T039 [US2] Add validated container/subtype/external/relationship commands in `frontend/src/state/diagram-store.ts` and extend `frontend/src/state/history.ts` so required metadata, subtype, sizing, fitted boundary, and displaced externals commit as one bounded snapshot; reject parent-type creation/reclassification in child documents before mutation, and preserve child own name/kind/scope, artifact IDs, endpoints and ADR links across history (depends on T038).
+- [ ] T040 [US2] Complete child edit validation/persistence in `backend/src/services/diagram-service.ts`, `backend/src/services/container-context.ts` and `backend/src/persistence/diagram-repository.ts`; require both allowed subtypes, resolve eligible sources under the existing graph transaction, overwrite display caches, retain local layout, reject invalid geometry rather than repair on save, and preserve immutable scope/dependency guards (depends on T039).
+- [ ] T041 [US2] Retain normalized containerType in saved/loaded child parsing and PUT serialization in `frontend/src/api/diagram-client.ts` using the revised shared schema; preserve child ID/name/kind/scope/boundary, send explicit subtype, and expose field-level corrections without stripping unsupported content; run T029–T031 before consumers adopt the revised response shape (depends on T040).
+- [ ] T042 [US2] Route completed pointer drag/resize and keyboard movement through one domain command in `frontend/src/components/DiagramCanvas.tsx` and `frontend/src/adapters/react-flow/diagram-adapter.ts`; retain subtype and child scope metadata, group pointer gestures, persist keyboard changes, restore rejected external geometry, and preserve boundary/ADR focus behavior (depends on T041).
+- [ ] T043 [US2] Render wrapped Application/Datastore and source-derived Person/Software System metadata plus relationship protocol in `frontend/src/components/ComponentNode.tsx`, `frontend/src/components/RelationshipEdge.tsx` and `frontend/src/styles.css`; use role-aware helpers, grow domain dimensions before boundary fitting, and avoid clipping complete content (depends on T042).
+- [ ] T044 [US2] Add atomic internal forms and child toolbar/inspector modes in `frontend/src/components/DiagramToolbar.tsx` and `frontend/src/components/WorkspaceInspector.tsx`: exactly Application/Datastore in add/edit, Application default, retained selected subtype, required name/responsibilities/technology, and no general group/type commands in child views (depends on T043).
+- [ ] T045 [US2] Reset add/edit drafts on document ID/kind or selected-role changes in `frontend/src/components/WorkspaceInspector.tsx` and `frontend/src/components/DiagramWorkspace.tsx`; derive controls from current domain context, prevent stale parent Person/Software System values from reaching internal commands, and keep external details read-only (depends on T044).
+- [ ] T046 [US2] Add Include external participant using fresh context in `frontend/src/components/WorkspaceInspector.tsx` and `frontend/src/state/diagram-store.ts`; exclude owner, disable included sources, distinguish duplicate labels by IDs, and create local occurrence IDs/layout with null subtype/technology and no copied parent relationships (depends on T045).
+- [ ] T047 [US2] Add directed-only child interaction creation/editing with required description and optional protocol in `frontend/src/components/DiagramCanvas.tsx`, `frontend/src/components/WorkspaceInspector.tsx` and `frontend/src/state/diagram-store.ts`; reject unsupported endpoints before persisting an edge, retain confirmed removal/blockers, and verify T029–T035 including SC-009 (depends on T046).
 
-**Checkpoint**: US2 is independently testable on a prepared child, and the US1 workflow now leads to a useful editable container diagram.
+**Checkpoint**: Both subtypes persist through migration, editor/history, adapter and API; only two internal choices are available and external inclusion remains a separate workflow. A prepared child supports the independent acceptance test.
 
 ## Phase 5: User Story 3 — Navigate and Continue Without Losing Context (Priority: P2)
 
-**Goal**: Restore saved child content, show current owner/source context, and guard every navigation path against losing diagram or ADR drafts.
+**Goal**: Save the same named child under its canonical parent, render the library hierarchy, restore current source context, and guard every navigation path against losing diagram/ADR drafts.
 
-**Independent Test**: Save a populated child, return to the parent, rename/move its owner and a source participant, refresh, and reopen through both the owner and library. Verify current source names and unchanged IDs/layout/links. Exercise Save/Discard/Cancel and failed save for dirty diagrams and ADRs through parent, library, and external-system entry points.
+**Independent Test**: From a named parent, rename/edit/save its child twice and verify PUT uses the same child ID, its own name/kind/scope persist, one entry appears beneath that parent, and parent content is unchanged. Repeat after refresh/library reopen, save-before-navigation, parent/owner rename, identical names across parents, failed save/retry, and malformed save responses. Exercise child-only/parent-only name/date filters, matching counts, sorting, missing parent summaries, keyboard actions, source refresh, and Save/Discard/Cancel.
 
 ### Tests for User Story 3
 
-- [ ] T041 [P] [US3] Add resolved GET/active-list/trash-list/source-refresh contract cases in `backend/tests/contract/container-navigation.test.ts` for duplicate owner names, renamed/reclassified eligible sources, independent child names/layout, stable timestamps/IDs, and broken contextual references.
-- [ ] T042 [P] [US3] Add parent/library/external navigation, combined diagram/ADR dirty states, failed-save/cancel retention, edits during loading, out-of-order responses, selection/focus reset, and source refresh outside history cases in `frontend/tests/container-diagram-navigation.test.tsx`.
-- [ ] T043 [US3] Extend `e2e/tests/container-diagrams.spec.ts` with populated-child refresh/reopen, library search/filter labels, owner/source rename and regroup/reposition, parent owner highlighting, and Save/Discard/Cancel/failed-save browser scenarios.
+- [ ] T048 [P] [US3] Add resolved GET/flat active-list/trash-list and repeated child PUT contract cases in `backend/tests/contract/container-navigation.test.ts` for independently named children, persisted subtypes, stable ID/kind/scope/creation times, unchanged parent content, names duplicated across parents, eligible source rename/reclassification, and broken references.
+- [ ] T049 [P] [US3] Add ordinary/repeated save, save-before-navigation, refresh/library reopen, failed save/retry and wrong-ID/name/kind/parent/owner response cases in `frontend/tests/container-diagram-navigation.test.tsx`; assert same child PUT path, no generic-create call or Parent Diagram assignment, unchanged parent content, child-only summary upsert, newer-edit retention, diagram/ADR dirty guards, stale load rejection and focus reset.
+- [ ] T050 [P] [US3] Extend `frontend/tests/diagram-list.test.ts` with UUID-based groups, duplicate parent/owner/child names, parent-only/child-only own-name/date matches, contextual headings excluded from counts, missing-parent fallback, deterministic group/sibling sorting with UUID ties, clear filters, invalid ranges, and immutable summary input.
+- [ ] T051 [P] [US3] Extend `frontend/tests/saved-diagram-list.test.tsx` with nested native lists, child own-name/level/owner/parent accessible labels, unavailable-parent context, child-only results/counts, successful-save single-row reconciliation, keyboard open/delete actions, focus/selection and existing no-results/error behavior.
+- [ ] T052 [US3] Extend `e2e/tests/container-diagrams.spec.ts` with named child/repeated saves, parent content comparison, save-before-navigation, refresh/library reopen, parent/owner/source rename/regroup, identical names under separate parents, failed-save retry, nested filters/counts/sorting, and Save/Discard/Cancel before implementing the save/list changes.
 
 ### Implementation for User Story 3
 
-- [ ] T044 [US3] Resolve current scope/source details for active and trash summaries and saved child GET in `backend/src/services/diagram-service.ts`, `backend/src/services/container-context.ts`, and `backend/src/api/diagram-routes.ts`; batch hydration, preserve independently editable child names/local geometry, and avoid manufacturing local edits on source rename.
-- [ ] T045 [US3] Retain kind/scope summary fields and expose searchable/filterable diagram level, owner, parent, and stable-ID distinctions in `frontend/src/api/diagram-client.ts`, `frontend/src/state/diagram-list.ts`, `frontend/src/components/SavedDiagramList.tsx`, and `frontend/src/components/saved-diagram-list.css` without changing the list-array contract (depends on T044).
-- [ ] T046 [US3] Extend the T025 coordinator to all parent, library, new-diagram, and external-source navigation in `frontend/src/components/DiagramWorkspace.tsx`, `frontend/src/components/DiagramSwitchDialog.tsx`, `frontend/src/state/diagram-store.ts`, and `frontend/src/state/adr-store.ts`; guard both drafts, retain failed intent, re-guard revision changes during load, and highlight the owner/focus the heading after successful parent return (depends on T045).
-- [ ] T047 [US3] Separate fresh source context from local geometry/history in `frontend/src/state/diagram-store.ts` and `frontend/src/components/WorkspaceInspector.tsx`; refresh owner/external names on load/context refresh, preserve dirty local edits and occurrence IDs, and offer guarded parent navigation to edit read-only source details (depends on T046).
-- [ ] T048 [US3] Extend shared-response parsing and diagram listing in `cli/src/api-client.ts`, `cli/src/diagrams-command.ts`, `cli/tests/api-client.test.ts`, and `cli/tests/diagrams-command.test.ts` to preserve child kind/scope and owner/parent identity with legacy compatibility; verify T041–T043 and saved reopen across clients (depends on T047).
+- [ ] T053 [US3] Resolve current scope/source details for saved child GET and flat active/trash summaries in `backend/src/services/diagram-service.ts`, `backend/src/services/container-context.ts` and `backend/src/api/diagram-routes.ts`; batch hydration, preserve child own name/subtype/local geometry/creation time, and retain existing PUT immutable-scope guards without manufacturing source-refresh edits.
+- [ ] T054 [US3] Retain summary kind/scope and full child name/subtype/boundary in `frontend/src/api/diagram-client.ts` and summary construction in `frontend/src/state/diagram-store.ts`; ensure list/save/load all share normalized schemas and summary replacement is keyed by the child's UUID (depends on T053).
+- [ ] T055 [US3] Verify save response ID, trimmed own name, kind and canonical parent/owner IDs against the captured request before editor/list registration in `frontend/src/state/diagram-store.ts`; retain existing newer-revision guard, drafts and retry intent on mismatch/failure, block overlapping save/navigation, and retry PUT of the same child without generic creation or parent-content replacement (depends on T054).
+- [ ] T056 [US3] Derive nested library groups in `frontend/src/state/diagram-list.ts` from the full flat summary set keyed by scope.parentDiagramId; filter each own name/date first, count matches only, retain nonmatching parent context for child matches, exclude nonmatching siblings, reuse current comparators/UUID ties, use scope fallback when the parent is absent, and preserve invalid-range behavior (depends on T055).
+- [ ] T057 [US3] Render nested native lists and contextual parent headings in `frontend/src/components/SavedDiagramList.tsx` and `frontend/src/components/saved-diagram-list.css`; show child own name/Container diagram/owner/parent in accessible open/delete actions, indicate unavailable parents without promoting children, and retain counts, selection, last-saved feedback, no-results and DESIGN.md styles (depends on T056).
+- [ ] T058 [US3] Extend the T025 coordinator across parent/library/new-diagram/external-source navigation in `frontend/src/components/DiagramWorkspace.tsx`, `frontend/src/components/DiagramSwitchDialog.tsx`, `frontend/src/components/DiagramToolbar.tsx`, `frontend/src/state/diagram-store.ts` and `frontend/src/state/adr-store.ts`; apply T055 to Save-before-navigation, guard both drafts, retain failed intent, re-guard changes during load, show child own name separately from owner, and return using persisted scope.parentDiagramId with owner highlight/heading focus (depends on T057).
+- [ ] T059 [US3] Separate source context from local edits/history in `frontend/src/state/diagram-store.ts` and `frontend/src/components/WorkspaceInspector.tsx`; refresh owner/external display names without altering child own name/kind/scope/subtype/geometry/IDs, and provide guarded parent navigation to edit read-only source details (depends on T058).
+- [ ] T060 [US3] Extend response parsing and flat listing in `cli/src/api-client.ts`, `cli/src/diagrams-command.ts`, `cli/tests/api-client.test.ts` and `cli/tests/diagrams-command.test.ts` to retain child own name/kind/scope/subtype with legacy compatibility; verify T048–T052 and SC-010 across save/reopen entry points (depends on T059).
 
-**Checkpoint**: Navigation and reopening preserve both architecture data and current source context. Stories can be checked independently using saved fixtures; actual navigation shares the US1 coordinator.
+**Checkpoint**: One named child stays under its original parent across every save/load entry point, filtering keeps parent context without inflating matches, and failed saves preserve work. No list API or save endpoint is added.
 
 ## Phase 6: User Story 4 — Preserve Decisions and Recoverable Data (Priority: P2)
 
@@ -132,33 +150,33 @@
 
 ### Tests for User Story 4
 
-- [ ] T049 [P] [US4] Add dependency endpoint and PUT/DELETE safeguard contract cases in `backend/tests/contract/container-dependencies.test.ts` for active/trashed owning children, recoverable source occurrences, allowed eligible source reclassification, blocked invalid reclassification, ADR-linked local removals, and typed next-action feedback.
-- [ ] T050 [P] [US4] Add child ADR lifecycle/link/replacement/activity contract cases in `backend/tests/contract/container-adrs.test.ts` proving stable local container/occurrence/relationship targets, no inherited parent links, retained replacement rules, and rejected boundary or inactive-graph writes.
-- [ ] T051 [P] [US4] Add trash-impact, confirmed DELETE 204, bodyless legacy delete, TRASH_IMPACT_CHANGED, independent Restore, RESTORE_REQUIRED, exact parent batch, previous-trash preservation, and failure/rollback contract cases in `backend/tests/contract/container-recovery.test.ts`.
-- [ ] T052 [P] [US4] Add real PostgreSQL trash/restore provenance, broken-source rollback, source deletion/retyping versus occurrence writes, changed-impact versus creation, ADR mutation versus parent/child trash, and stable-link recovery cases in `backend/tests/persistence/container-recovery.test.ts`; coordinate competing transactions deterministically rather than relying on timing sleeps.
-- [ ] T053 [P] [US4] Add named multi-diagram confirmation, current affected child/ADR dirty guards, cancellation, changed-impact reconfirmation, failed operations, full list reconciliation, Restore entry actions, and dependency feedback cases in `frontend/tests/container-diagram-recovery.test.tsx`.
-- [ ] T054 [P] [US4] Add validated Mermaid/SVG/HTML content/escaping/empty-child/offline-link/package-compatibility cases in `shared/tests/container-export.test.ts`, covering every new label, long/multiline/Unicode content, unsupported controls/roles/references, source IDs, visible boundary, protocol, and parent single-diagram scope notes.
-- [ ] T055 [P] [US4] Add immutable unsaved child/ADR draft capture, fresh-context overlay, pending local source additions, source-fetch failure, scope mismatch, and editor-retention cases in `frontend/tests/container-html-export.test.tsx`.
-- [ ] T056 [P] [US4] Add saved-only container export, field retention, invalid-context/no-file failure, empty-child HTML success, and general-package regressions in `cli/tests/container-export-command.test.ts` and `backend/tests/container-export.test.ts`.
-- [ ] T057 [US4] Extend `e2e/tests/container-diagrams.spec.ts` with ADR lifecycle/linking, protected removals/retyping, independently trashed child versus parent cascade/restore, owner Restore through both entry points, affected unsaved child/ADR decisions, and offline HTML/Mermaid outcomes before implementing recovery/export integration.
+- [ ] T061 [P] [US4] Add dependency endpoint and PUT/DELETE safeguard contract cases in `backend/tests/contract/container-dependencies.test.ts` for active/trashed owning children, recoverable source occurrences, allowed eligible source reclassification, blocked invalid reclassification, ADR-linked local removals, and typed next-action feedback.
+- [ ] T062 [P] [US4] Add child ADR lifecycle/link/replacement/activity contract cases in `backend/tests/contract/container-adrs.test.ts` proving stable local container/occurrence/relationship targets, no inherited parent links, retained replacement rules, and rejected boundary or inactive-graph writes.
+- [ ] T063 [P] [US4] Add trash-impact, confirmed DELETE 204, bodyless legacy delete, TRASH_IMPACT_CHANGED, independent Restore, RESTORE_REQUIRED, exact parent batch, previous-trash preservation, and failure/rollback contract cases in `backend/tests/contract/container-recovery.test.ts`.
+- [ ] T064 [P] [US4] Add real PostgreSQL trash/restore provenance, broken-source rollback, source deletion/retyping versus occurrence writes, changed-impact versus creation, ADR mutation versus parent/child trash, and stable-link recovery cases in `backend/tests/persistence/container-recovery.test.ts`; coordinate competing transactions deterministically rather than relying on timing sleeps.
+- [ ] T065 [P] [US4] Add named multi-diagram confirmation, current affected child/ADR dirty guards, cancellation, changed-impact reconfirmation, failed operations, full list reconciliation, Restore entry actions, and dependency feedback cases in `frontend/tests/container-diagram-recovery.test.tsx`.
+- [ ] T066 [P] [US4] Add validated Mermaid/SVG/HTML content/escaping/empty-child/offline-link/package-compatibility cases in `shared/tests/container-export.test.ts`, covering Application/Datastore labels and containerType, child own-name/canonical scope, missing/unsupported subtype rejection, every new label, long/multiline/Unicode content, unsupported controls/roles/references, source IDs, visible boundary, protocol, and parent single-diagram scope notes.
+- [ ] T067 [P] [US4] Add immutable unsaved child/ADR draft and changed-subtype capture, fresh-context overlay that retains own name/scope/containerType, pending local source additions, source-fetch failure, scope mismatch, and editor-retention cases in `frontend/tests/container-html-export.test.tsx`.
+- [ ] T068 [P] [US4] Add saved-only container export, both subtype round trips and labels, own-name/canonical-scope retention, unsaved browser-versus-saved CLI subtype comparison, field retention, invalid-context/no-file failure, empty-child HTML success, and general-package regressions in `cli/tests/container-export-command.test.ts` and `backend/tests/container-export.test.ts`.
+- [ ] T069 [US4] Extend `e2e/tests/container-diagrams.spec.ts` with ADR lifecycle/linking, protected removals/retyping, independently trashed child versus parent cascade/restore, owner Restore through both entry points, affected unsaved child/ADR decisions, and offline HTML/Mermaid outcomes with both subtype labels and the child's own name/scope before implementing recovery/export integration.
 
 ### Implementation for User Story 4
 
-- [ ] T058 [US4] Surface diagram blockers alongside existing ADR/relationship/group blockers in dependency endpoints and inspector/remove flows in `backend/src/api/diagram-routes.ts`, `frontend/src/api/diagram-client.ts`, `frontend/src/components/WorkspaceInspector.tsx`, and `frontend/src/state/diagram-store.ts`; name affected active/recoverable children or occurrences and supported next actions, and prevent owner retyping without overwriting current drafts.
-- [ ] T059 [US4] Integrate container/external/relationship targets with existing ADR picker, summaries, counts, lifecycle, and undo context in `frontend/src/components/AdrLinkPicker.tsx`, `frontend/src/components/ComponentAdrSummary.tsx`, `frontend/src/components/RelationshipAdrSummary.tsx`, and `frontend/src/state/adr-store.ts`; keep links local and stable, exclude the synthetic boundary, and retain parent ADR isolation.
-- [ ] T060 [US4] Implement locked trash-impact enumeration and batch trash in `backend/src/persistence/diagram-repository.ts` and `backend/src/services/diagram-service.ts`: recheck the confirmed root/active-child ID set, write fresh common batch/root provenance only to those rows, retain previously trashed child markers, and roll back changed-impact/failure cases.
-- [ ] T061 [US4] Implement exact batch restoration and independent-child restoration in `backend/src/persistence/diagram-repository.ts` and `backend/src/services/diagram-service.ts`, checking active parent/valid sources for child restore, validating the whole batch, preserving UUIDs/content/links/layout, and clearing only restored provenance (depends on T060).
-- [ ] T062 [US4] Wire trash-impact, optional confirmedDiagramIds DELETE, and resolved-document restore in `backend/src/api/diagram-routes.ts` and `backend/src/api/recovery-routes.ts`, preserving DELETE 204, restore response shape, and legacy bodyless deletes with no affected children; return actionable TRASH_IMPACT_CHANGED/PARENT_INACTIVE errors (depends on T061).
-- [ ] T063 [US4] Extend recovery API calls and state reconciliation in `frontend/src/api/diagram-client.ts` and `frontend/src/state/diagram-store.ts` to refresh every affected active/trash summary, clear deletion filters after restore, preserve error/retry state, and exit an affected editor/reset ADR context only after successful mutation (depends on T062).
-- [ ] T064 [US4] Apply a single named trash-impact confirmation and dirty-work coordinator across `frontend/src/components/DiagramWorkspace.tsx`, `frontend/src/components/SavedDiagramList.tsx`, `frontend/src/components/RecoveryControls.tsx`, and `frontend/src/components/DiagramDeletionUnsavedDialog.tsx`; protect any currently edited affected child/ADR, require fresh confirmation after changed impact, and preserve drafts/view on cancel or failure (depends on T063).
-- [ ] T065 [US4] Complete native Restore container diagram and double-click restoration confirmation in `frontend/src/components/WorkspaceInspector.tsx`, `frontend/src/components/DiagramWorkspace.tsx`, and `frontend/src/components/DiagramCanvas.tsx`, using the canonical child summary and guarded restore/load flow without replacement or stale switches (depends on T064).
-- [ ] T066 [US4] Extend `shared/src/export/mermaid-export.ts` for validated populated child scope/source comments, escaped full multiline container metadata, labeled system subgraph, external nodes/relationships after its end, and protocol; return actionable EMPTY_CONTAINER_MERMAID for empty children and add a parent single-diagram/unbundled-child scope note without dummy nodes.
-- [ ] T067 [US4] Extend `shared/src/export/svg-layout.ts` and `shared/src/export/svg-export.ts` for empty/populated system boundaries, current owner/type/source metadata, wrapped full responsibilities/technology/protocol, stable artifact data IDs, accessible scope text, and a viewBox covering every boundary/node/relationship label; preserve general/group rendering (depends on T066).
-- [ ] T068 [US4] Extend `shared/src/export/html-snapshot.ts`, `shared/src/export/diagram-page.ts`, `shared/src/export/styles.ts`, and `shared/src/export/html-package.ts` to retain all child/scope/source fields, printable full details, empty-state boundary, stable local ADR anchors, and explicit single-diagram scope; keep existing ZIP paths/offline links and reject unsupported content before file generation (depends on T067).
-- [ ] T069 [US4] Integrate immutable browser draft/ADR capture and fresh same-scope container-context resolution in `frontend/src/components/ExportButton.tsx` and `frontend/src/api/export-client.ts` using `frontend/src/api/diagram-client.ts`; overlay only authoritative source display fields, validate references including unsaved new occurrences, and preserve draft/view with no download on failure (depends on T068).
-- [ ] T070 [US4] Integrate saved resolved child documents/ADRs into `cli/src/api-client.ts` and `cli/src/export-command.ts`, preserving every new field and existing overwrite/error behavior; generate the existing complete HTML ZIP without recursive parent/child packages or live-app links (depends on T068).
-- [ ] T071 [US4] Use consistent source-resolved documents in `backend/src/services/export-service.ts` and `backend/src/api/export-routes.ts`, sharing `backend/src/services/container-context.ts`; reject inactive/broken graphs and map empty-child Mermaid to 422 EMPTY_CONTAINER_MERMAID before producing files (depends on T066).
-- [ ] T072 [US4] Complete DESIGN.md styling, visible focus, readable diagram-level/type labels, native Create/Open/Restore controls, live progress/errors, accessible boundary description, and non-nested ADR interactions in `frontend/src/styles.css`, `frontend/src/components/recovery.css`, `frontend/src/components/ContainerBoundaryNode.tsx`, and `frontend/src/components/ComponentNode.tsx`; verify T049–T057 and keyboard recovery/export feedback after all US4 integrations.
+- [ ] T070 [US4] Surface diagram blockers alongside existing ADR/relationship/group blockers in dependency endpoints and inspector/remove flows in `backend/src/api/diagram-routes.ts`, `frontend/src/api/diagram-client.ts`, `frontend/src/components/WorkspaceInspector.tsx`, and `frontend/src/state/diagram-store.ts`; name affected active/recoverable children or occurrences and supported next actions, and prevent owner retyping without overwriting current drafts.
+- [ ] T071 [US4] Integrate container/external/relationship targets with existing ADR picker, summaries, counts, lifecycle, and undo context in `frontend/src/components/AdrLinkPicker.tsx`, `frontend/src/components/ComponentAdrSummary.tsx`, `frontend/src/components/RelationshipAdrSummary.tsx`, and `frontend/src/state/adr-store.ts`; keep links local and stable, exclude the synthetic boundary, and retain parent ADR isolation.
+- [ ] T072 [US4] Implement locked trash-impact enumeration and batch trash in `backend/src/persistence/diagram-repository.ts` and `backend/src/services/diagram-service.ts`: recheck the confirmed root/active-child ID set, write fresh common batch/root provenance only to those rows, retain previously trashed child markers, and roll back changed-impact/failure cases.
+- [ ] T073 [US4] Implement exact batch restoration and independent-child restoration in `backend/src/persistence/diagram-repository.ts` and `backend/src/services/diagram-service.ts`, checking active parent/valid sources for child restore, validating the whole batch, preserving UUIDs/subtypes/own names/scope/content/links/layout, and clearing only restored provenance (depends on T072).
+- [ ] T074 [US4] Wire trash-impact, optional confirmedDiagramIds DELETE, and resolved-document restore in `backend/src/api/diagram-routes.ts` and `backend/src/api/recovery-routes.ts`, preserving DELETE 204, restore response shape, and legacy bodyless deletes with no affected children; return actionable TRASH_IMPACT_CHANGED/PARENT_INACTIVE errors (depends on T073).
+- [ ] T075 [US4] Extend recovery API calls and state reconciliation in `frontend/src/api/diagram-client.ts` and `frontend/src/state/diagram-store.ts` to refresh every affected active/trash summary and reconcile nested parent groups by UUID, clear deletion filters after restore, preserve error/retry state, and exit an affected editor/reset ADR context only after successful mutation (depends on T074).
+- [ ] T076 [US4] Apply a single named trash-impact confirmation and dirty-work coordinator across `frontend/src/components/DiagramWorkspace.tsx`, `frontend/src/components/SavedDiagramList.tsx`, `frontend/src/components/RecoveryControls.tsx`, and `frontend/src/components/DiagramDeletionUnsavedDialog.tsx`; protect any currently edited affected child/ADR, require fresh confirmation after changed impact, and preserve drafts/view on cancel or failure (depends on T075).
+- [ ] T077 [US4] Complete native Restore container diagram and double-click restoration confirmation in `frontend/src/components/WorkspaceInspector.tsx`, `frontend/src/components/DiagramWorkspace.tsx`, and `frontend/src/components/DiagramCanvas.tsx`, using the canonical child summary and guarded restore/load flow without replacement or stale switches (depends on T076).
+- [ ] T078 [US4] Extend `shared/src/export/mermaid-export.ts` for validated populated child scope/source comments, escaped full multiline Application/Datastore labels from validated containerType and complete container metadata, labeled system subgraph, external nodes/relationships after its end, and protocol; return actionable EMPTY_CONTAINER_MERMAID for empty children and add a parent single-diagram/unbundled-child scope note without dummy nodes.
+- [ ] T079 [US4] Extend `shared/src/export/svg-layout.ts` and `shared/src/export/svg-export.ts` for empty/populated system boundaries, child own name/canonical scope, current owner/source metadata and Application/Datastore labels from validated containerType, wrapped full responsibilities/technology/protocol, stable artifact data IDs, accessible scope text, and a viewBox covering every boundary/node/relationship label; preserve general/group rendering (depends on T078).
+- [ ] T080 [US4] Extend `shared/src/export/html-snapshot.ts`, `shared/src/export/diagram-page.ts`, `shared/src/export/styles.ts`, and `shared/src/export/html-package.ts` to retain child own name, canonical scope, containerType and all source fields, printable full details with Application/Datastore labels, empty-state boundary, stable local ADR anchors, and explicit single-diagram scope; keep existing ZIP paths/offline links and replace general-only internal type rejection with role-aware validation and reject missing/unsupported subtype or other unsupported content before file generation (depends on T079).
+- [ ] T081 [US4] Integrate immutable browser draft/ADR capture and fresh same-scope container-context resolution in `frontend/src/components/ExportButton.tsx` and `frontend/src/api/export-client.ts` using `frontend/src/api/diagram-client.ts`; overlay only authoritative source display fields without replacing child own name/scope/subtype, validate references including unsaved new occurrences, and preserve draft/view with no download on failure (depends on T080).
+- [ ] T082 [US4] Integrate saved resolved child documents/ADRs into `cli/src/api-client.ts` and `cli/src/export-command.ts`, preserving child own name/canonical scope/containerType and every new field plus existing overwrite/error behavior; generate the existing complete HTML ZIP without recursive parent/child packages or live-app links (depends on T080).
+- [ ] T083 [US4] Use consistent source-resolved documents in `backend/src/services/export-service.ts` and `backend/src/api/export-routes.ts`, sharing `backend/src/services/container-context.ts`; reject inactive/broken graphs and map empty-child Mermaid to 422 EMPTY_CONTAINER_MERMAID before producing files (depends on T078).
+- [ ] T084 [US4] Complete DESIGN.md styling, visible focus, readable diagram-level/type labels, native Create/Open/Restore controls, live progress/errors, accessible boundary description, and non-nested ADR interactions in `frontend/src/styles.css`, `frontend/src/components/recovery.css`, `frontend/src/components/ContainerBoundaryNode.tsx`, and `frontend/src/components/ComponentNode.tsx`; verify T061–T069 and keyboard recovery/export feedback after all US4 integrations.
 
 **Checkpoint**: ADR references, dependency safeguards, exact recoverability, and complete supported exports work with all four stories and existing diagrams.
 
@@ -166,142 +184,169 @@
 
 **Purpose**: Establish implementation evidence and compatibility across the complete feature.
 
-- [ ] T073 [P] Add the 100-container/100-external/300-relationship validation/layout/export envelope and general-diagram baseline comparison in `shared/tests/container-scale.test.ts` and `e2e/tests/performance.spec.ts`; record timing and batched-resolution behavior in `specs/009-c4-container-diagrams/validation.md` without introducing a product limit or per-source lookup loop.
-- [ ] T074 [P] Update `README.md` and `specs/009-c4-container-diagrams/quickstart.md` for migration 0005, both entry points, external-source editing, list/parent navigation, ownership blockers, exact trash restoration, browser-draft versus saved CLI exports, and empty Mermaid alternatives; keep examples aligned with implemented contracts.
-- [ ] T075 Run `npm.cmd run build` and `npm.cmd test` from `package.json` with a dedicated DATABASE_URL and RUN_POSTGRES_TESTS enabled; verify migration, feature PostgreSQL race/rollback suites execute without skips and existing general/group/ADR/CLI/export compatibility passes, fixing affected implementation/tests and recording results in `specs/009-c4-container-diagrams/validation.md`.
-- [ ] T076 Run the feature browser suite in `e2e/tests/container-diagrams.spec.ts` plus affected saved-diagram, grouping, ADR, recovery, and HTML-portability workflows in `e2e/tests/`; complete the keyboard-only select/create/edit/connect/save/return journey and focus/error checks, fixing failures and recording executed scenarios in `specs/009-c4-container-diagrams/validation.md` (depends on T075).
-- [ ] T077 Perform observed SC-001 creation, SC-003 modeling, and SC-004 readability checks using prepared architecture information in `specs/009-c4-container-diagrams/quickstart.md`; record participant counts, observed times, success rates, and errors against the 90%/30-second, five-minute, and 90%/one-minute targets in `specs/009-c4-container-diagrams/validation.md`, and inspect exported SVG/HTML/ADR links offline (depends on T076).
-- [ ] T078 Reconcile FR-001–FR-022 and SC-001–SC-008 evidence in `specs/009-c4-container-diagrams/validation.md` against `specs/009-c4-container-diagrams/plan.md` and `specs/009-c4-container-diagrams/contracts/`; confirm unchanged identities/creation times, no unsupported export omission, no unresolved placeholders, and accurate checkbox completion in `specs/009-c4-container-diagrams/tasks.md`; leave unexecuted/failed gates explicitly outstanding (depends on T073–T077).
+- [ ] T085 [P] Add the 100-container/100-external/300-relationship validation/layout/export envelope and general-diagram baseline comparison in `shared/tests/container-scale.test.ts` and `e2e/tests/performance.spec.ts`; record timing and batched-resolution behavior in `specs/009-c4-container-diagrams/validation.md` without introducing a product limit or per-source lookup loop.
+- [ ] T086 [P] Update `README.md` and `specs/009-c4-container-diagrams/quickstart.md` for preserved 0005 and forward 0006, application-only compatibility backfill and deployment order, exactly-two-choice editing, stale form reset, both entry points, external-source editing, canonical child save/retry, nested library own-name/date filters and matching counts, list/parent navigation, ownership blockers, exact trash restoration, browser-draft versus saved CLI exports, and empty Mermaid alternatives; keep examples aligned with implemented contracts.
+- [ ] T087 Run `npm.cmd run build` and `npm.cmd test` from `package.json` with a dedicated DATABASE_URL and RUN_POSTGRES_TESTS enabled; verify clean installation through 0006 and populated 0005-to-0006 upgrade, subtype constraints/round trips, and feature PostgreSQL race/rollback suites execute without skips and existing general/group/ADR/CLI/export compatibility passes, fixing affected implementation/tests and recording results in `specs/009-c4-container-diagrams/validation.md`.
+- [ ] T088 Run the feature browser suite in `e2e/tests/container-diagrams.spec.ts` plus affected saved-diagram, grouping, ADR, recovery, and HTML-portability workflows in `e2e/tests/`; rerun the previously inconclusive combined entry suite, cover SC-009 subtype/navigation and SC-010 repeated-save/list/failure scenarios, and complete the keyboard-only select/create/edit/connect/save/return journey and focus/error checks, fixing failures and recording executed scenarios in `specs/009-c4-container-diagrams/validation.md` (depends on T087).
+- [ ] T089 Perform observed SC-001 creation, SC-003 modeling, and SC-004 readability checks using prepared architecture information in `specs/009-c4-container-diagrams/quickstart.md`; record participant counts, observed times, success rates, and errors against the 90%/30-second, five-minute, and 90%/one-minute targets in `specs/009-c4-container-diagrams/validation.md`, and inspect exported SVG/HTML/ADR links offline (depends on T088).
+- [ ] T090 Reconcile FR-001–FR-024 and SC-001–SC-010 evidence in `specs/009-c4-container-diagrams/validation.md` against `specs/009-c4-container-diagrams/plan.md` and `specs/009-c4-container-diagrams/contracts/`; confirm revised subtype/save/list gates have new evidence, unchanged identities/creation times, no unsupported export omission, no unresolved placeholders, and accurate checkbox completion in `specs/009-c4-container-diagrams/tasks.md`; leave unexecuted/failed gates explicitly outstanding (depends on T085–T089).
 
 ## Dependencies & Execution Order
 
 ### Phase dependencies
 
 ```text
-Setup (T001–T003)
-  -> Foundation (T004–T016)
-      -> US1 (T017–T028): canonical entry points + empty child
-          -> US2 (T029–T040): useful container editing
-          -> US3 (T041–T048): complete navigation + source/list context
-          -> US4 (T049–T072): ADR/recovery/export integration
-US2 + US3 + US4
-  -> Polish and release validation (T073–T078)
+Setup (T001–T003, completed)
+  -> Foundation (T004–T016, completed)
+      -> US1 (T017–T028, completed): canonical entry + empty child
+          -> US2 (T029–T047): subtype migration + useful editing
+              -> US3 (T048–T060): canonical save + nested library/navigation
+                  -> US4 (T061–T084): decisions + exact recovery + exports
+                      -> Polish (T085–T090): full release evidence
 ```
 
-- Execute in numeric phase order for the default single-developer workflow: Setup → Foundation → US1 → US2 → US3 → US4 → Polish.
-- US1 depends on Foundation, not another story. Its external-source cases use seeded occurrences. T026 consumes the foundation layout/domain contract.
-- US2 depends on US1's child session/visual boundary/API context integration. Its independent test can start from a prepared saved child.
-- US3 depends on US1's coordinator and child loading. Populated acceptance scenarios use either US2 output or equivalent saved fixtures.
-- US4 depends on foundation transactional guards and US1's canonical navigation; its full UI/export journey uses US2 editor output and US3 draft/navigation/list integration. Backend recovery and shared-export work can be prepared after Foundation/US1, but the integrated US4 checkpoint waits for US2/US3.
-- Independent testing means each story has a bounded fixture-driven acceptance check; it does not mean shared application files can be edited concurrently without coordination.
-- Release validation depends on all stories. Do not expose an incomplete recovery/export workflow as a completed release merely because the US1 demo passes.
+- Default execution follows numeric phase order. Existing checked tasks retain their prior scope/evidence; new work starts at T029. Do not apply 0006 as part of task generation.
+- US1 depends on Foundation. Its external-source cases use prepared occurrences, and its completed empty-child milestone remains the suggested MVP demonstration.
+- US2 depends on the US1 session/API/boundary and shared foundation. T029–T041 add subtype support to those established boundaries before later stories consume revised schemas. Deploy 0006 before runtime schemas requiring subtype; never rewrite applied 0005.
+- US3 depends on US1 navigation and US2 schemas/serialization. Its independent test uses prepared populated children; hierarchy derives from canonical saved scope, never the latest navigation origin.
+- US4 depends on Foundation graph/ADR guards, US1 navigation, US2 subtype/editor content and US3 save/list/dirty guards. Its independent test can use saved fixtures; integrated recovery/export acceptance waits for those prior surfaces.
+- Release validation waits for all stories. A fixture-driven independent test does not allow simultaneous edits to shared stores/services/UI files or waive earlier-story dependencies.
 
 ### Within each phase/story
 
-- Author the listed test batch first, confirm meaningful failures, then implement and run it at the checkpoint. T016 adds integration coverage after the complete shared foundation is wired.
-- Foundation implementation order: T007 → T008/T009 → T010 → T011 → T012 → T013 → T014 → T015 → T016. T008 and T009 use separate files and can be coordinated after T007 even though the default numeric execution is sequential.
-- US1 backend chain is T022 → T023 → T024 → T025. Boundary integration T026 and the entry/heading tasks T027–T028 follow the established coordinator/domain interfaces.
-- US2 commands T034 precede geometry/UI T036–T040; T035 completes server acceptance of the same edits.
-- US3 uses T044 → T045 → T046 → T047 → T048 to keep source/list/navigation behavior aligned.
-- US4 recovery chain is T060 → T061 → T062 → T063 → T064 → T065. T058/T059 integrate existing foundation safeguards and ADR targets before the user journey is validated.
-- US4 export chain is T066 → T067 → T068, followed by T069/T070; T071 follows T066 and source resolution. T072 waits for every integrated surface it validates.
-- Run PostgreSQL-writing test processes serially against shared fixtures, or provide isolated databases/schemas. `[P]` on test tasks authorizes independent test authoring, not simultaneous destructive fixture setup in one database.
+- Author each listed test batch first and confirm meaningful failures before its implementation. Existing foundation ordering remains T007 -> T008/T009 -> T010 -> T011 -> T012 -> T013 -> T014 -> T015 -> T016.
+- US1 ordering remains T022 -> T023 -> T024 -> T025 -> T026 -> T027 -> T028; historical checkboxes and validation are unchanged.
+- US2 tests T029–T034 are disjoint-file authoring work; T035 adds to the shared browser file sequentially. Then T036 domain/fixtures -> T037 migration/schema -> T038 mapping -> T039 store/history -> T040 validation -> T041 browser serialization -> T042 geometry -> T043 labels -> T044 forms -> T045 reset -> T046 sources -> T047 interactions.
+- US3 tests T048–T051 are disjoint-file authoring work; T052 browser additions stay sequential. Then T053 resolution -> T054 parsing/summary -> T055 save checks -> T056 projection -> T057 nested UI -> T058 navigation -> T059 source context -> T060 CLI compatibility.
+- US4 dependency/ADR surfaces T070/T071 integrate existing safeguards. Recovery chain: T072 -> T073 -> T074 -> T075 -> T076 -> T077.
+- US4 export chain: T078 Mermaid -> T079 SVG -> T080 HTML. Browser T081 and CLI T082 follow T080; backend T083 follows T078 and source resolution. Complete all integrated surfaces before T084 accessibility/checkpoint validation.
+- Polish T085 and T086 use disjoint files. T087 follows all implementation; T088 follows T087; T089 follows T088; T090 reconciles evidence after T085–T089.
+- Run PostgreSQL-writing tests serially against shared fixtures or use isolated schemas/databases. Test `[P]` markers allow independent authoring, not simultaneous destructive fixture setup in one database.
+- T085 owns `specs/009-c4-container-diagrams/validation.md` during its batch; later evidence tasks append sequentially.
 
 ### Parallel opportunities
 
-- Foundation test authoring: T004, T005, and T006 after Setup.
-- US1 test authoring: T017–T021 after Foundation.
-- US2 test authoring: T029–T032 after US1; T033 writes the same browser file used by other story phases and stays sequential.
-- US3 test authoring: T041 and T042 after US1/US2; T043 browser additions stay sequential.
-- US4 test authoring: T049–T056 after preceding phase interfaces are stable; T057 browser additions stay sequential.
-- Final T073 performance work and T074 documentation use separate files. T073 owns `validation.md` during that batch; later evidence tasks append sequentially.
-- Implementation tasks share stores, services, and UI files across stories. Use the default sequential integration order; do not infer unrestricted story-level parallelism from the fixture-driven tests.
+- Completed foundation test authoring: T004–T006; completed US1 test authoring: T017–T021.
+- Remaining US2 test authoring: T029–T034 after US1. Tests must not mutate shared fixtures until the sequential T036 fixture update.
+- Remaining US3 test authoring: T048–T051 after US2 interfaces are stable.
+- Remaining US4 test authoring: T061–T068 after preceding interfaces are stable.
+- Final performance/evidence authoring T085 and documentation T086 are disjoint.
+- These 28 marked tasks include 8 already completed and 20 outstanding. Implementation remains sequential because it shares domain, repository, store, inspector and export surfaces.
 
 ## Parallel Example: User Story 1
 
-After Foundation, author these independent files together:
+Historical disjoint authoring batch after Foundation:
 
 ```text
 T017: backend/tests/contract/container-diagrams.test.ts
 T018: backend/tests/persistence/container-diagrams.test.ts
 T019: frontend/tests/container-diagram-entry-store.test.ts
 T020: frontend/tests/container-diagram-entry-ui.test.tsx
-T021: e2e/tests/container-diagrams.spec.ts (US1 cases only)
+T021: e2e/tests/container-diagrams.spec.ts (US1 cases)
 ```
 
 ## Parallel Example: User Story 2
 
-After US1 interfaces are ready, author these independent files together:
+After US1, author separate test files before changing the shared fixtures:
 
 ```text
-T029: backend/tests/contract/container-editing.test.ts + backend/tests/persistence/container-editing.test.ts
-T030: frontend/tests/container-diagram-store.test.ts
-T031: frontend/tests/react-flow-container.test.ts
-T032: frontend/tests/container-diagram-ui.test.tsx
+T029: shared/tests/container-diagrams.test.ts + shared/tests/compatibility.test.ts
+T030: backend/tests/persistence/container-migration.test.ts
+T031: backend/tests/contract/container-editing.test.ts + backend/tests/persistence/container-editing.test.ts
+T032: frontend/tests/container-diagram-store.test.ts
+T033: frontend/tests/react-flow-container.test.ts
+T034: frontend/tests/container-diagram-ui.test.tsx
 ```
+
+T035 uses the feature browser file and remains sequential; T036–T047 then integrate in dependency order.
 
 ## Parallel Example: User Story 3
 
-After preceding phase interfaces are stable:
+After US2 interfaces are stable:
 
 ```text
-T041: backend/tests/contract/container-navigation.test.ts
-T042: frontend/tests/container-diagram-navigation.test.tsx
+T048: backend/tests/contract/container-navigation.test.ts
+T049: frontend/tests/container-diagram-navigation.test.tsx
+T050: frontend/tests/diagram-list.test.ts
+T051: frontend/tests/saved-diagram-list.test.tsx
 ```
+
+T052 uses the feature browser file and remains sequential.
 
 ## Parallel Example: User Story 4
 
-After preceding phase interfaces are stable, representative independent test tasks are:
+After preceding phase interfaces are stable, representative disjoint authoring tasks:
 
 ```text
-T049: backend/tests/contract/container-dependencies.test.ts
-T051: backend/tests/contract/container-recovery.test.ts
-T053: frontend/tests/container-diagram-recovery.test.tsx
-T054: shared/tests/container-export.test.ts
-T055: frontend/tests/container-html-export.test.tsx
-T056: cli/tests/container-export-command.test.ts + backend/tests/container-export.test.ts
+T061: backend/tests/contract/container-dependencies.test.ts
+T063: backend/tests/contract/container-recovery.test.ts
+T065: frontend/tests/container-diagram-recovery.test.tsx
+T066: shared/tests/container-export.test.ts
+T067: frontend/tests/container-html-export.test.tsx
+T068: cli/tests/container-export-command.test.ts + backend/tests/container-export.test.ts
 ```
+
+T062 and T064 have additional disjoint ADR/database test files; T069 browser additions remain sequential.
 
 ## Requirement Coverage
 
 | Requirement group | Implementation tasks | Principal validation tasks |
 | --- | --- | --- |
-| FR-001–FR-005: entry points, canonical identity, eligibility, persisted owner, retry | T011–T013, T022–T028 | T017–T021 |
-| FR-006–FR-009, FR-022: boundary, metadata, source occurrences, placement and endpoints | T007–T012, T026, T034–T040 | T004–T006, T029–T033 |
-| FR-010–FR-013: guarded navigation, list context, saved identity/layout, history | T010–T012, T025, T034–T036, T044–T048 | T019, T030–T031, T041–T043 |
-| FR-014–FR-018: ADR workflows, safeguards, exact trash/restore, removal confirmation | T013–T015, T058–T065 | T016, T049–T053, T057 |
-| FR-019: complete supported exports, explicit unsupported cases, single-diagram parent scope | T066–T071 | T054–T057, T077 |
-| FR-020: legacy storage/payload/general/group/ADR/export compatibility | T002, T007, T009–T010, T048, T066–T071 | T004, T006, T056, T075–T076 |
-| FR-021: keyboard/focus/feedback and non-color scope/type cues | T027–T028, T036–T040, T045–T047, T058–T065, T072 | T020–T021, T031–T033, T042–T043, T053, T057, T076–T077 |
-| SC-001–SC-004: observed creation/modeling/readability and identity behavior | T022–T028, T034–T040 | T017–T021, T033, T077 |
-| SC-005–SC-006: integrity and actionable no-loss failures | T010–T015, T025, T034–T035, T044–T047, T058–T071 | T016–T019, T029–T031, T041–T043, T049–T057, T075–T076 |
-| SC-007–SC-008: keyboard journey and existing-diagram compatibility | T007–T010, T027–T028, T036–T040, T045–T048, T072 | T004, T006, T021, T033, T043, T056, T075–T076 |
+| FR-001–FR-005: entry, canonical identity, eligibility, persisted owner, retry | T011–T013, T022–T028 | T017–T021, T088 |
+| FR-006–FR-009, FR-022: roles, metadata, boundary, sources, placement/endpoints | T007–T012, T026, T036–T047 | T004–T006, T029–T035 |
+| FR-007, FR-024, SC-009: exactly Application/Datastore, subtype retention, form reset, forbidden commands | T036–T045, T078–T083 | T029–T035, T066–T069, T087–T088 |
+| FR-010–FR-013: guarded navigation, scope/layout/history, saved reopening | T010–T012, T025, T039–T042, T053–T060 | T019, T032–T033, T048–T052 |
+| FR-011, FR-023, SC-010: own child name/ID/kind/scope, repeated PUT/retry, nested library/filter counts | T039, T041–T042, T053–T059 | T033, T048–T052, T088 |
+| FR-014–FR-018: decisions, safeguards, exact recovery and confirmed removal | T013–T015, T070–T077 | T016, T061–T065, T069 |
+| FR-019: complete supported exports, subtype labels, explicit unsupported cases, single-diagram scope | T078–T083 | T066–T069, T089 |
+| FR-020: legacy/general/group compatibility and 0005-to-0006 upgrade | T002, T007, T009–T010, T036–T038, T060, T078–T083 | T004, T006, T029–T031, T068, T087–T088 |
+| FR-021: keyboard/focus, readable scope/type and progress/errors | T027–T028, T042–T047, T055–T059, T070–T077, T084 | T020–T021, T033–T035, T049–T052, T065, T069, T088–T089 |
+| SC-001–SC-004: timed creation/modeling/readability and canonical identity | T022–T028, T036–T047 | T017–T021, T035, T089 |
+| SC-005–SC-006: stable links and actionable no-loss failures | T010–T015, T025, T036–T041, T053–T059, T070–T083 | T016–T019, T029–T033, T048–T052, T061–T069, T087–T088 |
+| SC-007–SC-008: keyboard journey and existing-diagram compatibility | T007–T010, T027–T028, T036–T047, T053–T060, T084 | T004, T006, T021, T029–T035, T048–T052, T068, T087–T088 |
+| SC-009–SC-010: revised subtype choices and child save/list placement | T036–T060, T078–T083 | T029–T035, T048–T052, T066–T069, T087–T090 |
+
+## Task Summary
+
+| Phase/story | Total | Previously complete | Outstanding |
+| --- | ---: | ---: | ---: |
+| Setup | 3 | 3 | 0 |
+| Foundation | 13 | 13 | 0 |
+| US1 (P1) | 12 | 12 | 0 |
+| US2 (P1) | 19 | 0 | 19 |
+| US3 (P2) | 13 | 0 | 13 |
+| US4 (P2) | 24 | 0 | 24 |
+| Polish | 6 | 0 | 6 |
+| **Total** | **90** | **28** | **62** |
 
 ## Implementation Strategy
 
 ### MVP First (User Story 1)
 
-1. Complete Setup and Foundation, including executable migration/transaction checks.
-2. Deliver US1: saved Software System → Create/Open → same empty labeled child, with parent-save and retry safeguards.
-3. Validate both entry points, group/duplicate-name identity, canonical external-source resolution, and failure retention. This is the first demo milestone.
-4. Keep full release approval gated on the remaining stories and validation, especially recoverability and export completeness.
+1. Preserve completed Setup/Foundation/US1 and their recorded database and contract checks.
+2. US1 remains the first demo milestone: saved Software System -> Create/Open -> same empty labeled child with parent-save/retry safeguards.
+3. The prior combined browser run is inconclusive; rerun it with the complete feature suite in T088.
+4. Continue at US2 for the revised behavior. Complete all stories/release gates before treating recovery, exports, SC-009 or SC-010 as delivered.
 
 ### Incremental Delivery
 
-1. US2 adds useful container/communication authoring and complete atomic layout/history.
-2. US3 adds full parent/library/source navigation and contextual saved reopening.
-3. US4 completes linked decisions, dependency feedback, exact recovery, and supported exports.
-4. Polish records executed database/browser/export checks and observed usability results; every increment reruns affected earlier acceptance checks.
+1. US2 extends established storage/domain boundaries with subtype and forward migration, then delivers exactly-two-choice authoring, source inclusion, geometry and history.
+2. US3 preserves canonical child save identity and adds nested library/filter projection and guarded contextual navigation.
+3. US4 completes linked decisions, dependency feedback, exact recovery and complete subtype-aware exports.
+4. Polish records database/browser/export results and observed usability outcomes; each checkpoint runs affected earlier acceptance checks. Leave unavailable, failed or skipped evidence outstanding.
 
 ### Coordinated Parallel Work
 
-Use the explicitly listed test-authoring batches and disjoint performance/documentation work. Integrate shared domain/repository/store/UI changes sequentially using the task dependencies. Shared PostgreSQL fixtures and the feature browser file require coordinated ownership.
+Use the listed disjoint test-authoring batches and performance/documentation pair. Integrate shared implementation files sequentially. Shared PostgreSQL fixtures and `e2e/tests/container-diagrams.spec.ts` require coordinated ownership; these examples describe implementation opportunities, not permission to start agents during task generation.
 
 ## Notes
 
-- Keep React Flow as a visual adapter; exports and persistence consume validated domain data.
-- Do not add authentication, collaboration, deeper C4 levels, permanent deletion, ownership detachment, recursive packages, a new import workflow, or a new revision-history subsystem.
-- Source rename hydration updates displayed context, not parent layout, child identity, or local undo history.
-- Boundary fitting/displaced externals belong to the same edit snapshot. Invalid edits do not create partial artifacts or history entries.
-- A trashed canonical child reserves ownership and must be restored explicitly. Previously trashed children do not join a later parent restore batch.
-- Confirm task completion only after its implementation/validation exists; task generation alone leaves all boxes unchecked.
+- Keep React Flow as a visual adapter; exports/persistence consume validated domain data.
+- Preserve applied 0005. Only 0006 backfills existing generic internal subtype to application; new writes and exporters must not invent a missing subtype. Retain legacy type, UUIDs, timestamps, content, layout and links.
+- Do not widen parent C4/source helpers to Application/Datastore. Internal subtype changes keep role/type container and all artifact references.
+- Child scope is persisted canonical identity. Names, source refresh, latest navigation origin and library grouping never reassign it or substitute Parent Diagram for the child's own name.
+- Parent headings retained for child filter matches are context, not additional matching diagrams. An absent parent summary never promotes a child to a top-level parent.
+- Boundary fitting/displaced externals belong to the same edit snapshot; invalid edits create no partial artifacts/history.
+- A trashed child reserves ownership and requires explicit restore. Previously trashed children do not join a later parent restore batch.
+- Do not introduce auth, collaboration, deeper C4 levels, permanent deletion, ownership detachment, recursive packages, a new import workflow or revision-history subsystem.
+- Keep T001–T028 completion flags/evidence unchanged. All revised/remaining tasks stay unchecked until their implementation and required validation exist; task generation establishes no implementation pass.

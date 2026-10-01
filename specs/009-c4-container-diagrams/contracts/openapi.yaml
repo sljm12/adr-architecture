@@ -1,19 +1,21 @@
 openapi: 3.0.3
 info:
   title: ADR Diagram API - C4 Container Diagrams
-  version: 1.0.0
+  version: 1.1.0
   description: >-
     Feature additions to the existing REST contract. Paths are backend paths; the Vite
     browser proxy prefixes them with /api. General diagrams remain compatible.
     All graph mutations lock the source parent before affected children and validate dependencies
-    within the same transaction. This is a design contract, not an implemented API.
+    within the same transaction. Revised design includes internal container subtypes and
+    canonical child save identity; existing foundation/entry endpoints are implemented,
+    while remaining behavior is planned.
 paths:
   /diagrams:
     get:
       summary: List active general and container diagrams with source scope
       responses:
         '200':
-          description: Existing array result, extended with kind and scope
+          description: Flat array with kind and scope; clients group children by parentDiagramId
           content:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/DiagramSummary' } }
@@ -48,6 +50,11 @@ paths:
         not written to parent artifacts. Container groups must be empty. Omitted components
         and relationships undergo the same ADR, hierarchy, source and local dependency checks
         as DELETE. Status and trash metadata cannot be changed through this route.
+        An internal component requires containerType application or datastore; in a child,
+        Person and Software System are source-derived external participants only. Saving a child updates
+        its own path ID and preserves its own name and canonical parent/owner association;
+        it neither creates a top-level parent nor replaces parent content. Responses retain
+        that ID/kind/scope. A pre-revision child payload missing subtype fails validation.
       requestBody:
         required: true
         content:
@@ -109,7 +116,8 @@ paths:
         No request body. The owner must already be persisted, its parent active, its role
         element and type software-system. The transaction creates one complete empty child
         with a default name, boundary and no components/relationships/groups. Retries return
-        the same existing active child. A trashed canonical child returns 409 RESTORE_REQUIRED
+        the same existing active child under its canonical source parent; later child saves
+        use its own ID. A trashed canonical child returns 409 RESTORE_REQUIRED
         with its summary; this route never restores or replaces it implicitly.
       responses:
         '201': { $ref: '#/components/responses/Document' }
@@ -309,6 +317,7 @@ components:
         name: { type: string, minLength: 1, maxLength: 200 }
         description: { type: string, nullable: true }
         type: { type: string, nullable: true }
+        containerType: { $ref: '#/components/schemas/ContainerType' }
         technology: { type: string, nullable: true, maxLength: 200, default: null }
         sourceComponentId: { type: string, format: uuid, nullable: true, default: null }
         position: { $ref: '#/components/schemas/Position' }
@@ -317,11 +326,21 @@ components:
         updatedAt: { type: string, format: date-time }
       description: >-
         Role-specific validation is mandatory. General elements retain legacy nullable/free-form
-        classifications. Containers require role container, type container, nonblank name,
+        classifications. Containers require role container, type container, containerType
+        application or datastore, nonblank name,
         description and technology, null source. External occurrences require role external,
-        a valid source UUID, null technology, and source-derived person/software-system details.
-        Read responses always include normalized role, technology, sourceComponentId and size;
+        a valid source UUID, null containerType/technology, and source-derived person/software-system details.
+        General elements also require null containerType. Read responses always include
+        normalized role, containerType, technology, sourceComponentId and size;
         omitted role/size/new fields are accepted only for legacy general inputs.
+    ContainerType:
+      type: string
+      nullable: true
+      enum: [application, datastore, null]
+      description: >-
+        Required non-null for an internal container and null for general/external roles.
+        User-facing choices are Application and Datastore. New internal writes have no
+        omission default; only legacy general input may normalize omission to null.
     Relationship:
       type: object
       required: [id, diagramId, sourceComponentId, targetComponentId, direction, label, createdAt, updatedAt]
@@ -358,7 +377,8 @@ components:
             $ref: '../../003-c4-system-groups/contracts/openapi.yaml#/components/schemas/SystemGroup'
       description: >-
         Complete artifact write. Container writes must explicitly supply kind/scope/boundary,
-        empty groups and valid container/external roles. General defaults preserve old clients.
+        empty groups and valid container/external roles with internal containerType.
+        General defaults preserve old clients.
         Unknown feature fields and invalid scope/role combinations are rejected, not stripped.
         Timestamps are accepted for round trips but original creation and new update times are server-managed.
     DiagramDocument:
@@ -369,6 +389,9 @@ components:
       description: Fully normalized response with source-resolved scope and occurrence details
     DiagramSummary:
       type: object
+      description: >-
+        A container retains its own name and stable ID; scope.parentDiagramId identifies
+        its canonical parent for library grouping regardless of the latest entry point.
       required: [id, name, status, createdAt, updatedAt, kind, scope]
       properties:
         id: { type: string, format: uuid }
