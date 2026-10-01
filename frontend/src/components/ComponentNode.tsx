@@ -1,10 +1,10 @@
 import { Handle, NodeResizer, Position } from '@xyflow/react';
 import { getC4ArtifactTypeLabel } from '../../../shared/src/index';
 
-export function ComponentNode({ data }: { data: { id?: string; label: string; type?: string | null; isSelected?: boolean; isCandidate?: boolean; adrCount?: number; onOpenComponentAdrs?: (componentId: string) => void } }) {
+export function ComponentNode({ data }: { data: { id?: string; label: string; type?: string | null; role?: string; isSelected?: boolean; isCandidate?: boolean; adrCount?: number; onOpenComponentAdrs?: (componentId: string) => void; onOpenContainerDiagram?: (componentId: string) => void } }) {
   const typeLabel = getC4ArtifactTypeLabel(data.type);
   const cue = data.type === 'person' ? '○' : data.type === 'software-system' ? '□' : '◇';
-  return <div className={`component-node component-node-${data.type ?? 'unclassified'}${data.isSelected ? ' is-selected' : ''}${data.isCandidate ? ' is-add-candidate' : ''}`} role="group" tabIndex={0} aria-selected={data.isSelected ? 'true' : 'false'} aria-label={`Component ${data.label}, ${typeLabel}`} aria-describedby={data.isCandidate ? `${data.id ?? 'component'}-group-candidate` : undefined}>
+  return <div className={`component-node component-node-${data.type ?? 'unclassified'}${data.isSelected ? ' is-selected' : ''}${data.isCandidate ? ' is-add-candidate' : ''}`} role="group" tabIndex={0} aria-selected={data.isSelected ? 'true' : 'false'} aria-label={`Component ${data.label}, ${typeLabel}`} aria-describedby={data.isCandidate ? `${data.id ?? 'component'}-group-candidate` : undefined} onDoubleClick={event => { if (!event.shiftKey && data.id && data.onOpenContainerDiagram) { event.stopPropagation(); data.onOpenContainerDiagram(data.id); } }}>
     <NodeResizer isVisible={Boolean(data.isSelected)} minWidth={120} minHeight={56} />
     <Handle id="target-top" type="target" position={Position.Top} aria-hidden="true" />
     <Handle id="target-right" type="target" position={Position.Right} aria-hidden="true" />

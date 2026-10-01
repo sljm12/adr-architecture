@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { DiagramToolbar, type InspectorMode } from './DiagramToolbar';
 import { DiagramCanvas } from './DiagramCanvas';
 import { useDiagramStore } from '../state/diagram-store';
@@ -34,6 +34,7 @@ export function DiagramWorkspace() {
   const selectAdr = useAdrStore(state => state.select);
   const [confirmNew, setConfirmNew] = useState(false);
   const [pendingDiagramId, setPendingDiagramId] = useState<string | null>(null);
+  const [pendingContainerIntent, setPendingContainerIntent] = useState<{ diagramId: string; componentId: string } | null>(null);
   const [pendingDeletionId, setPendingDeletionId] = useState<string | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(true);
@@ -48,6 +49,72 @@ export function DiagramWorkspace() {
   const requestNewDiagram = () => { if (!document || status === 'saving' || adrStatus === 'saving') return; if (status === 'unsaved' || status === 'failed' || adrStatus === 'unsaved' || adrStatus === 'failed') { setConfirmNew(true); return; } startFreshDiagram(); };
   const load = async (id: string) => { if (await loadSavedDocument(id)) { clearCanvasSelection(); setClosedInspectorMode(null); setInspectorMode(null); setInspectorOpen(false); useAdrStore.getState().startNew(id); void useAdrStore.getState().loadComponentAdrCounts(id); setCanvasEpoch(value => value + 1); } };
   const requestLoad = (id: string) => { if (status === 'saving' || adrStatus === 'saving') return; if (document && document.id !== id && (status === 'unsaved' || status === 'failed' || adrStatus === 'unsaved' || adrStatus === 'failed')) { setPendingDiagramId(id); return; } void load(id); };
+  const finishContainerOpen = async (componentId: string) => {
+    const opened = await useDiagramStore.getState().createOrOpenContainerDiagram(componentId);
+    if (!opened) return;
+    const child = useDiagramStore.getState().document;
+    if (!child || child.kind !== 'container') return;
+    clearCanvasSelection(); setClosedInspectorMode(null); setInspectorMode(null); setInspectorOpen(false);
+    useAdrStore.getState().startNew(child.id); void useAdrStore.getState().load(child.id); void loadAdrCounts(child.id);
+    setCanvasEpoch(value => value + 1);
+    window.requestAnimationFrame(() => globalThis.document.getElementById('container-diagram-heading')?.focus());
+  };
+  const requestContainerOpen = (componentId: string) => {
+    const current = useDiagramStore.getState();
+    const currentAdr = useAdrStore.getState();
+    if (!current.document || current.containerOpenStatus === 'loading' || current.status === 'saving' || currentAdr.status === 'saving') return;
+    if (current.status === 'unsaved' || current.status === 'failed' || currentAdr.status === 'unsaved' || currentAdr.status === 'failed') {
+      setPendingContainerIntent({ diagramId: current.document.id, componentId });
+      return;
+    }
+    void finishContainerOpen(componentId);
+  };
+  const resolveContainerIntent = async (choice: 'save' | 'discard') => {
+    const intent = pendingContainerIntent;
+    if (!intent) return;
+    const startingDocument = useDiagramStore.getState().document;
+    if (!startingDocument || startingDocument.id !== intent.diagramId) { setPendingContainerIntent(null); return; }
+    if (choice === 'save') {
+      const diagramState = useDiagramStore.getState();
+      if (diagramState.status === 'unsaved' || diagramState.status === 'failed') await diagramState.save();
+      if (useDiagramStore.getState().status !== 'saved') return;
+      const adrState = useAdrStore.getState();
+      if ((adrState.status === 'unsaved' || adrState.status === 'failed') && !(await adrState.save())) return;
+      if (!['saved', 'idle'].includes(useAdrStore.getState().status)) return;
+    } else {
+      const diagramState = useDiagramStore.getState();
+      if (diagramState.status === 'unsaved' || diagramState.status === 'failed') {
+        if (!(await diagramState.loadSavedDocument(intent.diagramId))) return;
+      }
+      const adrState = useAdrStore.getState();
+      if (adrState.status === 'unsaved' || adrState.status === 'failed') {
+        if (adrState.draft?.id) await adrState.select(adrState.draft.id);
+        else adrState.startNew(intent.diagramId);
+        if (useAdrStore.getState().status === 'failed' || useAdrStore.getState().status === 'loading') return;
+      }
+    }
+    const current = useDiagramStore.getState();
+    if (current.document?.id !== intent.diagramId || current.status !== 'saved') return;
+    const owner = current.document.components.find(component => component.id === intent.componentId);
+    const eligible = owner?.type === 'software-system' && (current.document.kind === 'container' ? owner.role === 'external' : (owner.role ?? 'element') === 'element');
+    if (!eligible) {
+      setPendingContainerIntent(null);
+      useDiagramStore.setState({ containerOpenStatus: 'failed', containerOpenComponentId: intent.componentId, containerOpenError: 'That Software System was only present in the discarded draft. Save it before opening a container diagram.' });
+      return;
+    }
+    setPendingContainerIntent(null);
+    await finishContainerOpen(intent.componentId);
+  };
+  const containerOpenRequestRef = useRef(requestContainerOpen);
+  containerOpenRequestRef.current = requestContainerOpen;
+  useEffect(() => {
+    const onContainerOpen = (event: Event) => {
+      const componentId = (event as CustomEvent<{ componentId?: string }>).detail?.componentId;
+      if (componentId) containerOpenRequestRef.current(componentId);
+    };
+    window.addEventListener('adr:open-container-diagram', onContainerOpen);
+    return () => window.removeEventListener('adr:open-container-diagram', onContainerOpen);
+  }, []);
   const saveAndLoad = async () => { if (!pendingDiagramId) return; await save(); if (useDiagramStore.getState().status === 'saved' && (adrStatus !== 'unsaved' && adrStatus !== 'failed' || await saveAdr())) { const id = pendingDiagramId; setPendingDiagramId(null); await load(id); } };
   const discardAndLoad = () => { if (!pendingDiagramId) return; const id = pendingDiagramId; setPendingDiagramId(null); void load(id); };
   const finishDeletion = async (id: string) => { const deleted = await trashSavedDocument(id); if (deleted && useDiagramStore.getState().document?.id === id) { useAdrStore.getState().startNew(); startFreshDiagram(); } };
@@ -90,7 +157,7 @@ export function DiagramWorkspace() {
     <div className="workspace"><aside className="workspace-sidebar" aria-label="Diagram overview"><div className="library-heading"><div><span className="eyebrow">Your artifacts</span><h2>Diagrams</h2></div><button className="icon-button" type="button" onClick={() => setLibraryOpen(false)} aria-label="Close diagrams panel">×</button></div><div className="current-diagram"><span className="card-kicker">Current diagram</span><strong>{document?.name ?? 'No diagram yet'}</strong><span className="card-meta">{document ? `${document.components.length} components · ${document.relationships.length} relationships` : 'Create a diagram to begin'}</span></div><SavedDiagramList onSelect={requestLoad} onDelete={requestDelete} onCreate={startNew} /></aside>
       <section className="editor-area" id="diagram-workspace" aria-label="Diagram editor"><DiagramToolbar onOpenInspector={openInspector} onToggleLibrary={() => setLibraryOpen(open => !open)} libraryOpen={libraryOpen} onToggleInspector={toggleInspector} inspectorOpen={inspectorOpen} selectedComponentIds={selectedComponentIds} />{document && adrCountStatus === 'failed' && <p className="adr-count-feedback" role="status">Decision counts are unavailable. <button type="button" className="text-action" onClick={() => void loadAdrCounts(document.id)}>Retry</button>{adrCountError ? ` ${adrCountError}` : ''}</p>}<div className={`canvas-workspace ${inspectorMode === 'adr' ? 'adr-mode' : ''} ${inspectorOpen ? 'inspector-open' : 'inspector-closed'}`}><DiagramCanvas onSelection={selectCanvasItem} selectedComponentIds={selectedComponentIds} selectedComponentId={selection?.kind === 'component' ? selection.id : null} selectedCandidateComponentId={selection?.kind === 'group-member-candidate' ? selection.componentId : null} selectedGroupId={selection?.kind === 'group' || selection?.kind === 'group-member-candidate' ? (selection.kind === 'group' ? selection.id : selection.groupId) : null} selectedRelationshipId={selection?.kind === 'relationship' ? selection.id : null} onMultiSelectionChange={updateSelectedComponentIds} groupingSelectionActive={inspectorMode === 'group'} canvasEpoch={canvasEpoch} adrCounts={adrCounts} onOpenComponentAdrs={selectLinkedComponent} /><WorkspaceInspector mode={inspectorMode} selection={selection} selectedComponentIds={selectedComponentIds} onClose={closeInspector} onSelectComponent={selectLinkedComponent} onSelectRelationship={selectLinkedRelationship} onSelectGroup={selectGroup} onOpenAdr={openLinkedAdr} /></div></section></div>
     {confirmNew && <ConfirmDialog title="Discard unsaved changes?" message="Your current diagram has changes that have not been saved. Discard them and create a new diagram?" confirmLabel="Discard and create" onConfirm={() => { startFreshDiagram(); setConfirmNew(false); }} onCancel={() => setConfirmNew(false)} />}
-    {pendingDiagramId && <DiagramSwitchDialog onSaveAndLoad={() => void saveAndLoad()} onDiscardAndLoad={discardAndLoad} onCancel={() => setPendingDiagramId(null)} />}
+    {(pendingDiagramId || pendingContainerIntent) && <DiagramSwitchDialog title={pendingContainerIntent ? 'Save changes before opening the container diagram?' : undefined} message={pendingContainerIntent ? 'Your diagram or decision has unsaved changes. Save both before opening, discard both to continue, or cancel.' : undefined} saveLabel={pendingContainerIntent ? 'Save and open' : undefined} discardLabel={pendingContainerIntent ? 'Discard and open' : undefined} onSaveAndLoad={() => pendingContainerIntent ? void resolveContainerIntent('save') : void saveAndLoad()} onDiscardAndLoad={() => pendingContainerIntent ? void resolveContainerIntent('discard') : discardAndLoad()} onCancel={() => { setPendingDiagramId(null); setPendingContainerIntent(null); }} />}
     {pendingDeletionId && <DiagramDeletionUnsavedDialog onSaveAndDelete={() => void saveAndDelete()} onDiscardAndDelete={() => void discardAndDelete()} onCancel={() => setPendingDeletionId(null)} />}
   </div>;
 }

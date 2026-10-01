@@ -1,6 +1,7 @@
 import type { DiagramDocument } from './types';
 import type { ArchitectureDecisionRecord, Component, Relationship } from './types';
 import { fitGroupBoundsAfterLayout, isLessThanOrApproximatelyEqual, isMemberWithinGroup } from './group-layout';
+import { isExternalOutsideBoundary } from './container-layout';
 
 export type GroupMemberAddReasonCode =
   | 'missing-group'
@@ -39,11 +40,74 @@ export function assertCanAddGroupMember(document: DiagramDocument, groupId: stri
 export function assertComponentName(name: string): void { if (!name.trim()) throw new Error('Component name must not be blank'); }
 export function assertRelationshipDirection(direction: string): void { if (direction !== 'directed' && direction !== 'undirected') throw new Error(`Unsupported relationship direction: ${direction}`); }
 export function assertDiagramInvariants(document: DiagramDocument): void {
-  if (!document.name.trim()) throw new Error('Diagram name must not be blank');
+  assertUuid(document.id, 'Diagram ID');
+  if (!document.name.trim() || document.name.trim().length > 200) throw new Error('Diagram name must contain 1 to 200 characters');
+  const kind = document.kind ?? 'general';
+  if (kind !== 'general' && kind !== 'container') throw new Error(`Unsupported diagram kind: ${kind}`);
+  if (kind === 'general' && (document.scope != null || document.boundary != null)) throw new Error('General diagrams cannot have container scope or boundary data');
+  if (kind === 'container') {
+    const scope = document.scope;
+    const boundary = document.boundary;
+    if (!scope || !boundary) throw new Error('Container diagrams require an owning Software System and a boundary');
+    assertUuid(scope.parentDiagramId, 'Parent diagram ID');
+    assertUuid(scope.softwareSystemId, 'Owning Software System ID');
+    if (scope.parentDiagramId === document.id) throw new Error('A container diagram must reference a separate parent diagram');
+    if (!scope.parentDiagramName.trim() || !scope.softwareSystemName.trim()) throw new Error('Resolved container scope names must not be blank');
+    if (![boundary.position.x, boundary.position.y, boundary.size.width, boundary.size.height].every(Number.isFinite) || boundary.size.width <= 0 || boundary.size.height <= 0) throw new Error('Container boundary must have finite coordinates and positive finite dimensions');
+    if ((document.groups ?? []).length > 0) throw new Error('Container diagrams cannot contain SystemGroups');
+  }
   const ids = new Set<string>();
-  for (const component of document.components) { if (!component.id || ids.has(component.id)) throw new Error(`Duplicate component ID: ${component.id}`); ids.add(component.id); if (component.diagramId !== document.id) throw new Error(`Component ${component.id} must belong to diagram ${document.id}`); if (!component.name.trim() || !Number.isFinite(component.position.x) || !Number.isFinite(component.position.y) || !Number.isFinite(component.size.width) || !Number.isFinite(component.size.height) || component.size.width <= 0 || component.size.height <= 0) throw new Error(`Invalid component layout: ${component.id}`); assertComponentName(component.name); }
+  const externalSources = new Set<string>();
+  for (const component of document.components) {
+    assertUuid(component.id, 'Component ID');
+    if (ids.has(component.id)) throw new Error(`Duplicate component ID: ${component.id}`);
+    ids.add(component.id);
+    if (component.diagramId !== document.id) throw new Error(`Component ${component.id} must belong to diagram ${document.id}`);
+    if (!component.name.trim() || component.name.trim().length > 200 || !Number.isFinite(component.position.x) || !Number.isFinite(component.position.y) || !Number.isFinite(component.size.width) || !Number.isFinite(component.size.height) || component.size.width <= 0 || component.size.height <= 0) throw new Error(`Invalid component layout: ${component.id}`);
+    assertComponentName(component.name);
+    const role = component.role ?? 'element';
+    if (kind === 'general') {
+      if (role !== 'element' || (component.technology ?? null) !== null || (component.sourceComponentId ?? null) !== null) throw new Error(`General component ${component.id} must remain an ordinary element without source metadata`);
+      continue;
+    }
+    if (role === 'container') {
+      if (component.type !== 'container' || !component.description?.trim() || !component.technology?.trim() || component.technology.trim().length > 200 || component.sourceComponentId) throw new Error(`Container ${component.id} needs a name, responsibility, technology, and no source reference`);
+      const boundary = document.boundary!;
+      const minX = boundary.position.x + 24;
+      const minY = boundary.position.y + 68;
+      const maxX = boundary.position.x + boundary.size.width - 24 - component.size.width;
+      const maxY = boundary.position.y + boundary.size.height - 24 - component.size.height;
+      if (!isLessThanOrApproximatelyEqual(minX, component.position.x) || !isLessThanOrApproximatelyEqual(minY, component.position.y) || !isLessThanOrApproximatelyEqual(component.position.x, maxX) || !isLessThanOrApproximatelyEqual(component.position.y, maxY)) throw new Error(`Container ${component.id} must fit inside the Software System boundary`);
+    } else if (role === 'external') {
+      if ((component.type !== 'person' && component.type !== 'software-system') || !component.sourceComponentId || component.sourceComponentId === document.scope!.softwareSystemId || (component.technology ?? null) !== null) throw new Error(`External participant ${component.id} must reference a different Person or Software System source`);
+      assertUuid(component.sourceComponentId, 'External source component ID');
+      if (externalSources.has(component.sourceComponentId)) throw new Error(`External source ${component.sourceComponentId} is included more than once`);
+      externalSources.add(component.sourceComponentId);
+      if (!isExternalOutsideBoundary(document.boundary!, component.position, component.size)) throw new Error(`External participant ${component.id} needs 24 units of clearance outside the Software System boundary`);
+    } else {
+      throw new Error(`Container diagram component ${component.id} has unsupported role ${role}`);
+    }
+  }
   const componentIds = new Set(document.components.map(c => c.id));
-  for (const relationship of document.relationships) { if (relationship.diagramId !== document.id) throw new Error(`Relationship ${relationship.id} must belong to diagram ${document.id}`); if (!componentIds.has(relationship.sourceComponentId) || !componentIds.has(relationship.targetComponentId)) throw new Error(`Relationship ${relationship.id} references a missing component`); if (relationship.sourceComponentId === relationship.targetComponentId) throw new Error(`Relationship ${relationship.id} cannot connect a component to itself`); assertRelationshipDirection(relationship.direction); }
+  const relationshipIds = new Set<string>();
+  for (const relationship of document.relationships) {
+    assertUuid(relationship.id, 'Relationship ID');
+    if (relationshipIds.has(relationship.id)) throw new Error(`Duplicate relationship ID: ${relationship.id}`);
+    relationshipIds.add(relationship.id);
+    assertUuid(relationship.diagramId, 'Relationship diagram ID');
+    assertUuid(relationship.sourceComponentId, 'Relationship source component ID');
+    assertUuid(relationship.targetComponentId, 'Relationship target component ID');
+    if (relationship.diagramId !== document.id) throw new Error(`Relationship ${relationship.id} must belong to diagram ${document.id}`);
+    if (!componentIds.has(relationship.sourceComponentId) || !componentIds.has(relationship.targetComponentId)) throw new Error(`Relationship ${relationship.id} references a missing component`);
+    if (relationship.sourceComponentId === relationship.targetComponentId) throw new Error(`Relationship ${relationship.id} cannot connect a component to itself`);
+    assertRelationshipDirection(relationship.direction);
+    if (kind === 'container') {
+      const source = document.components.find(component => component.id === relationship.sourceComponentId)!;
+      const target = document.components.find(component => component.id === relationship.targetComponentId)!;
+      if (relationship.direction !== 'directed' || !relationship.label?.trim()) throw new Error(`Container interaction ${relationship.id} needs a direction and nonblank description`);
+      if (source.role !== 'container' && target.role !== 'container') throw new Error(`Container interaction ${relationship.id} must connect to an internal container`);
+    }
+  }
 
   const groups = document.groups ?? [];
   const groupIds = new Set(groups.map(group => group.id));

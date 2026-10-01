@@ -8,10 +8,12 @@ import { ComponentAdrSummary } from './ComponentAdrSummary';
 import { RelationshipAdrSummary } from './RelationshipAdrSummary';
 import { ConfirmDialog } from './ConfirmDialog';
 import { assertCanAddGroupMember, c4ArtifactTypes, getC4ArtifactTypeDescription, getC4ArtifactTypeLabel, isC4ArtifactType, type C4ArtifactType } from '../../../shared/src/index';
+import type { ContainerAvailability } from '../../../shared/src/index';
+import { diagramClient } from '../api/diagram-client';
 
 export type CanvasSelection = { kind: 'component' | 'relationship' | 'group'; id: string } | { kind: 'components'; ids: string[] } | { kind: 'group-member-candidate'; groupId: string; componentId: string } | null;
 
-export function WorkspaceInspector({ mode, selection, selectedComponentIds = [], onClose, onSelectComponent, onSelectRelationship, onOpenAdr, onSelectGroup }: { mode: InspectorMode; selection: CanvasSelection; selectedComponentIds?: string[]; onClose: () => void; onSelectComponent?: (componentId: string) => void; onSelectRelationship?: (relationshipId: string) => void; onOpenAdr?: (adrId: string) => void; onSelectGroup?: (groupId: string) => void }) {
+export function WorkspaceInspector({ mode, selection, selectedComponentIds = [], onClose, onSelectComponent, onSelectRelationship, onOpenAdr, onSelectGroup, onOpenContainerDiagram }: { mode: InspectorMode; selection: CanvasSelection; selectedComponentIds?: string[]; onClose: () => void; onSelectComponent?: (componentId: string) => void; onSelectRelationship?: (relationshipId: string) => void; onOpenAdr?: (adrId: string) => void; onSelectGroup?: (groupId: string) => void; onOpenContainerDiagram?: (componentId: string) => void }) {
   const [name, setName] = useState('');
   const [source, setSource] = useState('');
   const [target, setTarget] = useState('');
@@ -47,6 +49,30 @@ export function WorkspaceInspector({ mode, selection, selectedComponentIds = [],
   const removeGroupMember = useDiagramStore(state => state.removeGroupMember);
   const ungroup = useDiagramStore(state => state.ungroup);
   const groupError = useDiagramStore(state => state.groupError);
+  const diagramStatus = useDiagramStore(state => state.status);
+  const containerOpenStatus = useDiagramStore(state => state.containerOpenStatus);
+  const containerOpenError = useDiagramStore(state => state.containerOpenError);
+  const [containerAvailability, setContainerAvailability] = useState<ContainerAvailability | null>(null);
+  const [containerAvailabilityStatus, setContainerAvailabilityStatus] = useState<'idle' | 'loading' | 'loaded' | 'failed'>('idle');
+  const [containerAvailabilityError, setContainerAvailabilityError] = useState<string | null>(null);
+  const [availabilityRetry, setAvailabilityRetry] = useState(0);
+  const selectedContainerTarget = document && selection?.kind === 'component' ? document.components.find(component => component.id === selection.id) : undefined;
+  const eligibleContainerTarget = Boolean(selectedContainerTarget && selectedContainerTarget.type === 'software-system' && (document?.kind === 'container' ? selectedContainerTarget.role === 'external' : (selectedContainerTarget.role ?? 'element') === 'element'));
+
+  useEffect(() => {
+    if (!document || !selectedContainerTarget || !eligibleContainerTarget || diagramStatus !== 'saved') {
+      setContainerAvailability(null); setContainerAvailabilityStatus('idle'); setContainerAvailabilityError(null);
+      return;
+    }
+    let current = true;
+    setContainerAvailability(null); setContainerAvailabilityStatus('loading'); setContainerAvailabilityError(null);
+    diagramClient.containerAvailability(document.id, selectedContainerTarget.id).then(value => {
+      if (current) { setContainerAvailability(value); setContainerAvailabilityStatus('loaded'); }
+    }).catch(error => {
+      if (current) { setContainerAvailability(null); setContainerAvailabilityStatus('failed'); setContainerAvailabilityError(error instanceof Error ? error.message : 'Availability could not be checked.'); }
+    });
+    return () => { current = false; };
+  }, [document?.id, document?.kind, selectedContainerTarget?.id, selectedContainerTarget?.type, selectedContainerTarget?.role, diagramStatus, eligibleContainerTarget, availabilityRetry]);
 
   useEffect(() => {
     if (!document || !selection) return;
@@ -110,6 +136,15 @@ export function WorkspaceInspector({ mode, selection, selectedComponentIds = [],
   const selectedComponent = selection?.kind === 'component'
     ? document.components.find(component => component.id === selection.id)
     : undefined;
+  const canOpenContainerDiagram = Boolean(selectedComponent && selectedComponent.type === 'software-system' && (
+    document.kind === 'container'
+      ? selectedComponent.role === 'external'
+      : (selectedComponent.role ?? 'element') === 'element'
+  ));
+  const requestContainerOpen = (componentId: string) => {
+    if (onOpenContainerDiagram) onOpenContainerDiagram(componentId);
+    else window.dispatchEvent(new CustomEvent('adr:open-container-diagram', { detail: { componentId } }));
+  };
   const selectedRelationship = selection?.kind === 'relationship'
     ? document.relationships.find(relationship => relationship.id === selection.id)
     : undefined;
@@ -228,6 +263,8 @@ export function WorkspaceInspector({ mode, selection, selectedComponentIds = [],
   return <aside className={inspectorClassName} aria-label={mode === 'adr' ? 'ADR workspace' : 'Diagram inspector'}><div className="inspector-header"><div><span className="eyebrow">Inspector</span><h2>{heading}</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Close inspector">×</button></div>
     {mode === 'adr' && <div className="adr-workspace-body" aria-live="polite"><AdrList diagramId={document.id} /><AdrEditor components={document.components} relationships={document.relationships} onSelectComponent={onSelectComponent} onSelectRelationship={onSelectRelationship} onOpenAdr={onOpenAdr} /></div>}
     {mode === null && selectedComponent && <section className="artifact-edit-panel" aria-label="Edit component"><span className="eyebrow">Component</span><h3>Edit component</h3><form className="inspector-form artifact-edit-form" onSubmit={saveComponentEdit}><label htmlFor="component-edit-name">Component name</label><input id="component-edit-name" value={componentEditName} onChange={event => { setComponentEditName(event.target.value); setComponentEditError(''); }} autoComplete="off" aria-invalid={Boolean(componentEditError)} />{c4TypeFieldset(componentEditType, type => { setComponentEditType(type); setComponentEditError(''); }, 'C4 artifact type')}{!isC4ArtifactType(selectedComponent.type) && <p className="inspector-meta">Legacy type: Unclassified. Choose a C4 type to classify this component.</p>}{componentEditError && <p className="artifact-edit-error" role="alert">{componentEditError}</p>}<button className="primary-pill" type="submit">Save component</button></form></section>}
+    {mode === null && selectedComponent && canOpenContainerDiagram && <section className="artifact-edit-panel container-entry-panel" aria-label="Container diagram action"><span className="eyebrow">Software System</span><h3>{selectedComponent.name}</h3><button className="primary-pill" type="button" aria-label={`Create or open container diagram for ${selectedComponent.name}`} onClick={() => requestContainerOpen(selectedComponent.id)} disabled={containerOpenStatus === 'loading' || containerAvailabilityStatus === 'loading' || containerAvailability?.availability === 'trashed'}>{containerAvailabilityStatus === 'loading' ? 'Checking container diagram…' : containerAvailability?.availability === 'active' ? 'Open container diagram' : containerAvailability?.availability === 'trashed' ? 'Container diagram in Trash' : 'Create container diagram'}</button>{containerAvailability?.availability === 'trashed' && <p className="container-entry-feedback" role="status">This Software System already has a container diagram in Trash. Restore “{containerAvailability.diagram?.name ?? selectedComponent.name}” from Recovery; no replacement will be created.</p>}{containerAvailabilityStatus === 'failed' && <p className="container-entry-feedback" role="status">Container availability could not be checked. <button type="button" className="text-action" onClick={() => setAvailabilityRetry(retry => retry + 1)}>Retry</button>{containerAvailabilityError ? ` ${containerAvailabilityError}` : ''}</p>}{containerOpenStatus === 'loading' && <p className="container-entry-feedback" role="status" aria-live="polite">Opening the canonical container diagram…</p>}{containerOpenStatus === 'failed' && <p className="container-entry-feedback" role="status" aria-live="polite">{containerOpenError ?? 'The container diagram could not be opened.'} <button type="button" className="text-action" onClick={() => requestContainerOpen(selectedComponent.id)}>Retry</button></p>}</section>}
+    {mode === null && selection?.kind === 'component' && !selectedComponent && containerOpenStatus === 'failed' && <p className="container-entry-feedback" role="status" aria-live="polite">{containerOpenError}</p>}
     {mode === null && selectedGroup && <section className="artifact-edit-panel system-group-details" aria-label="System group details"><span className="eyebrow">System group</span><h3>Group details</h3><p className="inspector-copy">This boundary contains Software System members. Moving it preserves each member's relative position.</p>{selection?.kind === 'group-member-candidate' && <div className="group-member-candidate" aria-label="Add component to group candidate"><strong>Candidate component</strong><span>{candidateComponent?.name ?? 'Selected component is no longer available'}</span><small>{candidateComponent ? `${getC4ArtifactTypeLabel(candidateComponent.type)} · Shift-selected for review` : 'The candidate could not be found in this diagram.'}</small>{candidateError && <p id="group-member-candidate-error" className="artifact-edit-error" role="alert" aria-live="assertive">{candidateError}</p>}<div className="artifact-edit-actions"><button className="primary-pill" type="button" onClick={addSelectedGroupMember} disabled={Boolean(candidateError)} aria-describedby={candidateError ? 'group-member-candidate-error' : undefined} aria-label={`Add ${candidateComponent?.name ?? 'component'} to ${selectedGroup.name}`}>Add component to group</button><button type="button" onClick={() => { clearGroupError(); onSelectGroup?.(selectedGroup.id); }}>Cancel</button></div></div>}<form className="inspector-form artifact-edit-form" onSubmit={saveGroupName}><label htmlFor="group-edit-name">Group name</label><input id="group-edit-name" value={groupName} onChange={event => { setGroupName(event.target.value); setGroupNotice(''); clearGroupError(); }} autoComplete="off" aria-invalid={Boolean(groupError)} />{groupError && !candidateError && <p className="artifact-edit-error" role="alert" aria-live="assertive">{groupError}</p>}<button className="primary-pill" type="submit">Rename group</button></form><h4>Members</h4><ul className="system-group-members" aria-label={`${selectedGroup.name} members`}>{selectedGroupMembers.map(component => <li key={component.id}><span><strong>{component.name}</strong><small>{getC4ArtifactTypeLabel(component.type)}</small></span><button className="secondary-action" type="button" onClick={() => removeMember(component.id)}>Remove from group</button></li>)}</ul><output className="group-feedback" aria-live="polite">{groupNotice}</output><button className="danger-action" type="button" onClick={() => setConfirmUngroup(true)}>Ungroup</button>{confirmUngroup && <ConfirmDialog title="Ungroup this boundary?" message="The group and its membership will be removed. Components, relationships, ADR links, and positions will be preserved." confirmLabel="Ungroup" onConfirm={confirmGroupRemoval} onCancel={() => setConfirmUngroup(false)} />}</section>}
     {mode === null && selectedRelationship && <section className="artifact-edit-panel" aria-label="Edit relationship"><span className="eyebrow">Relationship</span><h3>Edit relationship</h3><form className="inspector-form artifact-edit-form" onSubmit={saveRelationshipEdit}><label htmlFor="relationship-edit-source">Relationship source</label><select id="relationship-edit-source" value={relationshipEditSource} onChange={event => setRelationshipEditSource(event.target.value)}>{document.components.map(component => <option key={component.id} value={component.id}>{component.name}</option>)}</select><label htmlFor="relationship-edit-target">Relationship target</label><select id="relationship-edit-target" value={relationshipEditTarget} onChange={event => setRelationshipEditTarget(event.target.value)}>{document.components.map(component => <option key={component.id} value={component.id}>{component.name}</option>)}</select><label htmlFor="relationship-edit-label">Relationship label</label><input id="relationship-edit-label" value={relationshipEditLabel} onChange={event => setRelationshipEditLabel(event.target.value)} autoComplete="off" /><label htmlFor="relationship-edit-direction">Relationship direction</label><select id="relationship-edit-direction" value={relationshipEditDirection} onChange={event => setRelationshipEditDirection(event.target.value as 'directed' | 'undirected')}><option value="directed">Directed</option><option value="undirected">Undirected</option></select>{relationshipEditError && <p className="artifact-edit-error" role="alert">{relationshipEditError}</p>}<div className="artifact-edit-actions"><button type="button" onClick={reverseSelectedRelationship}>Reverse direction</button><button className="primary-pill" type="submit">Save relationship</button></div></form></section>}
     {mode === null && selection?.kind === 'component' && <ComponentAdrSummary diagramId={document.id} componentId={selection.id} onOpenAdr={onOpenAdr ?? (() => undefined)} />}

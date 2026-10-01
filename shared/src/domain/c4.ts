@@ -1,4 +1,4 @@
-import type { C4ArtifactType } from './types';
+import type { C4ArtifactType, ComponentRole, DiagramKind } from './types';
 
 export const c4ArtifactTypes = {
   person: {
@@ -13,6 +13,20 @@ export const c4ArtifactTypes = {
 
 export const C4_ARTIFACT_TYPES = c4ArtifactTypes;
 export const c4ArtifactMetadata = c4ArtifactTypes;
+
+export const c4ComponentRoles = {
+  element: { label: 'Element', diagramKind: 'general' },
+  container: { label: 'Container', diagramKind: 'container' },
+  external: { label: 'External participant', diagramKind: 'container' },
+} as const satisfies Record<ComponentRole, { label: string; diagramKind: DiagramKind }>;
+
+export function isContainerDiagram(kind: DiagramKind | null | undefined): kind is 'container' {
+  return kind === 'container';
+}
+
+export function getComponentRoleLabel(role: ComponentRole | null | undefined): string {
+  return role ? c4ComponentRoles[role].label : c4ComponentRoles.element.label;
+}
 
 export function isC4ArtifactType(value: string | null | undefined): value is C4ArtifactType {
   return value === 'person' || value === 'software-system';

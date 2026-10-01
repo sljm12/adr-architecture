@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { diagramDocumentSchema } from '../src/validation/schemas';
 import type { DiagramDocument } from '../src/domain/types';
+import { legacyPayloadFixture } from './container-fixtures';
 
 const document: DiagramDocument = {
   id: '00000000-0000-0000-0000-000000000001', name: 'System', status: 'active', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', trashedAt: null,
@@ -24,6 +25,12 @@ describe('future ADR link compatibility', () => {
     const legacy = { ...document, components: document.components.map(({ size: _size, ...component }) => component) };
     const parsed = diagramDocumentSchema.parse(legacy);
     expect(parsed.components[0]).toMatchObject({ id: document.components[0].id, size: { width: 180, height: 72 } });
+  });
+
+  it('adds general element defaults without reclassifying a legacy free-form type', () => {
+    const parsed = diagramDocumentSchema.parse(legacyPayloadFixture() as any);
+    expect(parsed).toMatchObject({ kind: 'general', scope: null, boundary: null, groups: [] });
+    expect(parsed.components[0]).toMatchObject({ type: 'microservice', role: 'element', technology: null, sourceComponentId: null });
   });
 
   it.each([

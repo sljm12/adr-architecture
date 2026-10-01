@@ -4,7 +4,7 @@ import type { DiagramRepositoryLike } from '../persistence/diagram-repository';
 import { sendError } from './errors';
 
 export function registerDiagramRoutes(app: FastifyInstance, repository: DiagramRepositoryLike, service: DiagramService): void {
-  const summary = (document: Awaited<ReturnType<DiagramRepositoryLike['list']>>[number]) => ({ id: document.id, name: document.name, status: document.status, createdAt: document.createdAt, updatedAt: document.updatedAt });
+  const summary = (document: Awaited<ReturnType<DiagramRepositoryLike['list']>>[number]) => ({ id: document.id, name: document.name, status: document.status, createdAt: document.createdAt, updatedAt: document.updatedAt, kind:document.kind ?? 'general', scope:document.scope ?? null });
   const completeDocument = (document: Awaited<ReturnType<DiagramRepositoryLike['get']>>) => document ? { ...document, groups: document.groups ?? [] } : document;
   app.get('/diagrams', async () => (await repository.list()).map(summary));
 
@@ -31,7 +31,7 @@ export function registerDiagramRoutes(app: FastifyInstance, repository: DiagramR
       try { return reply.send(await service.removeRelationship(request.params.diagramId, request.params.relationshipId)); }
       catch (error) {
         if (error instanceof DiagramNotFoundError) return reply.code(404).send({ message: error.message });
-      if (error instanceof RelationshipDependencyConflictError) return reply.code(409).send({ message: error.message, blockers: error.blockers });
+      if (error instanceof RelationshipDependencyConflictError) return reply.code(409).send({ message: error.message, code:'DIAGRAM_DEPENDENCY', blockers: error.blockers });
       if (error instanceof DiagramConflictError) return reply.code(409).send({ message: error.message });
       return sendError(reply, error);
     }

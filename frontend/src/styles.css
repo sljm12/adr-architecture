@@ -130,3 +130,11 @@ html,body,#root{overflow:hidden}
 @media(max-width:640px){.command-bar-actions .export-control .secondary-action:first-child{min-width:0;padding:10px 12px;font-size:13px}.command-bar-actions .export-control .secondary-action:first-child:after{content:none}}
 .save-status.save-failed{max-width:min(32rem,100%);padding:6px 10px;border:1px solid #d9a5a5;border-radius:8px;background:#fff1f1;color:#7d1c1c;overflow-wrap:anywhere}
 .save-failed .status-dot{flex:none;background:#9b1c1c}
+.container-boundary-node{width:100%;height:100%;overflow:visible;border:2px dashed #9aa5af;border-radius:8px;background:transparent;pointer-events:none;color:#fff}
+.container-boundary-heading{display:flex;align-items:center;gap:9px;min-height:44px;padding:6px 12px;border-bottom:1px dashed #9aa5af;background:#272729;color:#fff;font-size:13px}
+.container-boundary-heading strong{max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+.container-boundary-heading span:last-child{margin-left:auto;color:#d2d2d7;font-size:11px;white-space:nowrap}
+.command-bar .container-empty-instruction{flex:1 0 100%;margin:0;padding:6px 12px;border:1px solid #e0e0e0;border-radius:8px;color:#5f6368;font-size:13px;line-height:1.35}
+.container-entry-feedback{margin:2px 0 0;color:#5f6368;font-size:13px;line-height:1.4;overflow-wrap:anywhere}
+.container-entry-panel .primary-pill{justify-self:start}
+.command-bar .container-navigation-feedback{flex:1 0 100%;margin:0;padding:7px 12px;border:1px solid #d9a5a5;border-radius:8px;background:#fff1f1;color:#7d1c1c;font-size:13px;line-height:1.35}

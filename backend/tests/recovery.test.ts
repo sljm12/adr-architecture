@@ -24,16 +24,16 @@ const document: DiagramDocument = {
 };
 
 describe('recovery service', () => {
-  it('counts dependencies and rejects removal while relationships are attached', () => {
+  it('counts dependencies and rejects removal while relationships are attached', async () => {
     const repository = new DiagramRepository(); repository.create(document); const service = new DiagramService(repository);
     expect(service.dependencyCount(diagramId, componentApiId)).toBe(1);
-    expect(() => service.removeComponent(diagramId, componentApiId)).toThrow(/Remove the relationships first/);
+    await expect(service.removeComponent(diagramId, componentApiId)).rejects.toThrow(/Remove the relationships first/);
     expect(repository.get(diagramId)?.components.map(component => component.id)).toEqual([componentApiId, componentDbId]);
   });
 
-  it('removes an unconnected component without changing relationships', () => {
+  it('removes an unconnected component without changing relationships', async () => {
     const repository = new DiagramRepository(); repository.create({ ...document, components: [document.components[0]], relationships: [] }); const service = new DiagramService(repository);
-    const result = service.removeComponent(diagramId, componentApiId);
+    const result = await service.removeComponent(diagramId, componentApiId);
     expect(result.relationshipCount).toBe(0); expect(result.document.components).toEqual([]); expect(result.document.relationships).toEqual([]);
   });
 
@@ -42,16 +42,16 @@ describe('recovery service', () => {
     expect(() => service.dependencyCount(missingDiagramId, componentApiId)).toThrow(/Diagram not found/);
   });
 
-  it('rechecks dependencies when a stale preflight is followed by removal', () => {
+  it('rechecks dependencies when a stale preflight is followed by removal', async () => {
     const repository = new DiagramRepository(); repository.create({ ...document, relationships: [] }); const service = new DiagramService(repository);
     expect(service.dependencyCount(diagramId, componentApiId)).toBe(0); repository.replace(document);
-    expect(() => service.removeComponent(diagramId, componentApiId)).toThrow(/1 dependent relationship/); expect(repository.get(diagramId)?.components).toHaveLength(2);
+    await expect(service.removeComponent(diagramId, componentApiId)).rejects.toThrow(/1 dependent relationship/); expect(repository.get(diagramId)?.components).toHaveLength(2);
   });
 
-  it('blocks deletion when an ADR links the component and leaves the diagram unchanged', () => {
+  it('blocks deletion when an ADR links the component and leaves the diagram unchanged', async () => {
     const repository = new DiagramRepository(); repository.create({ ...document, components: [document.components[0]], relationships: [] }); const adrs = new AdrRepository();
     const adr = adrs.create(diagramId, completeAdrPayload); adrs.replaceLinks(adr.id, [componentApiId]); const service = new DiagramService(repository, adrs);
-    expect(() => service.removeComponent(diagramId, componentApiId)).toThrow(/linked to one or more ADRs/);
+    await expect(service.removeComponent(diagramId, componentApiId)).rejects.toThrow(/linked to one or more ADRs/);
     expect(repository.get(diagramId)?.components.map(component => component.id)).toEqual([componentApiId]);
   });
 

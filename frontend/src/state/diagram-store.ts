@@ -6,6 +6,7 @@ import { BoundedHistory } from './history';
 export type SaveStatus = 'idle' | 'unsaved' | 'saving' | 'saved' | 'failed';
 export type SavedDocumentsStatus = 'idle' | 'loading' | 'loaded' | 'failed';
 export type SavedDocumentDeleteStatus = 'idle' | 'deleting' | 'succeeded' | 'failed';
+export type ContainerOpenStatus = 'idle' | 'loading' | 'failed';
 
 type State = {
   document: DiagramDocument | null;
@@ -21,6 +22,9 @@ type State = {
   savedDocumentsDeleteMessage: string | null;
   deletedSavedDocumentIds: string[];
   loadError: string | null;
+  containerOpenStatus: ContainerOpenStatus;
+  containerOpenError: string | null;
+  containerOpenComponentId: string | null;
   canUndo: boolean;
   canRedo: boolean;
   open: (document: DiagramDocument) => void;
@@ -52,6 +56,7 @@ type State = {
   trashSavedDocument: (id: string) => Promise<boolean>;
   registerRestoredSavedDocument: (document: DiagramDocument) => void;
   loadSavedDocument: (id: string) => Promise<boolean>;
+  createOrOpenContainerDiagram: (componentId: string) => Promise<boolean>;
 };
 
 const history = new BoundedHistory<DiagramDocument>();
@@ -68,7 +73,7 @@ const saveErrorMessage = (error: unknown): string => {
   }
   return error instanceof Error ? error.message : 'Save failed';
 };
-const summary = (document: DiagramDocument): DiagramSummary => ({ id: document.id, name: document.name, status: document.status, createdAt: document.createdAt, updatedAt: document.updatedAt });
+const summary = (document: DiagramDocument): DiagramSummary => ({ id: document.id, name: document.name, status: document.status, createdAt: document.createdAt, updatedAt: document.updatedAt, kind: document.kind ?? 'general', scope: document.scope ?? null });
 const replaceSummary = (items: DiagramSummary[], next: DiagramSummary) => items.some(item => item.id === next.id) ? items.map(item => item.id === next.id ? next : item) : [...items, next];
 const normalizedGroupName = (name: string) => name.trim().toLocaleLowerCase();
 export const describeGroupSelection = (document: DiagramDocument, memberComponentIds: string[], excludedGroupId?: string): string | null => {
@@ -124,13 +129,16 @@ export const useDiagramStore = create<State>((set, get) => ({
   savedDocumentsDeleteStatus: 'idle', savedDocumentsDeleteError: null, savedDocumentsDeleteMessage: null,
   deletedSavedDocumentIds: [],
   loadError: null,
+  containerOpenStatus: 'idle',
+  containerOpenError: null,
+  containerOpenComponentId: null,
   canUndo: false,
   canRedo: false,
   open: input => {
     const document = history.reset(copy(input));
-    set({ document, status: 'saved', error: null, groupError: null, loadError: null, ...historyState() });
+    set({ document, status: 'saved', error: null, groupError: null, loadError: null, containerOpenStatus: 'idle', containerOpenError: null, containerOpenComponentId: null, ...historyState() });
   },
-  startNew: () => set({ document: null, status: 'idle', error: null, groupError: null, canUndo: false, canRedo: false }),
+  startNew: () => set({ document: null, status: 'idle', error: null, groupError: null, containerOpenStatus: 'idle', containerOpenError: null, containerOpenComponentId: null, canUndo: false, canRedo: false }),
   create: async name => {
     const created = await diagramClient.create(name);
     const document = history.reset(copy(created));
@@ -470,5 +478,44 @@ export const useDiagramStore = create<State>((set, get) => ({
       return true;
     }
     catch (error) { set({ loadError: error instanceof Error ? error.message : 'Could not load the selected diagram.' }); return false; }
+  },
+  createOrOpenContainerDiagram: async componentId => {
+    if (get().containerOpenStatus === 'loading') return false;
+    const sourceDocument = get().document;
+    const component = sourceDocument?.components.find(item => item.id === componentId);
+    const isOwnerElement = sourceDocument?.kind !== 'container' && (component?.role ?? 'element') === 'element' && component?.type === 'software-system';
+    const isExternalSystem = sourceDocument?.kind === 'container' && component?.role === 'external' && component.type === 'software-system';
+    if (!sourceDocument || !component || (!isOwnerElement && !isExternalSystem)) {
+      set({ containerOpenStatus: 'failed', containerOpenError: 'Select a Software System to open its container diagram.' });
+      return false;
+    }
+    if (sourceDocument.status !== 'active' || get().status !== 'saved') {
+      set({ containerOpenStatus: 'failed', containerOpenError: 'Save the current diagram before opening a container diagram.' });
+      return false;
+    }
+    set({ containerOpenStatus: 'loading', containerOpenError: null, containerOpenComponentId: componentId });
+    try {
+      const availability = await diagramClient.containerAvailability(sourceDocument.id, componentId);
+      if (availability.availability === 'trashed') {
+        const name = availability.diagram?.name ?? component.name;
+        throw new Error(`The container diagram “${name}” is in Trash. Restore it before opening; no replacement was created.`);
+      }
+      if (get().document !== sourceDocument || get().status !== 'saved') throw new Error('The current diagram changed while availability was loading. Try again from the current selection.');
+      const createdOrExisting = await diagramClient.createOrOpenContainerDiagram(sourceDocument.id, componentId);
+      if (get().document !== sourceDocument || get().status !== 'saved') throw new Error('The current diagram changed while the container diagram was opening. It is safe to retry.');
+      const loaded = await diagramClient.get(createdOrExisting.id);
+      if (get().document !== sourceDocument || get().status !== 'saved') throw new Error('The current diagram changed while loading. Your current work was kept; try opening again.');
+      if (loaded.id !== createdOrExisting.id || loaded.kind !== 'container' || loaded.scope?.parentDiagramId !== availability.parentDiagramId || loaded.scope?.softwareSystemId !== availability.softwareSystemId) {
+        throw new Error('The loaded container diagram did not match the selected Software System. Try again.');
+      }
+      const opened = copy(loaded);
+      history.reset(opened);
+      set(state => ({ document: opened, status: 'saved', error: null, groupError: null, loadError: null, containerOpenStatus: 'idle', containerOpenError: null, containerOpenComponentId: null, savedDocuments: replaceSummary(state.savedDocuments, summary(opened)), ...historyState() }));
+      void get().refreshSavedDocuments();
+      return true;
+    } catch (error) {
+      set({ containerOpenStatus: 'failed', containerOpenError: saveErrorMessage(error) });
+      return false;
+    }
   },
 }));

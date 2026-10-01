@@ -3,8 +3,9 @@ import { buildApp } from '../../src/api/app';
 import { createDatabase } from '../../src/persistence/database';
 import { PostgresAdrRepository } from '../../src/persistence/adr-repository';
 import { PostgresDiagramRepository } from '../../src/persistence/diagram-repository';
+import { cleanupDiagramGraph } from '../fixtures';
 
-const enabled = Boolean(process.env.DATABASE_URL);
+const enabled = process.env.RUN_POSTGRES_TESTS === '1' && Boolean(process.env.DATABASE_URL);
 
 describe.skipIf(!enabled)('PostgreSQL quickstart acceptance scenarios', () => {
   const database = enabled ? createDatabase(process.env.DATABASE_URL!) : undefined;
@@ -169,12 +170,7 @@ describe.skipIf(!enabled)('PostgreSQL quickstart acceptance scenarios', () => {
 });
 
 async function cleanup(pool: { query: (text: string, values?: unknown[]) => Promise<unknown> }, diagramId: string): Promise<void> {
-  await pool.query('DELETE FROM adr_component_links WHERE adr_id IN (SELECT id FROM adrs WHERE diagram_id = $1)', [diagramId]);
-  await pool.query('DELETE FROM adr_relationship_links WHERE adr_id IN (SELECT id FROM adrs WHERE diagram_id = $1)', [diagramId]);
-  await pool.query('DELETE FROM adrs WHERE diagram_id = $1', [diagramId]);
-  await pool.query('DELETE FROM relationships WHERE diagram_id = $1', [diagramId]);
-  await pool.query('DELETE FROM components WHERE diagram_id = $1', [diagramId]);
-  await pool.query('DELETE FROM diagrams WHERE id = $1', [diagramId]);
+  await cleanupDiagramGraph(pool as Parameters<typeof cleanupDiagramGraph>[0], diagramId);
 }
 
 async function cleanupPrefix(pool: { query: (text: string, values?: unknown[]) => Promise<unknown> }, prefix: string): Promise<void> {

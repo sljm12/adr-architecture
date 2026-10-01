@@ -3,8 +3,9 @@ import type { Pool } from 'pg';
 import { createDatabase } from '../../src/persistence/database';
 import { PostgresDiagramRepository } from '../../src/persistence/diagram-repository';
 import type { DiagramDocument } from '../../../../shared/src/index';
+import { cleanupDiagramGraph } from '../fixtures';
 
-const enabled = Boolean(process.env.DATABASE_URL);
+const enabled = process.env.RUN_POSTGRES_TESTS === '1' && Boolean(process.env.DATABASE_URL);
 const postgres = enabled ? createDatabase(process.env.DATABASE_URL) : undefined;
 const repository = postgres ? new PostgresDiagramRepository(postgres.db) : undefined;
 const diagramId = '10000000-0000-4000-8000-000000000001';
@@ -12,12 +13,6 @@ const componentA = '10000000-0000-4000-8000-000000000002';
 const componentB = '10000000-0000-4000-8000-000000000003';
 const relationshipId = '10000000-0000-4000-8000-000000000004';
 const timestamp = '2026-01-01T00:00:00.000Z';
-const cleanup = async (pool: Pool) => {
-  await pool.query('DELETE FROM relationships WHERE diagram_id = $1', [diagramId]);
-  await pool.query('DELETE FROM components WHERE diagram_id = $1', [diagramId]);
-  await pool.query('DELETE FROM diagrams WHERE id = $1', [diagramId]);
-};
-
 const document: DiagramDocument = {
   id: diagramId, name: 'Production topology', status: 'active', createdAt: timestamp, updatedAt: timestamp, trashedAt: null,
   components: [
@@ -29,11 +24,11 @@ const document: DiagramDocument = {
 
 describe.skipIf(!enabled)('PostgreSQL diagram repository', () => {
   beforeAll(async () => {
-    await cleanup(postgres!.pool as Pool);
+    await cleanupDiagramGraph(postgres!.pool as Pool, diagramId);
   });
 
   afterAll(async () => {
-    await cleanup(postgres!.pool as Pool);
+    await cleanupDiagramGraph(postgres!.pool as Pool, diagramId);
     await postgres!.pool.end();
   });
 

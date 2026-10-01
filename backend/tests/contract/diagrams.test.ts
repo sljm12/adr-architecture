@@ -103,7 +103,7 @@ describe('saved-document API', () => it('returns an empty list when no active do
   await app.close();
 }));
 
-describe.skipIf(!process.env.DATABASE_URL)('PostgreSQL diagram API', () => it('persists through POST/PUT and loads through GET from a fresh API instance', async () => {
+describe.skipIf(!(process.env.RUN_POSTGRES_TESTS === '1' && process.env.DATABASE_URL))('PostgreSQL diagram API', () => it('persists through POST/PUT and loads through GET from a fresh API instance', async () => {
   const first = createDatabase(process.env.DATABASE_URL!);
   const firstApp = buildApp(new PostgresDiagramRepository(first.db)); await firstApp.ready();
   const created = await firstApp.inject({ method: 'POST', url: '/diagrams', payload: { name: 'System' } });

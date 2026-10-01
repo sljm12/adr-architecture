@@ -12,5 +12,8 @@ export function SaveStatus() {
           ? `Save failed: ${error}`
           : 'Ready';
 
-  return <p className={`save-status save-${status}`} role={status === 'failed' ? 'alert' : 'status'} aria-live={status === 'failed' ? 'assertive' : 'polite'} aria-atomic="true"><span className="status-dot" aria-hidden="true" />{message}</p>;
+  if (status === 'failed') {
+    return <p className="save-status save-failed" role="alert" aria-live="assertive" aria-atomic="true"><span className="status-dot" aria-hidden="true" />{message}</p>;
+  }
+  return <p className={`save-status save-${status}`} role="status" aria-live="polite" aria-atomic="true"><span className="status-dot" aria-hidden="true" />{message}</p>;
 }

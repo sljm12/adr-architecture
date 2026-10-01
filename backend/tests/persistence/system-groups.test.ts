@@ -5,6 +5,7 @@ import { calculateGroupBounds } from '../../../shared/src/index';
 import { DiagramRepository, PostgresDiagramRepository } from '../../src/persistence/diagram-repository';
 import { createDatabase } from '../../src/persistence/database';
 import { DiagramService } from '../../src/services/diagram-service';
+import { cleanupDiagramGraph } from '../fixtures';
 
 const diagramId = '00000000-0000-4000-8000-000000000501';
 const firstId = '00000000-0000-4000-8000-000000000502';
@@ -22,7 +23,7 @@ const baseDocument = (): DiagramDocument => {
 };
 
 describe('system group persistence compatibility', () => {
-  it('saves a newly fitted group with fractional positions', () => {
+  it('saves a newly fitted group with fractional positions', async () => {
     const repository = new DiagramRepository();
     const service = new DiagramService(repository);
     const original = baseDocument();
@@ -35,45 +36,45 @@ describe('system group persistence compatibility', () => {
     }));
     const group = { ...original.groups[0], ...calculateGroupBounds(components) };
 
-    const saved = service.save(diagramId, { ...original, components, groups: [group] });
+    const saved = await service.save(diagramId, { ...original, components, groups: [group] });
     expect(saved.groups).toHaveLength(1);
     expect(repository.get(diagramId)?.groups[0].id).toBe(groupId);
   });
 
-  it('round-trips groups in memory while preserving identity, positions, and normalized names', () => {
+  it('round-trips groups in memory while preserving identity, positions, and normalized names', async () => {
     const repository = new DiagramRepository();
     const service = new DiagramService(repository);
     repository.create({ ...baseDocument(), groups: [] });
-    const saved = service.save(diagramId, baseDocument());
+    const saved = await service.save(diagramId, baseDocument());
     expect(saved.groups).toHaveLength(1);
     expect(saved.groups[0]).toMatchObject({ id: groupId, name: 'Finance', memberComponentIds: [secondId, firstId] });
     expect(saved.groups[0].createdAt).toBe(timestamp);
     expect(saved.components[0]).toMatchObject({ id: firstId, name: 'Checkout' });
 
-    const renamed = service.save(diagramId, { ...saved, groups: [{ ...saved.groups[0], name: '  FINANCE  ' }] });
+    const renamed = await service.save(diagramId, { ...saved, groups: [{ ...saved.groups[0], name: '  FINANCE  ' }] });
     expect(renamed.groups[0]).toMatchObject({ id: groupId, name: 'FINANCE', createdAt: timestamp });
     expect(renamed.groups[0].updatedAt).not.toBe(timestamp);
     expect(repository.get(diagramId)?.groups).toEqual(renamed.groups);
   });
 
-  it('round-trips an added membership while preserving component identity and position', () => {
+  it('round-trips an added membership while preserving component identity and position', async () => {
     const repository = new DiagramRepository();
     const service = new DiagramService(repository);
     repository.create({ ...baseDocument(), groups: [] });
-    const original = service.save(diagramId, baseDocument());
+    const original = await service.save(diagramId, baseDocument());
     const outsideId = '00000000-0000-4000-8000-000000000505';
     const outside = { id: outsideId, diagramId, name: 'Notifications', description: null, type: 'software-system' as const, position: { x: 620, y: 260 }, createdAt: timestamp, updatedAt: timestamp };
-    const added = service.save(diagramId, { ...original, components: [...original.components, outside], groups: [{ ...original.groups[0], memberComponentIds: [...original.groups[0].memberComponentIds, outsideId], ...calculateGroupBounds([...original.components.map(component => component.position), outside.position]) }] });
+    const added = await service.save(diagramId, { ...original, components: [...original.components, outside], groups: [{ ...original.groups[0], memberComponentIds: [...original.groups[0].memberComponentIds, outsideId], ...calculateGroupBounds([...original.components.map(component => component.position), outside.position]) }] });
     expect(added.groups[0]).toMatchObject({ id: groupId, memberComponentIds: [secondId, firstId, outsideId], createdAt: original.groups[0].createdAt });
     expect(added.components.find(component => component.id === outsideId)).toMatchObject({ id: outsideId, position: outside.position });
     expect(repository.get(diagramId)?.groups[0].memberComponentIds).toContain(outsideId);
   });
 
-  it('rejects invalid memberships without replacing the persisted document', () => {
+  it('rejects invalid memberships without replacing the persisted document', async () => {
     const repository = new DiagramRepository();
     const service = new DiagramService(repository);
     repository.create({ ...baseDocument(), groups: [] });
-    const original = service.save(diagramId, baseDocument());
+    const original = await service.save(diagramId, baseDocument());
     const outsideId = '00000000-0000-4000-8000-000000000506';
     const supportId = '00000000-0000-4000-8000-000000000507';
     const personId = '00000000-0000-4000-8000-000000000508';
@@ -82,7 +83,7 @@ describe('system group persistence compatibility', () => {
     const person = { id: personId, diagramId, name: 'Operator', description: null, type: 'person' as const, position: { x: 20, y: 20 }, createdAt: timestamp, updatedAt: timestamp };
     const secondGroup: SystemGroup = { id: '00000000-0000-4000-8000-000000000509', diagramId, name: 'Operations', memberComponentIds: [outsideId, supportId], ...calculateGroupBounds([outside.position, support.position]), createdAt: timestamp, updatedAt: timestamp };
     const valid = { ...original, components: [...original.components, outside, support, person], groups: [original.groups[0], secondGroup] };
-    const stored = service.save(diagramId, valid);
+    const stored = await service.save(diagramId, valid);
     const target = stored.groups[0];
     const invalidDocuments = [
       { ...stored, groups: [{ ...target, memberComponentIds: [firstId, secondId, firstId], ...calculateGroupBounds([stored.components[0].position, stored.components[1].position, stored.components[0].position]) }, stored.groups[1]] },
@@ -91,56 +92,48 @@ describe('system group persistence compatibility', () => {
       { ...stored, groups: [{ ...target, size: { width: 100, height: 100 } }, stored.groups[1]] },
     ];
     for (const invalid of invalidDocuments) {
-      expect(() => service.save(diagramId, invalid)).toThrow();
+      await expect(service.save(diagramId, invalid)).rejects.toThrow();
       expect(repository.get(diagramId)).toEqual(stored);
     }
   });
 
-  it('defaults omitted groups to an empty list for legacy documents', () => {
+  it('defaults omitted groups to an empty list for legacy documents', async () => {
     const repository = new DiagramRepository();
     const service = new DiagramService(repository);
     repository.create({ ...baseDocument(), groups: [] });
     const legacy = { ...baseDocument(), groups: undefined };
-    const saved = service.save(diagramId, legacy);
+    const saved = await service.save(diagramId, legacy);
     expect(saved.groups).toEqual([]);
     expect(repository.get(diagramId)?.groups).toEqual([]);
   });
 
-  it('rejects an invalid replacement without mutating the stored group', () => {
+  it('rejects an invalid replacement without mutating the stored group', async () => {
     const repository = new DiagramRepository();
     const service = new DiagramService(repository);
     repository.create({ ...baseDocument(), groups: [] });
-    const original = service.save(diagramId, baseDocument());
+    const original = await service.save(diagramId, baseDocument());
     const invalid = { ...original, groups: [{ ...original.groups[0], memberComponentIds: [firstId] }] };
 
-    expect(() => service.save(diagramId, invalid)).toThrow(/at least two/i);
+    await expect(service.save(diagramId, invalid)).rejects.toThrow(/at least two/i);
     expect(repository.get(diagramId)).toEqual(original);
   });
 
-  it('blocks grouped component deletion and reports the stable group ID', () => {
+  it('blocks grouped component deletion and reports the stable group ID', async () => {
     const repository = new DiagramRepository();
     const service = new DiagramService(repository);
     repository.create({ ...baseDocument(), groups: [] });
     service.save(diagramId, baseDocument());
 
-    expect(() => service.removeComponent(diagramId, firstId)).toThrow(new RegExp(`system group.*${groupId}`));
+    await expect(service.removeComponent(diagramId, firstId)).rejects.toThrow(new RegExp(`system group.*${groupId}`));
     expect(repository.get(diagramId)?.components).toHaveLength(2);
   });
 });
 
 const postgresEnabled = Boolean(process.env.RUN_POSTGRES_TESTS && process.env.DATABASE_URL);
 const database = postgresEnabled ? createDatabase(process.env.DATABASE_URL) : undefined;
-const cleanup = async (pool: Pool) => {
-  await pool.query('DELETE FROM system_group_members WHERE group_id IN (SELECT id FROM system_groups WHERE diagram_id = $1)', [diagramId]);
-  await pool.query('DELETE FROM system_groups WHERE diagram_id = $1', [diagramId]);
-  await pool.query('DELETE FROM relationships WHERE diagram_id = $1', [diagramId]);
-  await pool.query('DELETE FROM components WHERE diagram_id = $1', [diagramId]);
-  await pool.query('DELETE FROM diagrams WHERE id = $1', [diagramId]);
-};
-
 describe.skipIf(!postgresEnabled)('PostgreSQL system group persistence', () => {
-  beforeAll(async () => { await cleanup(database!.pool as Pool); });
-  afterAll(async () => { await cleanup(database!.pool as Pool); await database!.pool.end(); });
+  beforeAll(async () => { await cleanupDiagramGraph(database!.pool as Pool, diagramId); });
+  afterAll(async () => { await cleanupDiagramGraph(database!.pool as Pool, diagramId); await database!.pool.end(); });
 
   it('round-trips normalized memberships and preserves group creation timestamps on replacement', async () => {
     const repository = new PostgresDiagramRepository(database!.db);

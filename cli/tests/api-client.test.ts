@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createApiClient, getApiBaseUrl } from '../src/api-client';
 
 const diagramId = '00000000-0000-4000-8000-000000000001';
-const summary = { id: diagramId, name: 'Payments', status: 'active', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-02T00:00:00Z' };
+const summary = { id: diagramId, name: 'Payments', status: 'active', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-02T00:00:00Z', kind: 'general', scope: null };
 const diagram = { ...summary, trashedAt: null, components: [], relationships: [], groups: [] };
 
 function response(body: unknown, status = 200): Response {

@@ -6,9 +6,10 @@ import { useDiagramStore } from '../state/diagram-store';
 import { ComponentNode } from './ComponentNode';
 import { RelationshipEdge } from './RelationshipEdge';
 import { SystemGroupNode } from './SystemGroupNode';
+import { ContainerBoundaryNode } from './ContainerBoundaryNode';
 import type { CanvasSelection } from './WorkspaceInspector';
 
-const nodeTypes = { component: ComponentNode, systemGroup: SystemGroupNode };
+const nodeTypes = { component: ComponentNode, systemGroup: SystemGroupNode, containerBoundary: ContainerBoundaryNode };
 const edgeTypes = { relationship: RelationshipEdge };
 
 type DiagramCanvasProps = {
@@ -23,12 +24,17 @@ type DiagramCanvasProps = {
   canvasEpoch?: number;
   adrCounts?: Record<string, number>;
   onOpenComponentAdrs?: (componentId: string) => void;
+  onOpenContainerDiagram?: (componentId: string) => void;
 };
 
-export function DiagramCanvas({ onSelection, selectedComponentIds = [], selectedComponentId = null, selectedCandidateComponentId = null, selectedGroupId = null, selectedRelationshipId = null, onMultiSelectionChange, groupingSelectionActive = false, canvasEpoch = 0, adrCounts = {}, onOpenComponentAdrs }: DiagramCanvasProps) {
+export function DiagramCanvas({ onSelection, selectedComponentIds = [], selectedComponentId = null, selectedCandidateComponentId = null, selectedGroupId = null, selectedRelationshipId = null, onMultiSelectionChange, groupingSelectionActive = false, canvasEpoch = 0, adrCounts = {}, onOpenComponentAdrs, onOpenContainerDiagram }: DiagramCanvasProps) {
   const document = useDiagramStore(state => state.document);
   const update = useDiagramStore(state => state.update);
-  const visual = useMemo(() => document ? toReactFlow(document, undefined, adrCounts, onOpenComponentAdrs) : { nodes: [], edges: [] }, [document, adrCounts, onOpenComponentAdrs]);
+  const requestContainerOpen = useCallback((componentId: string) => {
+    if (onOpenContainerDiagram) onOpenContainerDiagram(componentId);
+    else window.dispatchEvent(new CustomEvent('adr:open-container-diagram', { detail: { componentId } }));
+  }, [onOpenContainerDiagram]);
+  const visual = useMemo(() => document ? toReactFlow(document, undefined, adrCounts, onOpenComponentAdrs, requestContainerOpen) : { nodes: [], edges: [] }, [document, adrCounts, onOpenComponentAdrs, requestContainerOpen]);
   const [interactiveNodes, setInteractiveNodes] = useState<Node[]>([]);
   useEffect(() => setInteractiveNodes(visual.nodes), [visual]);
   const selectedIds = useMemo(() => new Set(selectedComponentIds.length ? selectedComponentIds : selectedComponentId ? [selectedComponentId] : selectedCandidateComponentId ? [selectedCandidateComponentId] : []), [selectedCandidateComponentId, selectedComponentId, selectedComponentIds]);
@@ -142,11 +148,19 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
     if (node.type === 'systemGroup') emitSelection({ kind: 'group', id: node.id }, `group:${node.id}`);
     else emitSelection({ kind: 'component', id: node.id }, `component:${node.id}`);
   }, [emitSelection, groupingSelectionActive, onMultiSelectionChange, selectedCandidateComponentId, selectedGroupId, selectedIds]);
+  const onNodeDoubleClick = useCallback<NodeMouseHandler>((event, node) => {
+    if (groupingSelectionActive || event.shiftKey || node.type !== 'component') return;
+    const component = document?.components.find(item => item.id === node.id);
+    const eligible = component?.type === 'software-system' && (document?.kind === 'container' ? component.role === 'external' : (component.role ?? 'element') === 'element');
+    if (!eligible) return;
+    if (onOpenContainerDiagram) onOpenContainerDiagram(node.id);
+    else window.dispatchEvent(new CustomEvent('adr:open-container-diagram', { detail: { componentId: node.id } }));
+  }, [document, groupingSelectionActive, onOpenContainerDiagram]);
   const onEdgeClick = useCallback<EdgeMouseHandler>((_, edge) => {
     if (groupingSelectionActive) return;
     onMultiSelectionChange?.([]);
     emitSelection({ kind: 'relationship', id: edge.id }, `relationship:${edge.id}`);
   }, [emitSelection, groupingSelectionActive, onMultiSelectionChange]);
 
-  return <main id="diagram-canvas" tabIndex={-1} aria-label="Architecture diagram canvas"><ReactFlow key={`${document?.id ?? 'empty'}:${visual.nodes.length}:${canvasEpoch}`} nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={onNodesChange} onEdgesChange={() => undefined} onNodeDragStop={onNodeDragStop} onNodeClick={onNodeClick} onEdgeClick={onEdgeClick} onSelectionChange={handleSelectionChange} onPaneClick={() => { selectionSignature.current = ''; onMultiSelectionChange?.([]); onSelection(null); }} selectionOnDrag={false} selectionKeyCode="Shift" multiSelectionKeyCode="Shift" selectionMode="full" fitView fitViewOptions={{ padding: 0.4 }}><Background aria-hidden="true" /><Controls aria-label="Canvas zoom controls" /></ReactFlow></main>;
+  return <main id="diagram-canvas" tabIndex={-1} aria-label="Architecture diagram canvas"><ReactFlow key={`${document?.id ?? 'empty'}:${visual.nodes.length}:${canvasEpoch}`} nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={onNodesChange} onEdgesChange={() => undefined} onNodeDragStop={onNodeDragStop} onNodeClick={onNodeClick} onNodeDoubleClick={onNodeDoubleClick} onEdgeClick={onEdgeClick} onSelectionChange={handleSelectionChange} onPaneClick={() => { selectionSignature.current = ''; onMultiSelectionChange?.([]); onSelection(null); }} selectionOnDrag={false} selectionKeyCode="Shift" multiSelectionKeyCode="Shift" selectionMode="full" fitView fitViewOptions={{ padding: 0.4 }}><Background aria-hidden="true" /><Controls aria-label="Canvas zoom controls" /></ReactFlow></main>;
 }
