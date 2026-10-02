@@ -4,13 +4,20 @@
 
 **Created**: 2026-09-30
 
-**Updated**: 2026-10-01
+**Updated**: 2026-10-02
 
 **Status**: Draft
 
 **Input**: User description: "Create a new branch. The user wants to create C4 model container diagrams as specified at https://c4model.com/diagrams/container and https://c4model.com/abstractions/software-system. The user shall be able to create a container diagram when double-clicking a Software System, and there should be an option to create a container diagram when the Software System is clicked or being viewed."
 
 **Update request**: "When adding a component to a Container diagram, the only options are Application or Datastore, not Software System or Person. When editing a container diagram entered from a parent diagram, save it under that originating parent rather than as a Parent Diagram."
+
+## Clarifications
+
+### Session 2026-10-02
+
+- Q: If a parent diagram is in trash, what should happen when someone tries to restore one of its container diagrams? → A: Offer to restore the parent and its affected children together, with confirmation.
+- Q: If a parent element is used as an external participant in a container diagram, what should happen when its type changes to something other than Person or Software System? → A: Block the type change and identify the dependent occurrences that must be removed first.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -89,10 +96,11 @@ An architecture author links ADRs to containers and their relationships and safe
 
 1. **Given** a container or container relationship, **When** the author links an ADR using the existing workflow, **Then** the linked decision can be reviewed and remains attached to the same artifact after renaming, repositioning, saving, and reopening.
 2. **Given** a Software System owns an active or recoverable container diagram, **When** the author tries to delete that system or change its type, **Then** the operation is blocked with an explanation of the dependent diagram.
-3. **Given** a parent participant is referenced by a container diagram, **When** the author tries to delete that source participant, **Then** the operation is blocked until its dependent occurrences and affected links are explicitly resolved.
+3. **Given** a parent participant is referenced by an active or recoverable container diagram, **When** the author tries to delete that source participant or change its type to something other than Person or Software System, **Then** the operation is blocked and identifies the dependent occurrences that must be explicitly removed first; the source, occurrences, relationships, and ADR links remain unchanged by the blocked attempt.
 4. **Given** a parent diagram with active child container diagrams, **When** the author confirms moving the parent to trash, **Then** the confirmation identifies the affected children, those children also become unavailable for active editing, and restoring the parent restores the children that were active before that operation with their identities and links.
 5. **Given** a container diagram is moved to trash independently, **When** its owning system is viewed or double-clicked, **Then** the author is offered restoration of that diagram rather than silent replacement; restoration preserves its content and references.
 6. **Given** a container diagram is exported using an existing export option, **When** the format supports the content, **Then** the export identifies the owning system and represents its boundary, containers, displayed metadata, external participants, relationships, and any ADR content required by that format; otherwise an actionable error identifies the unsupported content and no incomplete export is presented as successful.
+7. **Given** a container diagram became unavailable when its parent was moved to trash, **When** the author attempts to restore that child, **Then** the system offers to restore the parent and all children affected by that trash operation together, identifies those diagrams before confirmation, and restores them with their identities and links only after confirmation; cancellation leaves their trash states unchanged.
 
 ### Edge Cases
 
@@ -108,8 +116,10 @@ An architecture author links ADRs to containers and their relationships and safe
 - An expanding boundary would overlap an external participant: that occurrence is repositioned outside the boundary with visible spacing, preserving its source identity and relationships; directly placing an external occurrence inside the boundary is rejected with an explanation.
 - The author selects the owning system itself as an external participant, includes the same source participant twice, or adds a relationship between two external participants: validation rejects the change with an explanation.
 - Including an external participant does not automatically copy system-level relationships into container-level relationships or invent connections.
+- The author attempts to reclassify a source participant to a type other than Person or Software System while active or recoverable child occurrences reference it: the change is blocked, the dependent occurrences that must be removed first are identified, and existing relationships and ADR links remain intact.
 - A referenced source artifact is unavailable or a saved ownership reference is broken: the diagram reports the affected reference and prevents saving or exporting it as a valid complete artifact.
 - A child was already in trash before the parent was trashed: restoring the parent leaves that child in trash until explicitly restored.
+- A child restoration is requested while its parent is in trash: the system offers confirmed restoration of the parent and the children affected by that parent's trash operation, rather than activating a child alone. Children already in trash before that operation still require separate explicit restoration after the parent is restored.
 - A diagram load, save, trash, restore, or export fails: the author receives clear failure feedback and no operation silently removes artifacts or reports a false success.
 
 ## Requirements *(mandatory)*
@@ -130,9 +140,9 @@ An architecture author links ADRs to containers and their relationships and safe
 - **FR-012**: Ownership, diagram identities, container details and layout, external participant source references and layout, relationships, ADRs, and artifact links MUST persist across save, refresh, and reopen. Renaming, positioning, resizing, or grouping an owning system MUST NOT change these associations.
 - **FR-013**: Ordinary container and relationship edits MUST participate in the existing undo and redo workflow without changing artifact identities or leaving unresolved references.
 - **FR-014**: The existing ADR creation, lifecycle, linking, and review workflows MUST be available for containers and their relationships. Links MUST target stable artifact identities. Parent ADR links MUST NOT be automatically copied to child containers or relationships.
-- **FR-015**: Deleting an owning Software System or changing it to another artifact type MUST be blocked while an active or recoverable child diagram depends on it. Deleting a source participant MUST likewise be blocked while child occurrences depend on it. The explanation MUST identify the dependency and the action needed to resolve it.
+- **FR-015**: Deleting an owning Software System or changing it to another artifact type MUST be blocked while an active or recoverable child diagram depends on it. Deleting a source participant or changing its type to something other than Person or Software System MUST likewise be blocked while occurrences in active or recoverable child diagrams depend on it. The explanation MUST identify the dependency and the action needed to resolve it; for a source participant, it MUST identify the dependent occurrences that must be explicitly removed first. A blocked attempt MUST leave the source artifact, occurrences, relationships, and ADR links unchanged.
 - **FR-016**: Moving a parent diagram to trash MUST require confirmation explaining which active container diagrams will also become unavailable. Restore MUST return the parent and exactly those children affected by that operation with their identities, content, and references; previously trashed children MUST remain trashed.
-- **FR-017**: Independently moving a container diagram to trash and restoring it MUST use the existing confirmed, recoverable deletion workflow. Its owner MUST expose "Restore container diagram" while it is in trash; double-click MUST offer that restoration without silently creating a replacement.
+- **FR-017**: Independently moving a container diagram to trash and restoring it MUST use the existing confirmed, recoverable deletion workflow. Its owner MUST expose "Restore container diagram" while it is in trash; double-click MUST offer that restoration without silently creating a replacement. If restoration is requested while the parent is in trash, the system MUST offer to restore the parent and the children affected by its trash operation together according to FR-016, identify the affected diagrams before confirmation, and leave their trash states unchanged on cancellation. A child MUST NOT become active while its parent remains in trash; children already in trash before the parent operation MUST still require separate explicit restoration after the parent is restored.
 - **FR-018**: Removing containers, relationships, or external occurrences MUST follow existing confirmation and reference-protection rules and MUST identify affected ADR links. Cancellation MUST leave the artifacts and references intact.
 - **FR-019**: Existing exports for a container diagram MUST preserve its system scope, boundary, containers, displayed details, external participants, and relationships, plus ADR content and references required by the selected format. Invalid or unsupported content MUST produce an actionable validation error rather than silent omission. Exporting a parent diagram MUST NOT claim to include child diagram contents unless they are actually included.
 - **FR-020**: Existing diagrams without container diagrams MUST continue to load, edit, save, group, link ADRs, and export without data loss or being reclassified as container diagrams.

@@ -4,7 +4,7 @@
 
 **Decisions**: [research.md](./research.md)
 
-**Updated**: 2026-10-01
+**Updated**: 2026-10-02
 
 ## Domain representation
 
@@ -81,10 +81,13 @@ Server-only `trashBatchId` and `trashRootDiagramId` are nullable UUID columns on
 | Parent active → trashed | Under one graph transaction, mark root and its currently active direct children with a fresh common batch/root ID and trashedAt. |
 | Child active → independently trashed | Fresh batch ID with the child's own ID as root. Keep parent active. |
 | Parent trashed → active | Restore root and exactly the children carrying that batch/root marker. Preserve children trashed earlier. Clear restored markers. |
-| Child trashed → active | Require active parent and valid owner/source references. Parent-cascade children cannot restore independently while parent is in trash. |
+| Child restoration requested with parent trashed | Read-only preview resolves to the parent root and exactly its trash batch. After named confirmation, restore that root/batch; never activate a child alone. Earlier independently trashed children remain trashed and require separate restoration afterward. |
+| Child trashed → active independently | Require active parent and valid owner/source references. Direct POST with an inactive parent returns PARENT_INACTIVE and the canonical restoration root ID without writes. |
 | Legacy trashed → active | Null provenance means a single-row restore unless feature children are associated; handle their own provenance explicitly. |
 
 Restore preserves all artifact UUIDs, timestamps other than updatedAt/trashedAt, ADR content, links and layouts. Broken contextual references cause rollback with actionable failure.
+
+Restore-impact is a transient response containing requestedDiagramId, restoreRootDiagramId, nullable trashBatchId, affectedDiagramIds, resolved affectedDiagrams and requestedDiagramIncluded. For a child with a trashed parent, the affected set is the parent and its matching root/batch children, not all recoverable children. requestedDiagramIncluded is false for a child independently trashed earlier. A confirmation submits the exact ID set and nullable batch identity to the root restore route. Under the graph lock, reread activity/provenance/references and reject a changed set or batch with RESTORE_IMPACT_CHANGED before writing. No extra persistence fields are needed.
 
 ## PostgreSQL migration design
 
@@ -157,6 +160,7 @@ A full-document PUT cannot bypass DELETE protections. Omitted ADR-linked artifac
 ## Dependency resolution
 
 - Owner deletion/reclassification is blocked even if its child is trashed. No permanent deletion or ownership detachment is introduced; feedback instructs the author to keep the Software System or trash the parent diagram to hide the complete architecture recoverably.
-- Source deletion is blocked until all its occurrences, including those in recoverable children, are explicitly removed after resolving ADR/relationship blockers. A trashed child must be restored before editing those occurrences.
+- Source deletion or reclassification to anything other than Person/Software System is blocked until all its occurrences, including those in recoverable children, are explicitly removed after resolving ADR/relationship blockers. Return DIAGRAM_DEPENDENCY with child ID/name/status, sourceComponentId, occurrence componentId and a removal nextAction for each occurrence. A trashed child must be restored before editing those occurrences; when its parent is also trashed, follow the confirmed parent-batch flow first. The rejected operation changes no source, occurrence, relationship or ADR/link data. Otherwise valid Person/Software System changes remain allowed unless owner protection applies.
 - Container/occurrence removal checks local relationships and ADR links. Relationship removal checks ADR links.
 - Confirmation preflight is informational. DELETE compares the confirmed affected-diagram ID set against the current set under lock and returns TRASH_IMPACT_CHANGED if it differs.
+- Restore preflight is informational. Root POST compares the confirmed set and batch identity under lock, requires confirmation for multi-diagram batches, and returns the restored root document. Cancellation does not issue a mutation; failed validation rolls back the whole batch. Clients refresh all affected summaries and separately load the requested child if it was included.

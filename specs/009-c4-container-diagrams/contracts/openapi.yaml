@@ -1,13 +1,14 @@
 openapi: 3.0.3
 info:
   title: ADR Diagram API - C4 Container Diagrams
-  version: 1.1.0
+  version: 1.2.0
   description: >-
     Feature additions to the existing REST contract. Paths are backend paths; the Vite
     browser proxy prefixes them with /api. General diagrams remain compatible.
     All graph mutations lock the source parent before affected children and validate dependencies
     within the same transaction. Revised design includes internal container subtypes and
-    canonical child save identity; existing foundation/entry endpoints are implemented,
+    canonical child save identity, confirmed child-initiated parent recovery and occurrence-specific
+    source reclassification blockers; existing foundation/entry endpoints are implemented,
     while remaining behavior is planned.
 paths:
   /diagrams:
@@ -55,6 +56,11 @@ paths:
         its own path ID and preserves its own name and canonical parent/owner association;
         it neither creates a top-level parent nor replaces parent content. Responses retain
         that ID/kind/scope. A pre-revision child payload missing subtype fails validation.
+        Retyping a parent source outside person/software-system is blocked while active or
+        recoverable child occurrences reference it. DIAGRAM_DEPENDENCY identifies child,
+        source and occurrence IDs with explicit removal guidance; rejected writes preserve
+        sources, occurrences, relationships and ADR links. Supported source type changes
+        remain allowed unless the source owns an active or recoverable child.
       requestBody:
         required: true
         content:
@@ -177,26 +183,81 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/DiagramSummary' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /diagrams/{diagramId}/restore-impact:
+    parameters:
+      - $ref: '#/components/parameters/DiagramId'
+    get:
+      summary: Preview the canonical root and exact restoration batch
+      description: >-
+        Read-only consistent snapshot for a trashed requested diagram. If a requested
+        container's parent is trashed, restoreRootDiagramId is that parent and the affected
+        set contains only the parent and children with its matching root/batch provenance.
+        Previously independently trashed children remain excluded; requestedDiagramIncluded
+        is false if the requested child was one of them. The client must show affected names
+        and confirm before POSTing to the root restore route. This preview restores nothing.
+      responses:
+        '200':
+          description: Named restoration set and provenance to confirm
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RestoreImpact' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /diagrams/{diagramId}/restore:
     parameters:
       - $ref: '#/components/parameters/DiagramId'
     post:
-      summary: Restore a diagram and exactly its parent-trash batch
+      summary: Restore a confirmed canonical root and exactly its trash batch
       description: >-
         Existing response shape remains a resolved diagram. Restoring a parent restores
         children with its batch/root marker only. Restoring a child independently requires
         an active parent and valid sources. Validation failures roll back the entire batch.
-        Clients refresh active/trash lists after success.
+        A direct child request with an inactive parent returns PARENT_INACTIVE and
+        restoreRootDiagramId without writes; clients offer the named parent-batch preview
+        rather than restoring that parent implicitly. Confirmed requests target the root,
+        not the originally requested child. Under the graph lock, reread the exact affected
+        IDs and trash batch; mismatch returns RESTORE_IMPACT_CHANGED without writes.
+        Multi-diagram restoration without confirmation returns RESTORE_CONFIRMATION_REQUIRED.
+        Bodyless legacy single-row restores remain supported with an active or absent parent.
+        Previously independently trashed children require separate restoration after parent
+        recovery. Return the restored root document; clients refresh active/trash lists and
+        load the requested child only if it was restored, through guarded navigation.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [confirmedDiagramIds, confirmedTrashBatchId]
+              properties:
+                confirmedDiagramIds:
+                  type: array
+                  minItems: 1
+                  uniqueItems: true
+                  items: { type: string, format: uuid }
+                confirmedTrashBatchId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: Exact preview batch identity; null only for legacy null provenance
       responses:
         '200': { $ref: '#/components/responses/Document' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
   /diagrams/{diagramId}/components/{componentId}/dependencies:
     parameters:
       - $ref: '#/components/parameters/DiagramId'
       - $ref: '#/components/parameters/ComponentId'
     get:
-      summary: Inspect local and cross-diagram deletion blockers
+      summary: Inspect local deletion blockers and cross-diagram source dependencies
+      description: >-
+        Diagram blockers cover active and recoverable children. External-source blockers
+        include the occurrence componentId and sourceComponentId, child name/status and
+        an explicit removal nextAction. These dependencies also block unsupported source
+        reclassification through full-document PUT. A recoverable occurrence must first
+        be restored for explicit removal; no links or relationships are removed automatically.
       responses:
         '200':
           description: Retain existing relationshipCount and add blocker collections
@@ -250,7 +311,7 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/ApiError' }
     Conflict:
-      description: Dependency, immutable ownership, inactive parent, changed trash impact or restoration required
+      description: Dependency, immutable ownership, inactive parent, changed trash/restore impact or restoration confirmation required
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ApiError' }
@@ -419,6 +480,28 @@ components:
         adrId: { type: string, format: uuid }
         title: { type: string }
         reason: { type: string }
+    RestoreImpact:
+      type: object
+      required: [requestedDiagramId, restoreRootDiagramId, trashBatchId, affectedDiagramIds, affectedDiagrams, requestedDiagramIncluded]
+      properties:
+        requestedDiagramId: { type: string, format: uuid }
+        restoreRootDiagramId: { type: string, format: uuid }
+        trashBatchId: { type: string, format: uuid, nullable: true }
+        affectedDiagramIds:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        affectedDiagrams:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/DiagramSummary' }
+        requestedDiagramIncluded: { type: boolean }
+      description: >-
+        Exact canonical root/batch snapshot to display and confirm. IDs and summaries
+        represent the same set including the root. Inclusion is false for a requested
+        child independently trashed before its parent's operation; that child needs
+        separate confirmation after the parent is active. Null batch is legacy provenance.
     DiagramBlocker:
       type: object
       required: [diagramId, name, status, reason, nextAction]
@@ -430,6 +513,10 @@ components:
         sourceComponentId: { type: string, format: uuid }
         reason: { type: string }
         nextAction: { type: string }
+      description: >-
+        Child dependency with an actionable next step. For external-source dependency,
+        componentId is the required local occurrence UUID and sourceComponentId the
+        referenced parent source UUID; both are retained for active and trashed children.
     ApiError:
       type: object
       required: [message]
@@ -437,7 +524,7 @@ components:
         message: { type: string }
         code:
           type: string
-          enum: [RESTORE_REQUIRED, PARENT_INACTIVE, DIAGRAM_REFERENCE_BROKEN, DIAGRAM_DEPENDENCY, IMMUTABLE_SCOPE, TRASH_IMPACT_CHANGED, EMPTY_CONTAINER_MERMAID]
+          enum: [RESTORE_REQUIRED, PARENT_INACTIVE, DIAGRAM_REFERENCE_BROKEN, DIAGRAM_DEPENDENCY, IMMUTABLE_SCOPE, TRASH_IMPACT_CHANGED, RESTORE_IMPACT_CHANGED, RESTORE_CONFIRMATION_REQUIRED, EMPTY_CONTAINER_MERMAID]
         fields: { type: object, additionalProperties: { type: string } }
         componentId: { type: string, format: uuid }
         relationshipCount: { type: integer, minimum: 0 }
@@ -445,3 +532,4 @@ components:
         blockers: { type: array, items: { $ref: '#/components/schemas/AdrBlocker' } }
         diagramBlockers: { type: array, items: { $ref: '#/components/schemas/DiagramBlocker' } }
         diagram: { $ref: '#/components/schemas/DiagramSummary' }
+        restoreRootDiagramId: { type: string, format: uuid }

@@ -2,7 +2,7 @@
 
 **Date**: 2026-09-30
 
-**Updated**: 2026-10-01
+**Updated**: 2026-10-02
 
 **Feature**: [spec.md](./spec.md)
 
@@ -35,6 +35,8 @@ Two research agents reviewed the current subtype path and the save/list path ind
 - `shared/src/export/html-snapshot.ts` rejects internal type container through general-only type validation; SVG/HTML/Mermaid labels need role-aware subtype propagation as part of the already-planned child export work.
 
 ## Decisions
+
+The 2026-10-02 revision reviewed `backend/src/services/diagram-service.ts`, both diagram repositories, graph transactions, recovery routes and existing contract/persistence tests. A research agent independently assessed the clarified recovery and source-type paths. `findHierarchyBlockers()` already checks unsupported source reclassification across active and trashed children, but blockers omit occurrence IDs and validation needs recoverable-child/preservation cases. Both repositories still restore a single row, `DiagramService.restore()` delegates directly, and recovery routes do not preserve typed conflict metadata. The 0005 provenance columns exist but exact recovery remains implementation work. The decisions below extend these existing business rules without a new library or additional recovery migration.
 
 ### 1. Extend the existing domain and tables
 
@@ -110,7 +112,7 @@ Two research agents reviewed the current subtype path and the save/list path ind
 
 ### 10. Record exactly which diagrams a trash operation affects
 
-**Decision**: Add server-managed `trashBatchId` and `trashRootDiagramId` columns. A parent trash marks the parent and currently active direct children with one batch. Previously trashed children keep their earlier marker. Restoration touches exactly that batch and validates sources. Independent child restore requires an active parent.
+**Decision**: Use the server-managed `trashBatchId` and `trashRootDiagramId` columns already added by 0005. A parent trash marks the parent and currently active direct children with one batch. Previously trashed children keep their earlier marker. Restoration touches exactly that batch and validates sources. Independent child restore requires an active parent; requesting restoration while the parent is trashed offers the confirmed parent-batch flow in Decision 16.
 
 **Rationale**: This small provenance model distinguishes independent trash from parent cascade. Preflight lists affected diagrams, and DELETE rechecks the confirmed IDs under the graph lock.
 
@@ -160,6 +162,22 @@ Two research agents reviewed the current subtype path and the save/list path ind
 
 **Alternatives considered**: A flat list with only a scope badge does not satisfy the requested placement. Name-based grouping merges unrelated architecture. A nested response contract would unnecessarily change frontend/CLI compatibility.
 
+### 16. Confirm the canonical parent batch when recovery starts from a child
+
+**Decision**: Add a read-only restore-impact preflight resolving a requested child with a trashed parent to that parent as root. Return the named affected set, batch identity and whether the requested child belongs to it. Confirm the root using the existing restore POST with the exact IDs and batch identity; reread under the graph lock and reject changed impact before mutation. Restore the complete validated batch atomically and return the root document. A direct independent child restore with an inactive parent remains a typed PARENT_INACTIVE conflict carrying the root ID. Route recovery failures through the standard typed error serializer.
+
+**Rationale**: This implements clarification B while preserving exact provenance and the existing resolved-document response. Comparing batch identity also prevents an old confirmation from restoring a later trash operation with identical diagram IDs. An earlier independently trashed child remains excluded; after confirmed parent recovery it requires a separate explicit child restoration. Full active/trash list reconciliation and guarded requested-child loading prevent false recovery feedback. Memory repository snapshots must preserve server-managed provenance separately from domain payloads. No new persistence fields or runtime dependencies are required.
+
+**Alternatives considered**: Blocking with no restoration offer conflicts with the accepted decision. Implicit parent restoration bypasses review of siblings. Restoring every recoverable child resurrects intentionally hidden work. Adding the requested earlier-independent child to the parent batch breaks exact recovery. A generalized recovery history subsystem exceeds this feature.
+
+### 17. Identify every occurrence blocking unsupported source reclassification
+
+**Decision**: Keep transactional previous/incoming source checks across active and recoverable children. Reject a change outside Person/Software System with DIAGRAM_DEPENDENCY and child ID/name/status, source ID, occurrence ID and explicit removal guidance. Preserve all source/occurrence/relationship/ADR data on rejection. Supported Person/Software System changes remain source-derived unless the separate owning-system restriction applies.
+
+**Rationale**: This implements clarification A using the existing hierarchy guard and prevents invalid child projections. Recoverable occurrences are still live references. Authors must restore affected children before editing and use existing relationship/ADR removal protections; no automatic unlinking is introduced. Test full-document PUT as well as ordinary editing, including races with occurrence creation/removal and unchanged persisted data after rejection.
+
+**Alternatives considered**: Confirmed automatic occurrence/link removal was explicitly rejected. Allowing invalid children and blocking only later save/export shifts repair work to a different diagram. Raw foreign-key protection cannot detect unsupported type changes.
+
 ## Documentation lookup record
 
 - Drizzle: Context7 resolved `/drizzle-team/drizzle-orm-docs`, then fetched transactions, PostgreSQL schema/constraints and conflict documentation outside the sandbox. The first PowerShell `npx` invocation was blocked by execution policy; `npx.cmd` succeeded. No quota failure occurred.
@@ -168,3 +186,4 @@ Two research agents reviewed the current subtype path and the save/list path ind
 - Additional primary sources: PostgreSQL locking/constraints above and the [C4 container](https://c4model.com/diagrams/container) and [Software System](https://c4model.com/abstractions/software-system) references supplied in the specification.
 - Revision lookup on 2026-10-01: Context7 resolved Drizzle ORM to `/drizzle-team/drizzle-orm-docs` and fetched named CHECK constraints and migration guidance outside the sandbox. PowerShell blocked npx.ps1; npx.cmd succeeded without quota failure. The documentation establishes constraint/migration mechanisms; subtype/backfill choices and save/list rules are project design inferences from the amended requirements and repository review.
 - No unresolved technical or product clarifications remain. Source citations establish the mechanisms; the schema, lock protocol and workflow choices are feature-specific design decisions.
+- Revision on 2026-10-02 is a business-rule and contract update grounded in the accepted clarifications and repository review. No library API/configuration changes are proposed; earlier documentation lookup records remain historical evidence.

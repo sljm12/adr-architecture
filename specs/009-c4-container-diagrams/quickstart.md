@@ -1,6 +1,6 @@
 # Quickstart Validation: C4 Container Diagrams
 
-This guide validates the complete revised feature after implementation. Foundation and entry-point work, including migration 0005, already exists; see [validation.md](./validation.md) for recorded results. The 2026-10-01 plan update adds no runtime changes or executed implementation checks. Migration 0006 and the revised subtype/save/list behavior remain implementation work. Use [plan.md](./plan.md) for the requirement matrix, [data-model.md](./data-model.md) for artifact rules, and [contracts/openapi.yaml](./contracts/openapi.yaml) for endpoint shapes.
+This guide validates the complete revised feature after implementation. Foundation and entry-point work, including migration 0005, already exists; see [validation.md](./validation.md) for recorded results. The 2026-10-02 plan update adds no runtime changes or executed implementation checks. Migration 0006, subtype/save/list behavior, confirmed child-initiated parent recovery and occurrence-specific source-type safeguards remain implementation validation work. Use [plan.md](./plan.md) for the requirement matrix, [data-model.md](./data-model.md) for artifact rules, and [contracts/openapi.yaml](./contracts/openapi.yaml) for endpoint shapes.
 
 ## Prerequisites
 
@@ -95,11 +95,19 @@ Attempt owner deletion/reclassification, source deletion while occurrences exist
 
 Expected: typed conflicts identify dependencies and supported next actions; PUT cannot bypass DELETE or silently detach ADR links. Removing unrelated eligible content preserves all other data. Unsaved/failing mutations leave current drafts available.
 
+Attempt to reclassify Customer to an unsupported legacy/unclassified type through a parent PUT while its external occurrence exists, then repeat with that child in trash. Capture saved source, occurrence, relationship and ADR/link data before/after. Expected: DIAGRAM_DEPENDENCY identifies each child name/status and occurrence/source ID with explicit removal guidance; every saved artifact remains unchanged. Restore the child if necessary, resolve relationship/ADR blockers and remove the occurrence explicitly before retrying. Verify a supported Person/Software System change succeeds for a nonowner source, while an owner still cannot change away from Software System. Include deterministic PUT-versus-occurrence-creation/removal race coverage.
+
 ### 7. Validate exact trash restoration
 
 Independently trash Ledger's child. Trash the parent, review the affected named set, cancel once and then confirm. Restore the parent, then restore Ledger's child independently. Repeat parent trash while an affected child/ADR is currently edited with unsaved changes.
 
 Expected: cascade affects only currently active children; parent restore returns exactly that batch. Previously trashed Ledger remains trashed until explicitly restored. Owners offer Restore rather than replacements. Changed confirmed impact requires a new confirmation. Child/ADR writes cannot proceed while its parent is in trash.
+
+Repeat with the parent trashed and initiate restoration from Payments' child in the trash list. Expected: GET restore-impact names the parent root and exactly its affected batch, supplies the batch identity and reports requestedDiagramIncluded true. Cancel once: all trash states remain unchanged and no POST occurs. Confirm the exact set/batch to POST the root restore route; the response is the restored parent document. Refresh both lists, then load Payments' child through guarded navigation. Verify all restored UUIDs, creation timestamps, layout, ADRs and links are preserved.
+
+Repeat by initiating restoration from Ledger's earlier independently trashed child. Expected: requestedDiagramIncluded false; confirmation explains that parent-batch recovery leaves Ledger trashed. After that recovery, a separate confirmed Ledger restore becomes available. Never report Ledger as restored or load it before this second operation succeeds. Direct child POST with an inactive parent returns PARENT_INACTIVE with the root ID and changes nothing.
+
+In contract/persistence fixtures, restore and retrash the same ID set after capturing a preview, then submit its old batch identity. Expected: RESTORE_IMPACT_CHANGED with no writes; refresh/reconfirm. A missing multi-diagram confirmation returns RESTORE_CONFIRMATION_REQUIRED. Invalid owner/source references roll back the entire restoration. Exercise recovery versus source edits, parent trash and competing restores in real PostgreSQL, plus canceled/failed dirty-work guards and a successful recovery followed by failed child loading.
 
 ### 8. Inspect exports
 

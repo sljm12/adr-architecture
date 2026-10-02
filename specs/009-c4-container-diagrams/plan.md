@@ -2,7 +2,7 @@
 
 **Branch**: `009-c4-container-diagrams` | **Date**: 2026-09-30 | **Spec**: [spec.md](./spec.md)
 
-**Updated**: 2026-10-01 to cover the revised FR-007/FR-011, new FR-023/FR-024 and SC-009/SC-010.
+**Updated**: 2026-10-02 to incorporate the clarified FR-015 source-type protection and FR-017 child-initiated parent recovery, retaining the subtype/save/list revision.
 
 **Input**: Feature specification from `specs/009-c4-container-diagrams/spec.md`
 
@@ -13,6 +13,8 @@ Add one canonical C4 container diagram per Software System through double-click 
 Use transactional create-or-open and source-parent locking, contextual source resolution, a separate visual system boundary and guarded navigation. Preserve general diagrams, grouping and package formats. This phase changes documentation only.
 
 Update internal component creation and editing to offer exactly Application and Datastore, persisted as `containerType` while retaining `role: container` and `type: container`. Save edits to the existing child, preserving its own name, kind and canonical parent/owner IDs, and render it beneath its parent in the library. Source-linked external participants retain their separate inclusion workflow.
+
+When a child restoration is requested while its parent is trashed, preview and confirm restoration of the parent and exactly its affected trash batch. Earlier independently trashed children require a separate restore after the parent is active. Block unsupported source type changes while active or recoverable occurrences depend on the source, and identify those occurrences without deleting relationships or ADR links.
 
 ### Current implementation and revision scope
 
@@ -48,8 +50,8 @@ Pre-research and post-design gates pass. The checks below assess design complian
 | --- | --- |
 | I. Linked, versioned artifacts | Stable IDs/source references, subtype-preserving history/serialization, immutable child save scope, existing timestamps, validated export snapshots. |
 | II. First-class decisions | Existing ADR content/lifecycle/replacement rules, local links, no inherited parent decisions. |
-| III. Data protection | Locked PUT/DELETE guards, activity checks before ADR writes, named confirmations, exact recovery and rollback. |
-| IV. Artifact boundary quality | Domain/contract/store/adapter/export coverage, 0005-to-0006 compatibility, both subtype round trips, child save/list regression cases and real PostgreSQL races required before completion. |
+| III. Data protection | Locked PUT/DELETE guards for active and recoverable occurrences, activity checks before ADR writes, named restore-impact confirmations, exact recovery and rollback. |
+| IV. Artifact boundary quality | Domain/contract/store/adapter/export coverage, 0005-to-0006 compatibility, subtype/save/list regressions, child-initiated recovery and source-type preservation tests, and real PostgreSQL races required before completion. |
 | V. Simplicity and accessibility | Existing stack/tables, one separate boundary, native keyboard actions, persistent keyboard geometry and existing design system. |
 
 No constitution exception is required.
@@ -118,6 +120,8 @@ Completed [research.md](./research.md) with decisions/rationale/alternatives, re
 
 The 2026-10-01 revision adds independent repository research for subtype propagation and child save/list behavior. Current Context7 Drizzle guidance supports named CHECK constraints and forward migrations; the compatibility backfill and library grouping are project design decisions. The established stack and previously researched editor/export mechanisms remain in use.
 
+The 2026-10-02 repository review confirms source reclassification protection already checks active and trashed children, but its blockers need occurrence identities and additional preservation coverage. Recovery still delegates to single-row repository operations; batch recovery, restore-impact and typed conflict handling remain planned implementation work. This revision changes business rules and contracts using the existing stack; no new library mechanism, dependency or migration is required for these two decisions.
+
 ## Phase 1: Design and Contracts
 
 Completed [data-model.md](./data-model.md), [REST contract](./contracts/openapi.yaml), [UI contract](./contracts/ui-contract.md), [export contract](./contracts/export-contract.md) and [quickstart validation guide](./quickstart.md).
@@ -128,9 +132,9 @@ Completed [data-model.md](./data-model.md), [REST contract](./contracts/openapi.
 2. Enforce unique owner across active/trashed children, restrictive owner/source FKs, composite owner-parent membership and unique external source per child. Legacy rows default to general/element without reclassifying free-form types.
 3. A graph transaction helper shared by diagram/ADR writes locks the canonical source parent, then affected children in UUID order, and rereads identity/activity/dependencies. General operations lock their general row.
 4. Atomic create-or-open returns 201 new/200 existing and 409 RESTORE_REQUIRED for a trashed child. A uniqueness conflict rolls back before fresh winner resolution.
-5. Replacement compares previous/incoming documents before physical diffs. Protect owners/sources, omitted ADR-linked artifacts, local relationship/group dependencies and immutable scope. PUT cannot change status/provenance or bypass DELETE.
+5. Replacement compares previous/incoming documents before physical diffs. Protect owners/sources, omitted ADR-linked artifacts, local relationship/group dependencies and immutable scope. PUT cannot change status/provenance or bypass DELETE. Unsupported source reclassification returns DIAGRAM_DEPENDENCY for every active or recoverable occurrence, with its child/source/occurrence identity and explicit removal action. Preserve the source, occurrences, relationships and ADR links on rejection; otherwise valid Person/Software System changes remain allowed unless owner protection applies.
 6. ADR create/update/delete/link/lifecycle operations check active parent/child before mutation in the same locked transaction. Repository writes must use that transaction rather than perform a separate write after a precheck.
-7. Parent trash validates the confirmed affected set and marks only active children with a common batch/root. Restore exactly that batch; previously trashed children remain trashed. Independent child restore requires an active parent and valid sources.
+7. Parent trash validates the confirmed affected set and marks only active children with a common batch/root. Restore exactly that batch; previously trashed children remain trashed. Independent child restore requires an active parent and valid sources. GET restore-impact resolves a requested child with a trashed parent to that parent as the restoration root. The confirmed POST targets the root, compares the full affected ID set and batch identity under the graph lock, and restores the batch atomically. Direct child POST while its parent is inactive returns PARENT_INACTIVE with the root ID and performs no restoration. Stale confirmation returns RESTORE_IMPACT_CHANGED without writes.
 8. Memory test repositories model the contracts; real PostgreSQL proves uniqueness, rollback, race safety and recovery.
 
 9. Preserve 0005 and add 0006 with nullable container_type, backfill only existing internal role rows to application, then replace the named role CHECK: internal containers require application/datastore and other roles require null. Keep type container, IDs, timestamps, layout, endpoints and ADR links unchanged. Mirror the check in Drizzle schema and include the field in both repository component write paths and reads. Application is the explicit compatibility default for formerly generic containers; never infer Datastore from names or technology.
@@ -159,7 +163,9 @@ Ordinary Save and Save-before-navigation PUT the captured child's own ID, name, 
 
 Keep the list API as a flat summary array and build nested UI groups keyed by parent UUID using frontend diagram-list helpers. Apply existing own-name/date filters first, render contextual parent headings for matching children, and count only matching diagrams. A parent match does not expand filter matches to unrelated children. Sort parent groups and child siblings using current comparators/UUID tie breakers. Use scope metadata as a contextual heading if the parent summary is unavailable; never promote that child to a top-level parent. Reconcile successful saves by child ID and show name/level/owner/parent in accessible list actions. Keep recovery scope labels consistent without adding a nested API or new save endpoint.
 
-Retain list arrays, DELETE 204 and restore document responses. Add diagramBlockers alongside existing ADR blockers and trash-impact preflight. Recheck confirmed IDs under lock; changed impact requires another confirmation.
+Retain list arrays, DELETE 204 and restore document responses. Add diagramBlockers alongside existing ADR blockers, trash-impact and restore-impact preflights. Recheck confirmed IDs and restoration batch under lock; changed impact requires another confirmation. Multi-diagram restoration requires a confirmation body; bodyless single-diagram restores remain compatible only when the parent is active or absent. Use the standard typed error serializer on recovery routes.
+
+All child restore entry points preview the canonical root and affected names before confirmation. Cancellation changes no trash states. After root restoration, refresh the full active/trash lists and load the requested child only if it was included and navigation guards succeed. If the requested child was independently trashed earlier, explain that it remains trashed and offer its separate confirmed restore after the parent is active. Never activate it as an unconfirmed addition to the batch. Preserve current editor/ADR work on failure, and distinguish successful recovery from a subsequent failed load.
 
 All library/workspace/RecoveryControls trash paths use named confirmation. Protect unsaved work in any currently edited affected child/ADR before parent trash. Refresh every affected active/trash summary. Permanent deletion and ownership detachment remain outside this feature.
 
@@ -176,9 +182,9 @@ Populated Mermaid uses existing flowchart/subgraph grammar, escaped multiline la
 1. Reconcile existing tasks with this revision, preserve T001–T028 completion/evidence and identify additional subtype/save/list coverage without assuming existing checks prove it.
 2. Extend established domain/schema/invariants with containerType, add forward 0006 and compatibility fixtures, and round-trip the field in memory/PostgreSQL repositories. Retain completed transactional APIs/guards and add the revised validation to them.
 3. Complete editor/adapter/rendering with Application/Datastore choices, source picker, metadata/history, draft reset and pointer/keyboard layout.
-4. Add save-response identity checks, guarded parent navigation, grouped library/filter projection, scope labels and dependency-aware recovery.
+4. Add save-response identity checks, guarded parent navigation, grouped library/filter projection, scope labels, occurrence-specific source blockers and confirmed child-initiated parent-batch recovery.
 5. Complete shared export and browser/CLI subtype snapshot integration with package regressions.
-6. Validate 0005-to-0006 upgrade, subtype round trips, repeated child saves and failed retries, grouped/filter list behavior, existing database concurrency, end-to-end, accessibility/usability and README.
+6. Validate 0005-to-0006 upgrade, subtype round trips, repeated child saves and failed retries, grouped/filter list behavior, active/trashed source-type guards, restoration cancellation/stale batches/rollback, existing database concurrency, end-to-end, accessibility/usability and README.
 
 Include meaningful checks at each artifact boundary. This workflow stops at design: task generation, application changes, migration application and implementation tests belong to subsequent phases.
 
@@ -190,6 +196,8 @@ Include meaningful checks at each artifact boundary. This workflow stops at desi
 | FR-006–FR-009, FR-022 | Kind/role/text/endpoint/source rules, empty/fitted boundary, clearance/displacement, readable metadata, independent layout. |
 | FR-010–FR-013 | Dirty diagram/ADR Save/Discard/Cancel, stale responses, list reopen/source refresh, pointer/keyboard moves, atomic undo/redo. |
 | FR-014–FR-018 | ADR lifecycle/ownership, DELETE/PUT bypass, blockers, trash races, exact batch recovery, inactive-write guards. |
+| FR-015, clarification 2026-10-02 | Unsupported source retype rejected with active and recoverable occurrence IDs; source/relationship/ADR preservation; supported type changes and owner restriction; PUT versus occurrence creation/removal races. |
+| FR-016–FR-017, clarification 2026-10-02 | Child-triggered parent/batch preview and confirmation, cancellation, earlier-independent-child exclusion/separate restore, direct-child inactive conflict, stale set/batch rejection, atomic rollback and full list refresh. |
 | FR-019 | Content/escaping, empty-child outcomes, offline package/ADR links, draft vs persisted CLI state, reference failures, parent scope. |
 | FR-020 | Additive migration/old payloads, no type reclassification, general edit/group/ADR/export regressions. |
 | FR-021 | Keyboard actions/editing, visible focus/live feedback and non-color scope/type cues. |
@@ -213,3 +221,5 @@ No constitution violations require justification.
 Reviewed on 2026-09-30. OpenAPI YAML parsed successfully; all 12 documented operations have responses and required path parameters; 70 contract references and 19 local Markdown links resolve. No unresolved clarification/template placeholders remain in the design artifacts. Application builds, migrations and implementation tests were not run in this planning phase.
 
 Revision review on 2026-10-01 covers the updated plan, research, data model, UI/REST/export contracts and quickstart. OpenAPI 1.1.0 YAML parses; all 12 documented operations have responses and required path parameters; all 71 contract references and 22 local Markdown links in these design artifacts resolve. Diff formatting passes and no unresolved clarification/template placeholders remain. Prior implementation outcomes remain recorded separately in validation.md. No application build, migration application or implementation test was run for this plan update. All five constitution design gates pass. The next workflow is speckit-tasks to reconcile remaining work with FR-023/FR-024 and SC-009/SC-010.
+
+Revision review on 2026-10-02 incorporates both accepted clarifications into the plan, research, data model, UI/REST contracts and quickstart. The export contract remains applicable without changes. OpenAPI 1.2.0 YAML parses with unique-key checking; all 13 documented operations have responses and required path parameters, 77 contract references resolve including the cross-feature group schema, and 22 local Markdown links resolve. No unresolved clarification/template placeholders remain and diff formatting passes. All five constitution design gates pass before research and after design, without exceptions. No application build, migration application or implementation test was run for this documentation update. Reconcile remaining tasks with clarified FR-015/FR-017 as well as the prior subtype/save/list revision; preserve existing completion markers and implementation evidence.

@@ -4,7 +4,7 @@
 
 **API**: [openapi.yaml](./openapi.yaml)
 
-**Updated**: 2026-10-01 for FR-007, FR-011, FR-023 and FR-024.
+**Updated**: 2026-10-02 for clarified FR-015/FR-017, retaining the subtype/save/list design.
 
 ## Entry points and state
 
@@ -75,7 +75,13 @@ All library, workspace and RecoveryControls trash actions use the same named con
 
 After 204 success or restore, refresh/reconcile the full active and trash lists. If the current editor belongs to the affected set, exit editing and reset ADR context only after the operation succeeds. A stale confirmed set returns TRASH_IMPACT_CHANGED, refreshes the preview and requires a fresh confirmation.
 
+Every restore entry point, including trash-list child actions, uses GET restore-impact before a named confirmation. If the requested child's parent is trashed, explain that restoring it requires restoring the parent and the children affected by that parent's trash operation. Show the canonical root and exact affected diagram names, then submit the confirmed ID set and batch identity to the root restore route. Cancellation changes no trash states and preserves focus/current work. RESTORE_IMPACT_CHANGED refreshes the preview and requires fresh confirmation; PARENT_INACTIVE redirects the offer to the parent root rather than silently restoring it.
+
+If requestedDiagramIncluded is false, explain that this child was independently trashed earlier and will remain trashed when the parent batch is restored. After the parent is active, offer a separate named child restoration; do not include it automatically. Refresh the full active/trash lists after each successful operation and load the originally requested child only after it is active and the existing dirty-work/navigation guards succeed. A failed subsequent load reports that recovery succeeded and offers loading retry without repeating restoration.
+
 Container/occurrence/relationship removal uses existing confirmation and blocker rules. Diagram blockers identify dependent children/occurrences and distinguish them from ADR and local relationship/group blockers.
+
+When a parent source is changed to a type other than Person or Software System, show DIAGRAM_DEPENDENCY blockers for all active and recoverable occurrences with child name/status and occurrence identity. Explain that the author must open or restore the child and explicitly remove those occurrences after resolving relationship/ADR blockers. The blocked save preserves its draft for correction and does not silently remove occurrences or links. Valid Person/Software System changes keep source projection behavior; a Software System owning a child retains its stricter owner protection.
 
 ## Accessibility and visual system
 
@@ -88,3 +94,5 @@ Retain React Flow node/edge focus and keyboard accessibility; Enter/Space select
 Both entry points, external-source navigation, duplicate attempts, grouped owners, Person/group rejection, dirty diagram/ADR Save/Discard/Cancel, creation/load/save failure, keyboard movement persistence, atomic details editing, boundary displacement/undo, source rename with independent layout, duplicate labels, current-child parent deletion, exact cascade restore, and color-independent scope identification.
 
 For SC-009, verify both internal type choices, subtype edit/save/reopen and undo/redo, stale parent form selections, store-level rejection, and separate external inclusion. For SC-010, verify repeated saves, save-before-navigation, refresh/list reopen, child/parent/owner rename, duplicate names across parents, failed-save retry, malformed responses, grouped library results and child-only filter matches. Assert child ID/name/kind/scope retention, a single summary under the correct parent, and unchanged parent content.
+
+For clarified FR-015/FR-017, verify unsupported source type changes with active and recoverable occurrences preserve all saved artifacts and identify occurrence blockers. Verify child-initiated parent restoration, named batch confirmation, cancellation, stale batch retry, earlier-independent-child exclusion and separate restore, dirty-work protection, list refresh and keyboard focus.
