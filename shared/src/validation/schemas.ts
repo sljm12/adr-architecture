@@ -11,7 +11,8 @@ export const componentTypeSchema = c4ArtifactTypeSchema.nullable();
 export const componentSizeSchema = z.object({ width: z.number().finite().positive(), height: z.number().finite().positive() }).default(DEFAULT_COMPONENT_SIZE);
 const componentBaseShape = { id:uuidSchema, diagramId:uuidSchema, name:componentNameSchema, description:z.string().nullable(), type:z.string().nullable(), position:positionSchema, size:componentSizeSchema, createdAt:z.string(), updatedAt:z.string() };
 export const componentRoleSchema = z.enum(['element', 'container', 'external']);
-const componentFeatureShape = { role:componentRoleSchema.default('element'), technology:z.string().trim().max(200).nullable().default(null), sourceComponentId:uuidSchema.nullable().default(null) };
+export const containerTypeSchema = z.enum(['application', 'datastore']);
+const componentFeatureShape = { role:componentRoleSchema.default('element'), containerType:containerTypeSchema.nullable().default(null), technology:z.string().trim().max(200).nullable().default(null), sourceComponentId:uuidSchema.nullable().default(null) };
 export const componentSchema = z.object({ ...componentBaseShape, ...componentFeatureShape });
 export const componentWriteSchema = componentSchema.extend({ type: c4ArtifactTypeSchema });
 const relationshipBaseShape = { id:uuidSchema, diagramId:uuidSchema, sourceComponentId:uuidSchema, targetComponentId:uuidSchema, direction:relationshipDirectionSchema, label:z.string().trim().nullable(), createdAt:z.string(), updatedAt:z.string() };
@@ -57,6 +58,7 @@ const generalDiagramDocumentSchema = z.object({
 }).superRefine((document, ctx) => {
   const components = new Map(document.components.map(component => [component.id, component]));
   document.components.forEach((component, index) => {
+    if (component.containerType !== null) ctx.addIssue({ code:'custom', path:['components',index,'containerType'], message:'General elements require null containerType' });
     if (component.role !== 'element' || component.technology !== null || component.sourceComponentId !== null) {
       ctx.addIssue({ code:'custom', path:['components',index], message:'General diagrams require ordinary element components without technology or source references' });
     }
@@ -74,6 +76,7 @@ const containerComponentSchema = z.object({
   description:z.string().trim().nullable(),
   type:z.string().nullable(),
   role:componentRoleSchema,
+  containerType:containerTypeSchema.nullable(),
   technology:z.string().trim().max(200).nullable(),
   sourceComponentId:uuidSchema.nullable(),
   position:positionSchema,
@@ -108,12 +111,14 @@ const containerDiagramDocumentSchema = z.object({
   document.components.forEach((component, index) => {
     if (component.diagramId !== document.id) ctx.addIssue({ code:'custom', path:['components',index,'diagramId'], message:'Component must belong to the container diagram' });
     if (component.role === 'container') {
+      if (component.containerType === null) ctx.addIssue({ code:'custom', path:['components',index,'containerType'], message:'Choose Application or Datastore for this container' });
       if (component.type !== 'container') ctx.addIssue({ code:'custom', path:['components',index,'type'], message:'Container role requires type container' });
       if (!component.description?.trim()) ctx.addIssue({ code:'custom', path:['components',index,'description'], message:'Container responsibility is required' });
       if (!component.technology?.trim()) ctx.addIssue({ code:'custom', path:['components',index,'technology'], message:'Container technology is required' });
       if (component.sourceComponentId !== null) ctx.addIssue({ code:'custom', path:['components',index,'sourceComponentId'], message:'Internal containers cannot reference an external source' });
       if (!isWithinBoundary(document.boundary, component.position, component.size)) ctx.addIssue({ code:'custom', path:['components',index,'position'], message:'Container must remain inside the fitted Software System boundary' });
     } else if (component.role === 'external') {
+      if (component.containerType !== null) ctx.addIssue({ code:'custom', path:['components',index,'containerType'], message:'External participants require null containerType' });
       if (component.type !== 'person' && component.type !== 'software-system') ctx.addIssue({ code:'custom', path:['components',index,'type'], message:'External participants must resolve to a Person or Software System' });
       if (!component.sourceComponentId || component.sourceComponentId === document.scope.softwareSystemId) ctx.addIssue({ code:'custom', path:['components',index,'sourceComponentId'], message:'External participant must reference a different parent element' });
       if (component.technology !== null) ctx.addIssue({ code:'custom', path:['components',index,'technology'], message:'External participant technology comes from its source' });

@@ -29,7 +29,7 @@ export const exportDiagramFixture = (): DiagramDocument => ({
   createdAt: exportTimestamp,
   updatedAt: exportTimestamp,
   trashedAt: null,
-  components: [structuredClone(systemA), structuredClone(systemB), structuredClone(person)],
+  components: [structuredClone(systemA), structuredClone(systemB), structuredClone(person)].map(component=>({...component,containerType:null})),
   relationships: [
     { id: exportIds.relationship, diagramId: exportIds.diagram, sourceComponentId: exportIds.systemA, targetComponentId: exportIds.systemB, direction: 'directed', label: 'writes <events>', createdAt: exportTimestamp, updatedAt: exportTimestamp },
     { id: exportIds.parallelRelationship, diagramId: exportIds.diagram, sourceComponentId: exportIds.systemA, targetComponentId: exportIds.systemB, direction: 'undirected', label: 'reconciles', createdAt: exportTimestamp, updatedAt: exportTimestamp },

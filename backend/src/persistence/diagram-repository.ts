@@ -212,6 +212,7 @@ function mapDocument(
       description: component.role === 'external' && component.sourceComponentId ? sourceComponents.get(component.sourceComponentId)?.description ?? component.description : component.description,
       type: component.role === 'external' && component.sourceComponentId ? sourceComponents.get(component.sourceComponentId)?.type ?? component.type : component.type,
       role: component.role as NonNullable<DiagramDocument['components'][number]['role']>,
+      containerType: component.containerType as DiagramDocument['components'][number]['containerType'],
       technology: component.technology,
       sourceComponentId: component.sourceComponentId,
       position: { x: component.x, y: component.y },
@@ -393,7 +394,7 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
         return {
           id: component.id, diagramId: document.id, name: component.name.trim(),
           description: component.description, type: component.type,
-          role: component.role ?? 'element', technology: component.technology ?? null, sourceComponentId: component.sourceComponentId ?? null,
+          role: component.role ?? 'element', containerType: component.containerType ?? null, technology: component.technology ?? null, sourceComponentId: component.sourceComponentId ?? null,
           x: component.position.x, y: component.position.y, width: component.size.width, height: component.size.height,
           createdAt: previous ? dateValue(previous.createdAt, `components.${component.id}.createdAt`) : dateValue(component.createdAt, `components.${component.id}.createdAt`),
           updatedAt: now,
@@ -453,7 +454,7 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
       const previous = existingComponents.get(component.id);
       const values = {
         diagramId: document.id, name: component.name.trim(), description: component.description, type: component.type,
-        role: component.role ?? 'element', technology: component.technology ?? null, sourceComponentId: component.sourceComponentId ?? null,
+        role: component.role ?? 'element', containerType: component.containerType ?? null, technology: component.technology ?? null, sourceComponentId: component.sourceComponentId ?? null,
         x: component.position.x, y: component.position.y, width: component.size.width, height: component.size.height, updatedAt: now,
       };
       if (previous) await tx.update(schema.components).set(values).where(eq(schema.components.id, component.id));

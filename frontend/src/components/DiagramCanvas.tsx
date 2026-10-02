@@ -25,18 +25,23 @@ type DiagramCanvasProps = {
   adrCounts?: Record<string, number>;
   onOpenComponentAdrs?: (componentId: string) => void;
   onOpenContainerDiagram?: (componentId: string) => void;
+  onCreateInteraction?: (source: string, target: string) => void;
 };
 
-export function DiagramCanvas({ onSelection, selectedComponentIds = [], selectedComponentId = null, selectedCandidateComponentId = null, selectedGroupId = null, selectedRelationshipId = null, onMultiSelectionChange, groupingSelectionActive = false, canvasEpoch = 0, adrCounts = {}, onOpenComponentAdrs, onOpenContainerDiagram }: DiagramCanvasProps) {
+export function DiagramCanvas({ onSelection, selectedComponentIds = [], selectedComponentId = null, selectedCandidateComponentId = null, selectedGroupId = null, selectedRelationshipId = null, onMultiSelectionChange, groupingSelectionActive = false, canvasEpoch = 0, adrCounts = {}, onOpenComponentAdrs, onOpenContainerDiagram, onCreateInteraction }: DiagramCanvasProps) {
   const document = useDiagramStore(state => state.document);
   const update = useDiagramStore(state => state.update);
+  const applyComponentGeometry = useDiagramStore(state => state.applyComponentGeometry);
+  const layoutError = useDiagramStore(state => state.error);
+  const dragging = useRef(false);
+  const resizing = useRef(false);
   const requestContainerOpen = useCallback((componentId: string) => {
     if (onOpenContainerDiagram) onOpenContainerDiagram(componentId);
     else window.dispatchEvent(new CustomEvent('adr:open-container-diagram', { detail: { componentId } }));
   }, [onOpenContainerDiagram]);
   const visual = useMemo(() => document ? toReactFlow(document, undefined, adrCounts, onOpenComponentAdrs, requestContainerOpen) : { nodes: [], edges: [] }, [document, adrCounts, onOpenComponentAdrs, requestContainerOpen]);
   const [interactiveNodes, setInteractiveNodes] = useState<Node[]>([]);
-  useEffect(() => setInteractiveNodes(visual.nodes), [visual]);
+  useEffect(() => setInteractiveNodes(previous => document?.kind === 'container' ? visual.nodes.map(node=>({...node,selected:previous.find(item=>item.id===node.id)?.selected??false})) : visual.nodes), [visual, document?.kind]);
   const selectedIds = useMemo(() => new Set(selectedComponentIds.length ? selectedComponentIds : selectedComponentId ? [selectedComponentId] : selectedCandidateComponentId ? [selectedCandidateComponentId] : []), [selectedCandidateComponentId, selectedComponentId, selectedComponentIds]);
   const renderedNodes = interactiveNodes.length || visual.nodes.length === 0 ? interactiveNodes : visual.nodes;
   const nodes = renderedNodes.map(node => ({ ...node, data: { ...node.data, isSelected: node.type === 'systemGroup' ? node.id === selectedGroupId : selectedIds.has(node.id), isCandidate: node.type === 'component' && node.id === selectedCandidateComponentId } }));
@@ -54,10 +59,16 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
   }, [onSelection]);
 
   const onNodeDragStop = useCallback((_: unknown, node: Node) => {
+    dragging.current = false;
     if (!document) return;
     // Grouped members intentionally bypass constrainMemberPosition: the adapter fits the boundary
     // around their new absolute position instead of trapping them at the old edge.
     const nextDocument = fromReactFlow(document, interactiveNodes.map(item => item.id === node.id ? { ...item, position: node.position } : item));
+    if (document.kind === 'container') {
+      const accepted = applyComponentGeometry(nextDocument.components.map(c=>({id:c.id,position:c.position,size:c.size})));
+      if (!accepted) setInteractiveNodes(visual.nodes);
+      return;
+    }
     if (node.type === 'systemGroup') {
       const group = nextDocument.groups.find(item => item.id === node.id);
       if (group) update(() => nextDocument);
@@ -68,15 +79,27 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
       const group = nextDocument.groups.find(item => item.memberComponentIds.includes(component.id));
       update(() => nextDocument);
     }
-  }, [document, interactiveNodes, update]);
+  }, [document, interactiveNodes, update, applyComponentGeometry, visual.nodes]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     if (!document) return;
     const currentNodes = interactiveNodes.length ? interactiveNodes : visual.nodes;
-    const layoutChanges = changes.filter(change => change.type === 'position' || change.type === 'dimensions');
+    const layoutChanges = changes.filter(change => change.type === 'position' || change.type === 'dimensions' || document.kind === 'container' && change.type === 'select');
     const nextNodes = applyNodeChanges(layoutChanges, currentNodes);
     const dimensionChanges = changes.filter(change => change.type === 'dimensions' && change.resizing !== undefined && change.dimensions && currentNodes.some(node => node.id === change.id && node.type === 'component'));
     setInteractiveNodes(nextNodes);
+    if (document.kind === 'container') {
+      if (dimensionChanges.some(change=>change.type==='dimensions'&&change.resizing===true)) resizing.current=true;
+      const finishedResize=dimensionChanges.some(change=>change.type==='dimensions'&&change.resizing===false);
+      const keyboardMove=changes.some(change=>change.type==='position'&&change.position&&change.dragging!==true)&&!dragging.current&&!resizing.current;
+      if (finishedResize || keyboardMove) {
+        resizing.current=false;
+        const next=fromReactFlow(document,nextNodes);
+        const accepted=applyComponentGeometry(next.components.filter(c=>changes.some(change=>change.id===c.id)).map(c=>({id:c.id,position:c.position,size:c.size})));
+        if (!accepted) setInteractiveNodes(visual.nodes);
+      }
+      return;
+    }
     if (!dimensionChanges.length) return;
     if (dimensionChanges.some(change => change.type === 'dimensions' && change.resizing !== false)) return;
     const resizedNodes = nextNodes.map(node => {
@@ -86,7 +109,7 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
     });
     const nextDocument = fromReactFlow(document, resizedNodes);
     update(() => nextDocument);
-  }, [document, interactiveNodes, update, visual.nodes]);
+  }, [document, interactiveNodes, update, visual.nodes, applyComponentGeometry]);
 
   const handleSelectionChange = useCallback<OnSelectionChangeFunc>(({ nodes: selectedNodes, edges: selectedEdges }) => {
     if (groupingSelectionActive) return;
@@ -162,5 +185,5 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
     emitSelection({ kind: 'relationship', id: edge.id }, `relationship:${edge.id}`);
   }, [emitSelection, groupingSelectionActive, onMultiSelectionChange]);
 
-  return <main id="diagram-canvas" tabIndex={-1} aria-label="Architecture diagram canvas"><ReactFlow key={`${document?.id ?? 'empty'}:${visual.nodes.length}:${canvasEpoch}`} nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={onNodesChange} onEdgesChange={() => undefined} onNodeDragStop={onNodeDragStop} onNodeClick={onNodeClick} onNodeDoubleClick={onNodeDoubleClick} onEdgeClick={onEdgeClick} onSelectionChange={handleSelectionChange} onPaneClick={() => { selectionSignature.current = ''; onMultiSelectionChange?.([]); onSelection(null); }} selectionOnDrag={false} selectionKeyCode="Shift" multiSelectionKeyCode="Shift" selectionMode="full" fitView fitViewOptions={{ padding: 0.4 }}><Background aria-hidden="true" /><Controls aria-label="Canvas zoom controls" /></ReactFlow></main>;
+  return <main id="diagram-canvas" tabIndex={-1} aria-label="Architecture diagram canvas"><ReactFlow key={`${document?.id ?? 'empty'}:${visual.nodes.length}:${canvasEpoch}`} nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={onNodesChange} onConnect={({source,target})=>{const a=document?.components.find(c=>c.id===source),b=document?.components.find(c=>c.id===target);if(!a||!b||source===target||document?.kind==='container'&&a.role!=='container'&&b.role!=='container'){useDiagramStore.setState({error:'Choose two different local components, including an internal container.'});return;}onCreateInteraction?.(source,target);}} onEdgesChange={() => undefined} onNodeDragStart={() => { dragging.current = true; }} onNodeDragStop={onNodeDragStop} onNodeClick={onNodeClick} onNodeDoubleClick={onNodeDoubleClick} onEdgeClick={onEdgeClick} onSelectionChange={handleSelectionChange} onPaneClick={() => { selectionSignature.current = ''; onMultiSelectionChange?.([]); onSelection(null); }} selectionOnDrag={false} selectionKeyCode="Shift" multiSelectionKeyCode="Shift" selectionMode="full" fitView fitViewOptions={{ padding: 0.4 }}><Background aria-hidden="true" /><Controls aria-label="Canvas zoom controls" /></ReactFlow>{document?.kind === 'container' && layoutError && <p className="canvas-edit-feedback" role="alert" aria-live="assertive">{layoutError}</p>}</main>;
 }

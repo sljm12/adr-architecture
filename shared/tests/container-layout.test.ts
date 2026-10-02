@@ -5,11 +5,11 @@ import { containerFixtureIds as ids, containerFixtureTimestamp as timestamp } fr
 
 const childId = '91000000-0000-4000-8000-000000000001';
 const container = (id: string, x: number, y: number, width: number, height: number): Component => ({
-  id, diagramId: childId, name: id, description: 'service', type: 'container', role: 'container', technology: 'TypeScript', sourceComponentId: null,
+  id, diagramId: childId, name: id, description: 'service', type: 'container', role: 'container', containerType: 'application', technology: 'TypeScript', sourceComponentId: null,
   position: { x, y }, size: { width, height }, createdAt: timestamp, updatedAt: timestamp,
 });
 const external = (id: string, x: number, y: number, width = 120, height = 80): Component => ({
-  id, diagramId: childId, name: id, description: null, type: 'software-system', role: 'external', technology: null, sourceComponentId: ids.sourceSystem,
+  id, diagramId: childId, name: id, description: null, type: 'software-system', role: 'external', containerType: null, technology: null, sourceComponentId: ids.sourceSystem,
   position: { x, y }, size: { width, height }, createdAt: timestamp, updatedAt: timestamp,
 });
 

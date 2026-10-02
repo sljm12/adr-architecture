@@ -2,6 +2,7 @@ import type { DiagramDocument } from './types';
 import type { ArchitectureDecisionRecord, Component, Relationship } from './types';
 import { fitGroupBoundsAfterLayout, isLessThanOrApproximatelyEqual, isMemberWithinGroup } from './group-layout';
 import { isExternalOutsideBoundary } from './container-layout';
+import { isContainerType } from './c4';
 
 export type GroupMemberAddReasonCode =
   | 'missing-group'
@@ -66,6 +67,7 @@ export function assertDiagramInvariants(document: DiagramDocument): void {
     if (!component.name.trim() || component.name.trim().length > 200 || !Number.isFinite(component.position.x) || !Number.isFinite(component.position.y) || !Number.isFinite(component.size.width) || !Number.isFinite(component.size.height) || component.size.width <= 0 || component.size.height <= 0) throw new Error(`Invalid component layout: ${component.id}`);
     assertComponentName(component.name);
     const role = component.role ?? 'element';
+    if (role === 'container' ? !isContainerType(component.containerType) : component.containerType != null) throw new Error(`Component ${component.id} requires ${role === 'container' ? 'Application or Datastore' : 'null containerType'}`);
     if (kind === 'general') {
       if (role !== 'element' || (component.technology ?? null) !== null || (component.sourceComponentId ?? null) !== null) throw new Error(`General component ${component.id} must remain an ordinary element without source metadata`);
       continue;

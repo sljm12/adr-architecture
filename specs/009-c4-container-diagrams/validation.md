@@ -35,3 +35,28 @@ Captured on 2026-10-01 after implementing Setup, Foundation, and US1. `.specify/
 The browser scenarios exercised grouped duplicate-name owners, ordinary click/Shift selection, keyboard activation, repeated owner identity, double-click activation, failure/retry, availability failure, unsaved-owner Save/Discard/Cancel, rejection of a discarded owner, external-source canonicalization, and protection of a dirty ADR draft. The final dirty-ADR scenario passed in isolation. Run the full browser suite again in a stable browser session before treating the combined E2E gate as complete.
 
 The T018 unique-index race exposed that Drizzle nests PostgreSQL error codes and constraint names under `cause`. `ContainerContextService` now walks the error-cause chain before resolving the committed winner. T006, T016, and T018 are complete; all their required database tests passed. The other Phase 1–3 implementation and contract/browser authoring tasks are checked in `tasks.md`.
+
+## Phase 4 implementation results
+
+Captured on 2026-10-02 for T029–T047 only. All 19 US2 tasks are complete; phases 5–7 remain outstanding. Dependencies and migration 0005 are unchanged. Ignore files already cover the detected private Node/Docker project; no additional ignore file is needed. No implementation extension hooks are configured.
+
+Implemented explicit Application/Datastore subtypes, strict role-aware validation and field errors, forward migration 0006 and both repository write/read paths. Existing generic internal database rows receive Application only during migration; new child writes missing a subtype fail. General and external components use null. Stable UUIDs, original creation times, scopes, endpoints and ADR links survive subtype changes.
+
+Child add/edit forms offer exactly two choices, reset on document/role switches and commit complete metadata in one edit. External inclusion fetches current parent context, excludes the owner, disables duplicates and creates independent occurrence IDs/layout without parent relationships. External details remain read-only. Interactions require directed local endpoints, at least one internal container and a description; protocol is optional. Canvas connections open the interaction form before creating an edge.
+
+Pointer movement, completed resizing and keyboard movement use validated domain geometry. Boundary fitting and deterministic external displacement share the same bounded history entry. Direct external overlap is rejected with live feedback and restored geometry. Selection retention for keyboard edits is limited to child diagrams to preserve general grouping/Shift behavior. Role-aware node labels wrap complete responsibilities/technology, with domain dimensions grown before fitting; interaction labels include protocol. The long-metadata browser screenshot was visually inspected.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Test-first phase 4 batch | Expected failures observed | Missing subtype schema support, absent child commands, general-type forms and missing adapter metadata failed before implementation. |
+| `RUN_POSTGRES_TESTS=1; npx.cmd vitest run --maxWorkers=4` | Passed, no skips | 75 files and 341 tests, including actual PostgreSQL migration/round-trip/rollback/concurrency, ADR quickstart and existing general/CLI/export regressions. |
+| `npm.cmd run build` | Passed | Shared, backend, frontend and CLI builds; existing Vite main-chunk warning remains. |
+| Container Playwright suite, one worker | Passed | All nine entry/authoring scenarios together: subtype choices/history/save/reopen, stale parent form, three containers, both external source types/read-only/duplicates, protocol, repeated keyboard moves, pointer displacement/rejection, resize undo and long-label bounds. |
+| General grouping browser regression | Passed | All seven `c4-system-groups.spec.ts` scenarios after restricting native selection retention to child diagrams. |
+| Additional general browser regressions | Passed | Both `add-component-to-group.spec.ts` and both `performance.spec.ts` scenarios. Save/export feedback target and failed-save draft recovery remain intact. |
+| Isolated clean install and populated 0005→0006 upgrade | Passed | Active/trashed generic containers, general/free-form/external rows; explicit null/unsupported subtype rejection; all component data and diagram/relationship/group/ADR/link rows preserved. Both subtypes round-trip; invalid child writes preserve parent and child data. |
+| Configured database migration 0006 | Applied | Preflight found the existing role CHECK and 17 ordinary elements, with no subtype column. Applied the additive migration transactionally; subsequent public-schema PostgreSQL regression/acceptance checks passed. |
+
+An initial unrestricted-worker Vitest run timed out during concurrent API startup; the bounded-worker full run passed. A broader browser run exposed general-selection regressions, which were corrected and its affected grouping suite rerun successfully. These failures are resolved; the remaining full feature/release gates, export support, recovery work and observed usability timing belong to later tasks. The current nine-scenario browser result supersedes the earlier six-scenario combined-run uncertainty without completing T088.
+
+Current library mechanisms were verified through Context7: React Flow controlled changes, resize and keyboard selection/movement (`/websites/reactflow_dev`), and Drizzle named PostgreSQL CHECK constraints (`/drizzle-team/drizzle-orm-docs`). No runtime dependencies were added.

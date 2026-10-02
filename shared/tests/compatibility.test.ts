@@ -30,7 +30,7 @@ describe('future ADR link compatibility', () => {
   it('adds general element defaults without reclassifying a legacy free-form type', () => {
     const parsed = diagramDocumentSchema.parse(legacyPayloadFixture() as any);
     expect(parsed).toMatchObject({ kind: 'general', scope: null, boundary: null, groups: [] });
-    expect(parsed.components[0]).toMatchObject({ type: 'microservice', role: 'element', technology: null, sourceComponentId: null });
+    expect(parsed.components[0]).toMatchObject({ type: 'microservice', role: 'element', containerType: null, technology: null, sourceComponentId: null });
   });
 
   it.each([

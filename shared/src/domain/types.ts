@@ -4,6 +4,7 @@ export type RelationshipDirection = 'directed' | 'undirected';
 export type C4ArtifactType = 'person' | 'software-system';
 export type DiagramKind = 'general' | 'container';
 export type ComponentRole = 'element' | 'container' | 'external';
+export type ContainerType = 'application' | 'datastore';
 export interface Position { x: number; y: number }
 export interface ComponentSize { width: number; height: number }
 export const DEFAULT_COMPONENT_SIZE = { width: 180, height: 72 } as const satisfies ComponentSize;
@@ -14,7 +15,7 @@ export interface ContainerScope {
   softwareSystemName: string;
   softwareSystemDescription: string | null;
 }
-export interface Component { id: UUID; diagramId: UUID; name: string; description: string | null; type: C4ArtifactType | string | null; role?: ComponentRole; technology?: string | null; sourceComponentId?: UUID | null; position: Position; size: ComponentSize; createdAt: string; updatedAt: string }
+export interface Component { id: UUID; diagramId: UUID; name: string; description: string | null; type: C4ArtifactType | string | null; role?: ComponentRole; containerType?: ContainerType | null; technology?: string | null; sourceComponentId?: UUID | null; position: Position; size: ComponentSize; createdAt: string; updatedAt: string }
 export interface Relationship { id: UUID; diagramId: UUID; sourceComponentId: UUID; targetComponentId: UUID; direction: RelationshipDirection; label: string | null; protocol?: string | null; createdAt: string; updatedAt: string }
 export interface Diagram { id: UUID; name: string; status: DiagramStatus; createdAt: string; updatedAt: string; trashedAt: string | null; kind?: DiagramKind; scope?: ContainerScope | null; boundary?: GroupBoundaryLayout | null }
 export interface GroupBoundaryLayout { position: Position; size: { width: number; height: number } }

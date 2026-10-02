@@ -24,6 +24,7 @@ const makeComponent = (id: string, diagramId: string, name: string, type: string
   description: null,
   type,
   role: 'element',
+  containerType: null,
   technology: null,
   sourceComponentId: null,
   position: { x, y },
@@ -118,6 +119,7 @@ export const populatedChildFixture = () => {
     ...makeComponent(containerFixtureIds.container, id, 'Payment API', 'container', 100, 100),
     description: 'Accepts and processes payment requests',
     role: 'container',
+    containerType: 'application',
     technology: 'TypeScript',
   };
   const external = {

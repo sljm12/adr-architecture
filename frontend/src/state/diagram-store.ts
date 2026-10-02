@@ -2,6 +2,10 @@ import { create } from 'zustand';
 import { assertCanAddGroupMember, calculateGroupBounds, DEFAULT_COMPONENT_SIZE, fitGroupBoundsAfterLayout, getC4ArtifactTypeLabel, isC4ArtifactType, translateGroupWithMembers, type C4ArtifactType, type DiagramDocument, type DiagramSummary, type GroupMemberAddReason, type Position, type Relationship, type RelationshipDirection } from '../../../shared/src/index';
 import { DiagramApiError, diagramClient } from '../api/diagram-client';
 import { BoundedHistory } from './history';
+import { assertDiagramInvariants, containerContextSchema, diagramDocumentSchema, fitContainerLayout, getContainerComponentMinimumSize, isContainerType, validateExternalPlacement, type ContainerContext, type ContainerType, type ComponentSize } from '../../../shared/src/index';
+
+export type ContainerEdit = { name: string; description: string; technology: string; containerType: ContainerType };
+export type ComponentGeometryEdit = { id: string; position: Position; size: ComponentSize };
 
 export type SaveStatus = 'idle' | 'unsaved' | 'saving' | 'saved' | 'failed';
 export type SavedDocumentsStatus = 'idle' | 'loading' | 'loaded' | 'failed';
@@ -34,6 +38,10 @@ type State = {
   undo: () => void;
   redo: () => void;
   addComponent: (name: string, type: C4ArtifactType, description?: string | null) => boolean;
+  addContainer: (details: ContainerEdit) => boolean;
+  editContainer: (componentId: string, details: ContainerEdit) => boolean;
+  includeExternalParticipant: (sourceId: string, context: ContainerContext) => boolean;
+  applyComponentGeometry: (edits: ComponentGeometryEdit[]) => boolean;
   setComponentType: (componentId: string, type: C4ArtifactType) => boolean;
   updateComponentType: (componentId: string, type: C4ArtifactType) => boolean;
   createGroup: (name: string, memberComponentIds: string[]) => boolean;
@@ -44,9 +52,9 @@ type State = {
   resizeComponent: (componentId: string, size: { width: number; height: number }) => boolean;
   removeGroupMember: (groupId: string, componentId: string) => boolean;
   ungroup: (groupId: string) => boolean;
-  addRelationship: (source: string, target: string, label: string, direction: 'directed' | 'undirected') => void;
+  addRelationship: (source: string, target: string, label: string, direction: 'directed' | 'undirected', protocol?: string | null) => boolean;
   renameComponent: (componentId: string, name: string) => boolean;
-  updateRelationship: (relationshipId: string, updates: Partial<Pick<Relationship, 'sourceComponentId' | 'targetComponentId' | 'direction' | 'label'>>) => boolean;
+  updateRelationship: (relationshipId: string, updates: Partial<Pick<Relationship, 'sourceComponentId' | 'targetComponentId' | 'direction' | 'label' | 'protocol'>>) => boolean;
   reverseRelationship: (relationshipId: string) => boolean;
   setRelationshipDirection: (relationshipId: string, direction: RelationshipDirection) => boolean;
   removeRelationship: (relationshipId: string) => void;
@@ -76,6 +84,20 @@ const saveErrorMessage = (error: unknown): string => {
 const summary = (document: DiagramDocument): DiagramSummary => ({ id: document.id, name: document.name, status: document.status, createdAt: document.createdAt, updatedAt: document.updatedAt, kind: document.kind ?? 'general', scope: document.scope ?? null });
 const replaceSummary = (items: DiagramSummary[], next: DiagramSummary) => items.some(item => item.id === next.id) ? items.map(item => item.id === next.id ? next : item) : [...items, next];
 const normalizedGroupName = (name: string) => name.trim().toLocaleLowerCase();
+const validContainerDetails = (details: ContainerEdit) => isContainerType(details.containerType) && Boolean(details.name.trim()) && details.name.trim().length <= 200 && Boolean(details.description.trim()) && Boolean(details.technology.trim()) && details.technology.trim().length <= 200;
+const fitChild = (document: DiagramDocument): DiagramDocument => {
+  const internal = document.components.filter(c => c.role === 'container');
+  const layout = fitContainerLayout(internal, document.components.filter(c => c.role === 'external'));
+  const externals = new Map(layout.externalComponents.map(c => [c.id, c]));
+  return { ...document, boundary: layout.boundary, components: document.components.map(c => externals.get(c.id) ?? c) };
+};
+const interactionError = (document: DiagramDocument, source: string, target: string, label: string | null, direction: string, protocol: string | null | undefined): string | null => {
+  const a=document.components.find(c=>c.id===source), b=document.components.find(c=>c.id===target);
+  if (!a || !b || source === target) return 'Choose two different local components.';
+  if (document.kind === 'container' && (direction !== 'directed' || !label?.trim() || (a.role !== 'container' && b.role !== 'container'))) return 'Interactions require a description, a directed connection, and at least one internal container.';
+  if (protocol && protocol.trim().length > 200) return 'Protocol must contain at most 200 characters.';
+  return null;
+};
 export const describeGroupSelection = (document: DiagramDocument, memberComponentIds: string[], excludedGroupId?: string): string | null => {
   if (memberComponentIds.length < 2) return 'Select at least two Software System components before grouping.';
   if (new Set(memberComponentIds).size !== memberComponentIds.length) return 'Group members must be unique; remove duplicate component selections.';
@@ -147,8 +169,17 @@ export const useDiagramStore = create<State>((set, get) => ({
   update: fn => {
     const current = get().document;
     if (!current) return;
-    const document = history.push(copy(fn(copy(current))));
-    set({ document, status: 'unsaved', error: null, groupError: null, ...historyState() });
+    try {
+      let next = copy(fn(copy(current)));
+      if (current.kind === 'container') {
+        if (next.kind !== current.kind || next.id !== current.id || next.scope?.parentDiagramId !== current.scope?.parentDiagramId || next.scope?.softwareSystemId !== current.scope?.softwareSystemId) throw new Error('Container ownership cannot be changed.');
+        next = diagramDocumentSchema.parse(fitChild(next)) as DiagramDocument;
+        assertDiagramInvariants(next);
+      }
+      if (JSON.stringify(next) === JSON.stringify(current)) return;
+      const document = history.push(next);
+      set({ document, status: 'unsaved', error: null, groupError: null, ...historyState() });
+    } catch (error) { set({ error: saveErrorMessage(error) }); }
   },
   undo: () => {
     const document = history.undo();
@@ -160,6 +191,7 @@ export const useDiagramStore = create<State>((set, get) => ({
   },
   addComponent: (name, type, description = null) => {
     const document = get().document;
+    if (document?.kind === 'container') { set({error:'Use Application or Datastore to add an internal container.'}); return false; }
     if (!document || !name.trim() || !isC4ArtifactType(type)) return false;
     const timestamp = now();
     get().update(current => ({
@@ -173,10 +205,47 @@ export const useDiagramStore = create<State>((set, get) => ({
     }));
     return true;
   },
+  addContainer: details => {
+    const document=get().document;
+    if (document?.kind !== 'container' || !validContainerDetails(details)) { set({error:'Choose Application or Datastore and provide name, responsibilities and technology.'}); return false; }
+    const timestamp=now();
+    get().update(current=>({...current,components:[...current.components,{
+      id:crypto.randomUUID(),diagramId:current.id,name:details.name.trim(),description:details.description.trim(),technology:details.technology.trim(),containerType:details.containerType,type:'container',role:'container',sourceComponentId:null,
+      position:{x:100+current.components.filter(c=>c.role==='container').length*340,y:100},size:getContainerComponentMinimumSize(details),createdAt:timestamp,updatedAt:timestamp,
+    }]}));
+    return get().document !== document;
+  },
+  editContainer: (componentId,details) => {
+    const document=get().document, component=document?.components.find(c=>c.id===componentId);
+    if(document?.kind!=='container'||component?.role!=='container'||!validContainerDetails(details)){set({error:'Choose Application or Datastore and provide name, responsibilities and technology.'});return false;}
+    const minimum=getContainerComponentMinimumSize(details);
+    get().update(current=>({...current,components:current.components.map(c=>c.id===componentId?{...c,name:details.name.trim(),description:details.description.trim(),technology:details.technology.trim(),containerType:details.containerType,size:{width:Math.max(c.size.width,minimum.width),height:Math.max(c.size.height,minimum.height)},updatedAt:now()}:c)}));
+    return get().document!==document;
+  },
+  includeExternalParticipant: (sourceId,input) => {
+    const document=get().document;
+    const parsed=containerContextSchema.safeParse(input);
+    if(document?.kind!=='container'||!parsed.success)return false;
+    const context=parsed.data,source=context.sources.find(c=>c.id===sourceId);
+    if(!source||context.scope.parentDiagramId!==document.scope?.parentDiagramId||context.scope.softwareSystemId!==document.scope.softwareSystemId||sourceId===document.scope.softwareSystemId||document.components.some(c=>c.sourceComponentId===sourceId)){set({error:'Choose an eligible parent participant that is not already included.'});return false;}
+    const timestamp=now(),boundary=document.boundary!;
+    get().update(current=>({...current,components:[...current.components,{diagramId:current.id,...source,id:crypto.randomUUID(),sourceComponentId:sourceId,role:'external',containerType:null,technology:null,position:{x:boundary.position.x+boundary.size.width+24,y:boundary.position.y},size:{width:280,height:Math.max(100,getContainerComponentMinimumSize({...source,technology:null}).height)},createdAt:timestamp,updatedAt:timestamp}]}));
+    return get().document!==document;
+  },
+  applyComponentGeometry: edits => {
+    const document=get().document;if(!document)return false;
+    const byId=new Map(edits.map(e=>[e.id,e]));
+    try {
+      for(const edit of edits){const c=document.components.find(c=>c.id===edit.id);if(!c)throw new Error('The component no longer exists.');if(![edit.position.x,edit.position.y,edit.size.width,edit.size.height].every(Number.isFinite)||edit.size.width<=0||edit.size.height<=0)throw new Error('Use finite positions and positive sizes.');if(document.kind==='container'&&c.role==='external')validateExternalPlacement(document.boundary!,edit);}
+      set({error:null});
+      get().update(current=>({...current,components:current.components.map(c=>{const e=byId.get(c.id);if(!e||JSON.stringify(c.position)===JSON.stringify(e.position)&&JSON.stringify(c.size)===JSON.stringify(e.size))return c;const minimum=c.role==='container'?getContainerComponentMinimumSize(c):null;return {...c,position:e.position,size:minimum?{width:Math.max(e.size.width,minimum.width),height:Math.max(e.size.height,minimum.height)}:e.size,updatedAt:now()};})}));
+      return !get().error;
+    }catch(error){set({error:saveErrorMessage(error)});return false;}
+  },
   setComponentType: (componentId, type) => {
     const current = get().document;
     const component = current?.components.find(item => item.id === componentId);
-    if (!current || !component || !isC4ArtifactType(type)) return false;
+    if (!current || current.kind === 'container' || !component || !isC4ArtifactType(type)) return false;
     const memberGroup = (current.groups ?? []).find(group => group.memberComponentIds.includes(componentId));
     if (memberGroup && type !== 'software-system') return false;
     if (component.type === type) return true;
@@ -189,6 +258,7 @@ export const useDiagramStore = create<State>((set, get) => ({
   updateComponentType: (componentId, type) => get().setComponentType(componentId, type),
   createGroup: (name, memberComponentIds) => {
     const document = get().document;
+    if (document?.kind === 'container') { set({groupError:'Container diagrams cannot contain system groups.'}); return false; }
     const validationError = document ? groupCreationError(document, name, memberComponentIds) : 'Create a diagram before grouping systems.';
     if (!document || validationError) {
       set({ groupError: validationError });
@@ -280,6 +350,7 @@ export const useDiagramStore = create<State>((set, get) => ({
     const document = get().document;
     const component = document?.components.find(item => item.id === componentId);
     if (!document || !component || !Number.isFinite(position.x) || !Number.isFinite(position.y)) return false;
+    if (document.kind === 'container') return get().applyComponentGeometry([{id:componentId,position,size:component.size}]);
     get().update(current => ({
       ...current,
       components: current.components.map(item => item.id === componentId ? { ...item, position, updatedAt: now() } : item),
@@ -299,6 +370,7 @@ export const useDiagramStore = create<State>((set, get) => ({
     const document = get().document;
     const component = document?.components.find(item => item.id === componentId);
     if (!document || !component || !Number.isFinite(size.width) || !Number.isFinite(size.height) || size.width <= 0 || size.height <= 0) return false;
+    if (document.kind === 'container') return get().applyComponentGeometry([{id:componentId,position:component.position,size}]);
     get().update(current => ({
       ...current,
       components: current.components.map(item => item.id === componentId ? { ...item, size: { ...size }, updatedAt: now() } : item),
@@ -348,21 +420,27 @@ export const useDiagramStore = create<State>((set, get) => ({
     get().update(current => ({ ...current, groups: current.groups.filter(group => group.id !== groupId) }));
     return true;
   },
-  addRelationship: (sourceComponentId, targetComponentId, label, direction) => {
+  addRelationship: (sourceComponentId, targetComponentId, label, direction, protocol = null) => {
     const document = get().document;
-    if (!document || sourceComponentId === targetComponentId) return;
+    if (!document) return false;
+    const error=interactionError(document,sourceComponentId,targetComponentId,label,direction,protocol);
+    if(error){set({error});return false;}
     const timestamp = now();
     get().update(current => ({
       ...current,
       relationships: [...current.relationships, {
         id: crypto.randomUUID(), diagramId: current.id, sourceComponentId, targetComponentId,
-        label: label.trim() || null, direction, createdAt: timestamp, updatedAt: timestamp,
+        label: label.trim() || null, direction, protocol:protocol?.trim() || null, createdAt: timestamp, updatedAt: timestamp,
       }],
     }));
+    return get().document !== document;
   },
   renameComponent: (componentId, name) => {
     const trimmedName = name.trim();
     if (!trimmedName || !get().document?.components.some(component => component.id === componentId)) return false;
+    const component=get().document!.components.find(c=>c.id===componentId)!;
+    if(component.role==='external')return false;
+    if(component.role==='container')return get().editContainer(componentId,{name,description:component.description!,technology:component.technology!,containerType:component.containerType!});
     get().update(current => ({
       ...current,
       components: current.components.map(component => component.id === componentId
@@ -381,6 +459,8 @@ export const useDiagramStore = create<State>((set, get) => ({
       || !current.components.some(component => component.id === sourceComponentId)
       || !current.components.some(component => component.id === targetComponentId)) return false;
     if (updates.direction && updates.direction !== 'directed' && updates.direction !== 'undirected') return false;
+    const error=interactionError(current,sourceComponentId,targetComponentId,updates.label===undefined?relationship.label:updates.label,updates.direction??relationship.direction,updates.protocol===undefined?relationship.protocol:updates.protocol);
+    if(error){set({error});return false;}
     get().update(document => ({
       ...document,
       relationships: document.relationships.map(item => item.id === relationshipId
@@ -390,6 +470,7 @@ export const useDiagramStore = create<State>((set, get) => ({
           targetComponentId,
           direction: updates.direction ?? item.direction,
           label: updates.label === undefined ? item.label : updates.label.trim() || null,
+          protocol: updates.protocol === undefined ? item.protocol : updates.protocol?.trim() || null,
           updatedAt: now(),
         }
         : item),

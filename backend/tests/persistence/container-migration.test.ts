@@ -83,6 +83,32 @@ describe.skipIf(!enabled)('C4 container migration 0005', () => {
     await expectRejected(() => insertExternal(childId, duplicatedExternalId, otherSystemId));
     await expectRejected(() => insertExternal(childId, 'a1000000-0000-4000-8000-000000000016', 'a1000000-0000-4000-8000-000000000099'));
   });
+
+  it('upgrades populated 0005 rows without changing content, timestamps or references and rejects null/unsupported subtypes', async () => {
+    await insertChild(secondChildId, otherSystemId, parentId, 'active');
+    await insertContainer(secondChildId, duplicatedExternalId);
+    const childAdr='a1000000-0000-4000-8000-000000000017';
+    const childRelationship='a1000000-0000-4000-8000-000000000018';
+    await db!.query("INSERT INTO relationships(id,diagram_id,source_component_id,target_component_id,direction,label,protocol,created_at,updated_at) VALUES($1,$2,$3,$4,'directed','Records payments','HTTPS',$5,$5)",[childRelationship,childId,containerId,externalId,timestamp]);
+    await db!.query("INSERT INTO adrs(id,diagram_id,title,context,decision,consequences,created_at,updated_at) VALUES($1,$2,'Child decision','Context','Decision','Consequences',$3,$3)",[childAdr,childId,timestamp]);
+    await db!.query('INSERT INTO adr_component_links(adr_id,component_id,created_at) VALUES($1,$2,$3)',[childAdr,containerId,timestamp]);
+    await db!.query('INSERT INTO adr_relationship_links(adr_id,relationship_id,created_at) VALUES($1,$2,$3)',[childAdr,childRelationship,timestamp]);
+    const retainedTables=['diagrams','relationships','adrs','adr_component_links','adr_relationship_links','system_groups','system_group_members'];
+    const beforeTables=await Promise.all(retainedTables.map(table=>db!.query(`SELECT * FROM ${table} ORDER BY 1,2`)));
+    const before=await db!.query('SELECT * FROM components ORDER BY id');
+    await db!.query(await readFile(new URL('../../drizzle/0006_container_component_types.sql',import.meta.url),'utf8'));
+    const after=await db!.query('SELECT * FROM components ORDER BY id');
+    const afterTables=await Promise.all(retainedTables.map(table=>db!.query(`SELECT * FROM ${table} ORDER BY 1,2`)));
+    expect(afterTables.map(result=>result.rows)).toEqual(beforeTables.map(result=>result.rows));
+    expect(after.rows.map(({container_type,...row})=>row)).toEqual(before.rows);
+    expect(after.rows.filter(row=>row.role==='container').map(row=>row.container_type)).toEqual(['application','application']);
+    expect(after.rows.filter(row=>row.role!=='container').every(row=>row.container_type===null)).toBe(true);
+    for(const value of [null,'queue','person']) await expectRejected(()=>db!.query('UPDATE components SET container_type=$1 WHERE id=$2',[value,containerId]));
+    await expectRejected(()=>db!.query("UPDATE components SET container_type='datastore' WHERE id=$1",[externalId]));
+    await db!.query("UPDATE components SET container_type='datastore' WHERE id=$1",[containerId]);
+    expect((await db!.query('SELECT container_type FROM components WHERE id=$1',[containerId])).rows[0].container_type).toBe('datastore');
+    const links=await db!.query('SELECT component_id FROM adr_component_links WHERE adr_id=$1',[adrId]);expect(links.rows[0].component_id).toBe(ownerId);
+  });
 });
 
 async function seedLegacyData(): Promise<void> {

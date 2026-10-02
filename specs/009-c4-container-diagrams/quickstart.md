@@ -1,6 +1,6 @@
 # Quickstart Validation: C4 Container Diagrams
 
-This guide validates the complete revised feature after implementation. Foundation and entry-point work, including migration 0005, already exists; see [validation.md](./validation.md) for recorded results. The 2026-10-02 plan update adds no runtime changes or executed implementation checks. Migration 0006, subtype/save/list behavior, confirmed child-initiated parent recovery and occurrence-specific source-type safeguards remain implementation validation work. Use [plan.md](./plan.md) for the requirement matrix, [data-model.md](./data-model.md) for artifact rules, and [contracts/openapi.yaml](./contracts/openapi.yaml) for endpoint shapes.
+This guide validates the complete revised feature after implementation. Foundation, entry points and phase 4 container authoring, including migrations 0005/0006, are implemented; see [validation.md](./validation.md) for recorded results. Later save/list behavior, confirmed child-initiated parent recovery, occurrence-specific source-type feedback and container exports remain implementation work. Use [plan.md](./plan.md) for the requirement matrix, [data-model.md](./data-model.md) for artifact rules, and [contracts/openapi.yaml](./contracts/openapi.yaml) for endpoint shapes.
 
 ## Prerequisites
 
@@ -27,7 +27,7 @@ npm.cmd run build
 npm.cmd run dev
 ```
 
-For an existing validation database, apply only pending migrations in order through its migration runner. Preserve applied 0005; 0006 is a planned implementation artifact. Seed an older database before 0005 and verify its IDs, timestamps, groups, relationships and ADR links remain unchanged. Separately seed a 0005 database with active and trashed children containing generic internal containers, then apply 0006. Verify only their new containerType is backfilled to application, all existing IDs/timestamps/type/details/layout/links persist, and general/external subtypes remain null. Application is the compatibility default; authors can change an existing data store to Datastore afterward.
+For an existing validation database, apply only pending migrations in order through its migration runner. Preserve applied 0005; 0006 is now available. Seed an older database before 0005 and verify its IDs, timestamps, groups, relationships and ADR links remain unchanged. Separately seed a 0005 database with active and trashed children containing generic internal containers, then apply 0006. Verify only their new containerType is backfilled to application, all existing IDs/timestamps/type/details/layout/links persist, and general/external subtypes remain null. Application is the compatibility default; authors can change an existing data store to Datastore afterward.
 
 Open http://localhost:5173; API health is http://localhost:3000/health. Keep DATABASE_URL available to backend/test processes.
 

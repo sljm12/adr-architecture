@@ -101,6 +101,11 @@ async function mockContainerApi(page: Page, options: { failFirstChildLoad?: bool
         return fulfill(route, child, existing ? 200 : 201);
       }
     }
+    const contextPath = path.match(/^\/diagrams\/([^/]+)\/container-context$/);
+    if (contextPath) {
+      const child=[...children.values()].find(d=>d.id===contextPath[1]);
+      return fulfill(route,{scope:child.scope,sources:parent.components.filter((c:any)=>c.id!==child.scope.softwareSystemId).map((c:any)=>({id:c.id,name:c.name,description:c.description,type:c.type})),capturedAt:new Date().toISOString()});
+    }
     const diagramPath = path.match(/^\/diagrams\/([^/]+)$/);
     if (diagramPath) {
       const [, id] = diagramPath;
@@ -125,7 +130,7 @@ async function mockContainerApi(page: Page, options: { failFirstChildLoad?: bool
     }
     return fulfill(route, { message: `No mock for ${method} ${path}` }, 404);
   });
-  return { parent, children };
+  return { get parent() { return parent; }, children };
 }
 
 test('creates distinct empty children from grouped duplicate-name systems, keeps ordinary selection, and opens by keyboard action', async ({ page }) => {
@@ -165,6 +170,71 @@ test('creates distinct empty children from grouped duplicate-name systems, keeps
   await page.getByRole('group', { name: 'Component Customer, Person' }).click();
   await expect(page.getByLabel('Container diagram action')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Select at least two Software System components' })).toBeDisabled();
+});
+
+test('authors two container subtypes and external interactions with atomic history and saved identity',async({page})=>{
+  test.setTimeout(60_000);
+  const mock=await mockContainerApi(page);
+  const originalParent=structuredClone(mock.parent);
+  await page.goto('/');await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click();
+  await page.getByRole('button',{name:'Add component',exact:true}).click();
+  await page.getByRole('radio',{name:/^Person /}).check();
+  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click();
+  await page.getByRole('group',{name:'Component Payments, Software System'}).nth(0).dblclick();
+  await expect(page.locator('#container-diagram-heading')).toHaveText('Payments');
+  for(const [name,subtype,technology] of [['Web app','Application','React'],['Service','Application','TypeScript'],['Ledger DB','Datastore','PostgreSQL']]){
+    await page.getByRole('button',{name:'Add component',exact:true}).click();const inspector=page.getByLabel('Diagram inspector');
+    await expect(inspector.getByRole('radio')).toHaveCount(2);await inspector.getByLabel(subtype,{exact:true}).check();await inspector.getByLabel('Component name',{exact:true}).fill(name);await inspector.getByLabel('Responsibilities',{exact:true}).fill(`Responsibilities for ${name}`);await inspector.getByLabel('Technology',{exact:true}).fill(technology);await inspector.getByRole('button',{name:'Add component',exact:true}).click();
+  }
+  await page.getByRole('button',{name:'Include external participant',exact:true}).click();
+  await page.getByLabel('External participant',{exact:true}).selectOption(ids.person);await page.getByLabel('Diagram inspector').getByRole('button',{name:'Include participant',exact:true}).click();
+  await page.getByRole('group',{name:'Component Customer, Person'}).click();await expect(page.getByLabel('External participant details')).toContainText('Source details are read-only');await expect(page.getByLabel('Diagram inspector').getByRole('radio')).toHaveCount(0);
+  await page.getByRole('button',{name:'Include external participant',exact:true}).click();await expect(page.locator(`#external-participant option[value="${ids.person}"]`)).toBeDisabled();await page.getByLabel('External participant',{exact:true}).selectOption(ids.sourceSystem);await page.getByLabel('Diagram inspector').getByRole('button',{name:'Include participant',exact:true}).click();
+  await page.getByRole('button',{name:'Connect',exact:true}).click();const inspector=page.getByLabel('Diagram inspector');await inspector.getByLabel('From',{exact:true}).selectOption({label:'Web app'});await inspector.getByLabel('To',{exact:true}).selectOption({label:'Ledger DB'});await inspector.getByLabel('Interaction description',{exact:true}).fill('Stores data');await inspector.getByLabel('Protocol',{exact:true}).fill('SQL');await inspector.getByRole('button',{name:'Connect components',exact:true}).click();
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await expect(page.getByText('Saved',{exact:true}).first()).toBeVisible();
+  const saved=mock.children.get(ids.owner);expect(saved.components.map((c:any)=>c.containerType)).toEqual(['application','application','datastore',null,null]);expect(saved.relationships[0].protocol).toBe('SQL');expect(mock.parent).toEqual(originalParent);
+  await page.getByRole('group',{name:'Component Ledger DB, Datastore'}).click();await page.getByLabel('Application',{exact:true}).check();await inspector.getByRole('button',{name:'Save component',exact:true}).click();await expect(page.getByRole('group',{name:'Component Ledger DB, Application'})).toBeVisible();await page.getByRole('button',{name:'Undo',exact:true}).click();await expect(page.getByRole('group',{name:'Component Ledger DB, Datastore'})).toBeVisible();await page.getByRole('button',{name:'Redo',exact:true}).click();await expect(page.getByRole('group',{name:'Component Ledger DB, Application'})).toBeVisible();
+  await page.getByRole('button',{name:'Save',exact:true}).click();await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click();await page.locator(`.saved-diagram-button[data-diagram-id="${saved.id}"]`).click();await page.getByRole('group',{name:'Component Ledger DB, Application'}).click();await expect(page.getByLabel('Application',{exact:true})).toBeChecked();expect(mock.children.get(ids.owner).id).toBe(saved.id);expect(mock.parent).toEqual(originalParent);
+});
+
+test('persists keyboard and pointer geometry, rejects external overlap, and undoes boundary displacement in one step',async({page})=>{
+  test.setTimeout(60_000);
+  await page.setViewportSize({width:1600,height:1000});
+  const mock=await mockContainerApi(page,{sourceOccurrence:true});await page.goto('/');await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click();
+  const before=structuredClone(mock.children.get(ids.sourceSystem));
+  const internal=page.locator(`.react-flow__node[data-id="${ids.container}"]`);
+  await internal.focus();await page.keyboard.press('Enter');await page.keyboard.press('ArrowRight');await page.keyboard.press('ArrowRight');await page.getByRole('button',{name:'Save',exact:true}).click();
+  await expect.poll(()=>mock.children.get(ids.sourceSystem).components[0].position.x).toBe(before.components[0].position.x+10);
+  await page.getByRole('button',{name:'Undo',exact:true}).click();
+  await page.getByRole('button',{name:'Undo',exact:true}).click();
+  await page.getByRole('button',{name:'Save',exact:true}).click();await expect.poll(()=>mock.children.get(ids.sourceSystem).components[0].position.x).toBe(before.components[0].position.x);
+  const box=(await internal.boundingBox())!;await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width/2+270,box.y+box.height/2,{steps:12});await page.mouse.up();
+  await page.getByRole('button',{name:'Save',exact:true}).click();await expect.poll(()=>mock.children.get(ids.sourceSystem).components[1].position.x).not.toBe(before.components[1].position.x);
+  await page.getByRole('button',{name:'Undo',exact:true}).click();await page.getByRole('button',{name:'Save',exact:true}).click();await expect.poll(()=>mock.children.get(ids.sourceSystem).components[1].position.x).toBe(before.components[1].position.x);
+  await page.getByRole('button',{name:'Hide Details panel',exact:true}).click();await page.getByRole('button',{name:'Fit View',exact:true}).click();
+  const ext=page.locator(`.react-flow__node[data-id="${ids.externalOccurrence}"]`),extBox=(await ext.boundingBox())!,intBox=(await internal.boundingBox())!;
+  await page.mouse.move(extBox.x+extBox.width/2,extBox.y+extBox.height/2);await page.mouse.down();await page.mouse.move(intBox.x+intBox.width/2,intBox.y+intBox.height/2,{steps:12});await page.mouse.up();
+  await expect(page.getByRole('alert').filter({hasText:'clearance'})).toBeVisible();await page.getByRole('button',{name:'Save',exact:true}).click();await expect.poll(()=>mock.children.get(ids.sourceSystem).components[1].position.x).toBe(before.components[1].position.x);
+});
+
+test('resizes containers atomically and keeps complete long metadata inside the card',async({page})=>{
+  test.setTimeout(60_000);await page.setViewportSize({width:1600,height:1000});
+  const mock=await mockContainerApi(page,{sourceOccurrence:true});await page.goto('/');await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click();
+  await page.getByRole('group',{name:'Component Payment API, Application'}).click();const inspector=page.getByLabel('Diagram inspector');
+  const responsibilities='Handles requests, validates payment details and records the result. '.repeat(6);const technology='TypeScript and PostgreSQL with transactional request processing and stable identifiers';
+  await inspector.getByLabel('Responsibilities',{exact:true}).fill(responsibilities);await inspector.getByLabel('Technology',{exact:true}).fill(technology);await inspector.getByRole('button',{name:'Save component',exact:true}).click();
+  const card=page.getByRole('group',{name:'Component Payment API, Application'});
+  await expect(card.locator('.component-responsibility')).toHaveText(responsibilities.trim());await expect(card.locator('.component-technology')).toContainText(technology);
+  const contentBounds=await card.evaluate(el=>({cardBottom:el.getBoundingClientRect().bottom,textBottom:el.querySelector('.component-technology')!.getBoundingClientRect().bottom}));
+  expect(contentBounds.textBottom).toBeLessThanOrEqual(contentBounds.cardBottom-4);
+  await page.getByRole('button',{name:'Save',exact:true}).click();const before=structuredClone(mock.children.get(ids.sourceSystem));
+  await page.getByRole('button',{name:'Hide Details panel',exact:true}).click();await page.getByRole('button',{name:'Fit View',exact:true}).click();
+  const handle=page.locator(`.react-flow__node[data-id="${ids.container}"] .react-flow__resize-control.bottom.right.handle`);await expect(handle).toBeVisible();const box=(await handle.boundingBox())!;
+  await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width/2+100,box.y+box.height/2+20,{steps:10});await page.mouse.up();
+  await page.getByRole('button',{name:'Save',exact:true}).click();await expect.poll(()=>mock.children.get(ids.sourceSystem).components[0].size.width).toBeGreaterThan(before.components[0].size.width);
+  await page.getByRole('button',{name:'Undo',exact:true}).click();await page.getByRole('button',{name:'Save',exact:true}).click();await expect.poll(()=>mock.children.get(ids.sourceSystem).components[0].size.width).toBe(before.components[0].size.width);await expect.poll(()=>mock.children.get(ids.sourceSystem).boundary).toEqual(before.boundary);
+  await page.screenshot({path:'test-results/container-metadata.png'});
 });
 
 test('keeps the parent visible when child loading fails and retry opens the already-created child', async ({ page }) => {

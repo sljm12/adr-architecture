@@ -138,3 +138,9 @@ html,body,#root{overflow:hidden}
 .container-entry-feedback{margin:2px 0 0;color:#5f6368;font-size:13px;line-height:1.4;overflow-wrap:anywhere}
 .container-entry-panel .primary-pill{justify-self:start}
 .command-bar .container-navigation-feedback{flex:1 0 100%;margin:0;padding:7px 12px;border:1px solid #d9a5a5;border-radius:8px;background:#fff1f1;color:#7d1c1c;font-size:13px;line-height:1.35}
+/* Complete container metadata uses domain dimensions and wraps without truncation. */
+.component-node-container { justify-content: flex-start; gap: 6px; }
+.component-node-container .component-label,
+.component-responsibility, .component-technology { white-space: pre-wrap; overflow-wrap: anywhere; text-overflow: clip; overflow: visible; line-height: 1.47; }
+.component-responsibility, .component-technology { font-size: 17px; font-weight: 400; }
+.canvas-edit-feedback { position: absolute; bottom: 16px; left: 64px; right: 16px; background: var(--canvas, #fff); padding: 12px 20px; border: 1px solid var(--hairline, rgba(0,0,0,.08)); border-radius: 8px; z-index: 10; }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assertDiagramInvariants, diagramDocumentSchema } from '../src/index';
+import { assertDiagramInvariants, diagramDocumentSchema, isC4ArtifactType } from '../src/index';
 import {
   containerFixtureIds as ids,
   containerFixtureTimestamp as timestamp,
@@ -10,6 +10,35 @@ import {
 } from './container-fixtures';
 
 describe('C4 container document validation', () => {
+  it.each(['application', 'datastore'])('retains explicit %s subtype without widening source eligibility', subtype => {
+    const child = populatedChildFixture() as any;
+    child.components[0].containerType = subtype;
+    child.components[1].containerType = null;
+    const parsed = diagramDocumentSchema.parse(child);
+    expect(parsed.components[0].containerType).toBe(subtype);
+    expect(isC4ArtifactType(subtype)).toBe(false);
+    expect(isC4ArtifactType('container')).toBe(false);
+  });
+
+  it.each([undefined, null, 'queue', 'person', 'software-system'])('rejects unsupported internal subtype %s with a field path', subtype => {
+    const child = populatedChildFixture() as any;
+    child.components[0].containerType = subtype;
+    child.components[1].containerType = null;
+    const result = diagramDocumentSchema.safeParse(child);
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues.some(issue => issue.path.join('.') === 'components.0.containerType')).toBe(true);
+  });
+
+  it('requires null subtype for ordinary elements and external occurrences', () => {
+    const parent = generalParentFixture() as any;
+    expect(diagramDocumentSchema.parse(parent).components[0].containerType).toBe(null);
+    parent.components[0].containerType = 'application';
+    expect(diagramDocumentSchema.safeParse(parent).success).toBe(false);
+    const child = populatedChildFixture() as any;
+    child.components[0].containerType = 'application';
+    child.components[1].containerType = 'datastore';
+    expect(diagramDocumentSchema.safeParse(child).success).toBe(false);
+  });
   it('retains general kind and canonical owner scope on container documents', () => {
     const parent = diagramDocumentSchema.parse(generalParentFixture());
     const child = diagramDocumentSchema.parse(emptyChildFixture());

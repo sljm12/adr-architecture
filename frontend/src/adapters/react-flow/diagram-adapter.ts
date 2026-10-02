@@ -91,12 +91,12 @@ export function toReactFlow(document:DiagramDocument,sizes?:ComponentSizeMap,adr
     const node:Node={id:c.id,position:group?getRelativeMemberPosition(c.position,group.position):c.position,data:{label:c.name},type:'component',style:{width:size.width,height:size.height}};
     const role=c.role??'element';
     const eligible=c.type==='software-system'&&(document.kind==='container'?role==='external':role==='element');
-    node.data={...node.data,id:c.id,adrCount:adrCounts?.[c.id] ?? 0,onOpenComponentAdrs,onOpenContainerDiagram:eligible?onOpenContainerDiagram:undefined,type:c.type,role,groupId};
+    node.data={...node.data,id:c.id,adrCount:adrCounts?.[c.id] ?? 0,onOpenComponentAdrs,onOpenContainerDiagram:eligible?onOpenContainerDiagram:undefined,type:c.type,role,containerType:c.containerType,description:c.description,technology:c.technology,groupId};
     if(group){node.parentId=group.id;node.extent='parent';node.expandParent=true;}
     return node;
   });
   const nodes=[...boundaryNodes,...groupNodes,...componentNodes];
-  return {nodes,edges:routed.map(({relationship,source,target})=>({id:relationship.id,type:'relationship',source:relationship.sourceComponentId,target:relationship.targetComponentId,sourceHandle:`source-${source}`,targetHandle:`target-${target}`,label:relationship.label??undefined,data:routing.get(relationship.id),markerEnd:relationship.direction==='directed'?{type:'arrowclosed'}:undefined}))};
+  return {nodes,edges:routed.map(({relationship,source,target})=>({id:relationship.id,type:'relationship',source:relationship.sourceComponentId,target:relationship.targetComponentId,sourceHandle:`source-${source}`,targetHandle:`target-${target}`,label:relationship.label??undefined,data:{...routing.get(relationship.id),protocol:relationship.protocol},markerEnd:relationship.direction==='directed'?{type:'arrowclosed'}:undefined}))};
 }
 export function fromReactFlow(document:DiagramDocument,nodes:Node[]):DiagramDocument{
   const nodeById=new Map(nodes.map(node=>[node.id,node]));

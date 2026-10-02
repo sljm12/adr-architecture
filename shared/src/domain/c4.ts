@@ -1,4 +1,19 @@
-import type { C4ArtifactType, ComponentRole, DiagramKind } from './types';
+import type { C4ArtifactType, Component, ComponentRole, ContainerType, DiagramKind } from './types';
+
+export const containerTypes = { application: { label: 'Application' }, datastore: { label: 'Datastore' } } as const;
+export function isContainerType(value: unknown): value is ContainerType { return value === 'application' || value === 'datastore'; }
+export function getComponentTypeLabel(component: Pick<Component, 'role' | 'type' | 'containerType'>): string {
+  if (component.role !== 'container') return getC4ArtifactTypeLabel(component.type);
+  if (!isContainerType(component.containerType)) throw new Error('Choose Application or Datastore for this container.');
+  return containerTypes[component.containerType].label;
+}
+
+/** Conservative wrapping metrics shared by domain edits and canvas labels. */
+export function getContainerComponentMinimumSize(component: Pick<Component, 'name' | 'description' | 'technology'>) {
+  const width = 280;
+  const lines = (text: string) => text.split('\n').reduce((total, line) => total + Math.max(1, Math.ceil(line.length / 24)), 0);
+  return { width, height: 96 + 26 * (lines(component.name) + lines(component.description ?? '') + lines(component.technology ? `Technology: ${component.technology}` : '')) };
+}
 
 export const c4ArtifactTypes = {
   person: {
