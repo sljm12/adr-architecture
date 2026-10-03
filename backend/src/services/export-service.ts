@@ -1,16 +1,15 @@
 import { MermaidExportError, exportMermaid, type DiagramDocument } from '../../../shared/src/index';
 import type { DiagramRepositoryLike, MaybePromise } from '../persistence/diagram-repository';
+import { ContainerContextService, ContainerContextNotFoundError } from './container-context';
 
 export class ExportService {
   constructor(private readonly repository: DiagramRepositoryLike) {}
 
-  exportMermaid(diagramId: string): MaybePromise<{ source: string; filename: string }> {
-    const result = this.repository.get(diagramId);
-    const resolve = (document: DiagramDocument | undefined) => {
-      if (!document) throw new ExportNotFoundError();
-      return { source: exportMermaid(document), filename: `${fileStem(document.name)}.mmd` };
-    };
-    return result instanceof Promise ? result.then(resolve) : resolve(result);
+  async exportMermaid(diagramId: string): Promise<{ source: string; filename: string }> {
+    let document: DiagramDocument;
+    try { document = await new ContainerContextService(this.repository).resolveDocument(diagramId); }
+    catch (error) { if (error instanceof ContainerContextNotFoundError) throw new ExportNotFoundError(); throw error; }
+    return { source: exportMermaid(document), filename: `${fileStem(document.name)}.mmd` };
   }
 }
 

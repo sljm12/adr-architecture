@@ -26,7 +26,7 @@ describe('recovery API', () => {
     const repository = new DiagramRepository(); repository.create(document);
     const app = buildApp(repository); await app.ready();
     const count = await app.inject({ method: 'GET', url: `/diagrams/${ids.diagram}/components/${ids.api}/dependencies` });
-    expect(count.statusCode).toBe(200); expect(count.json()).toEqual({ relationshipCount: 1 });
+    expect(count.statusCode).toBe(200); expect(count.json()).toEqual({ relationshipCount: 1, groupIds: [], blockers: [], diagramBlockers: [] });
     const removal = await app.inject({ method: 'DELETE', url: `/diagrams/${ids.diagram}/components/${ids.api}` });
     expect(removal.statusCode).toBe(409); expect(removal.json()).toMatchObject({ componentId: ids.api, relationshipCount: 1 });
     expect(repository.get(ids.diagram)?.components).toHaveLength(2);

@@ -1,7 +1,122 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
-import { calculateGroupBounds, diagramDocumentSchema } from '../../shared/src/index';
+import { calculateGroupBounds, diagramDocumentSchema, fitContainerLayout } from '../../shared/src/index';
 import { containerFixtureIds as ids, emptyChildFixture, groupedOwnerParentFixture, populatedChildFixture } from '../../shared/tests/container-fixtures';
+import { buildApp } from '../../backend/src/api/app';
+import { DiagramRepository } from '../../backend/src/persistence/diagram-repository';
+import { DiagramService } from '../../backend/src/services/diagram-service';
+import JSZip from 'jszip';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { AdrRepository } from '../../backend/src/persistence/adr-repository';
+import { completeAdrPayload } from '../../backend/tests/fixtures';
+
+async function recoveryHarness(page: Page, repository: DiagramRepository, adrs = new AdrRepository()) {
+  const app = buildApp(repository, adrs);
+  const behavior = { failChildLoad: false, failRecoveryRefresh: false, staleRestore: false, unsupportedSourceSave: false, restores: 0 };
+  await page.route(/\/api\/(?:diagrams|adrs)(?:\/|$|\?)/, async route => {
+    const request = route.request(), path = new URL(request.url()).pathname.replace(/^\/api/, '');
+    let payload = request.postData() ? JSON.parse(request.postData()!) : undefined;
+    if (path === '/diagrams' && request.method() === 'GET' && behavior.failRecoveryRefresh) { behavior.failRecoveryRefresh = false; return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Recovery list refresh temporarily failed.' }) }); }
+    if (path === `/diagrams/${ids.populatedChild}` && request.method() === 'GET' && behavior.failChildLoad) { behavior.failChildLoad = false; return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Recovery succeeded; child load temporarily failed.' }) }); }
+    if (request.method() === 'POST' && path.endsWith('/restore')) {
+      behavior.restores++;
+      if (behavior.staleRestore) {
+        behavior.staleRestore = false;
+        const service = new DiagramService(repository, adrs), impact = await service.restoreImpact(ids.populatedChild);
+        await service.restore(impact.restoreRootDiagramId, { confirmedDiagramIds: impact.affectedDiagramIds, confirmedTrashBatchId: impact.trashBatchId });
+        await service.trash(impact.restoreRootDiagramId, impact.affectedDiagramIds);
+      }
+    }
+    // Model an unsupported source classification arriving from a stale client; the service supplies the real blockers.
+    if (behavior.unsupportedSourceSave && request.method() === 'PUT' && path === `/diagrams/${ids.parentDiagram}`) { payload.components.find((c: any) => c.id === ids.sourceSystem).type = 'database'; payload.groups = []; }
+    const response = await app.inject({ method: request.method() as any, url: path, ...(payload ? { payload } : {}) });
+    await route.fulfill({ status: response.statusCode, contentType: response.headers['content-type'] as string, body: response.body });
+  });
+  return { app, behavior };
+}
+
+test('protects dirty child and ADR work before named parent trash and restores stable local decisions', async ({ page }) => {
+  const repository = new DiagramRepository(); repository.create(makeParent()); repository.create(populatedChildFixture() as any);
+  const adrs = new AdrRepository(), decision = adrs.create(ids.populatedChild, completeAdrPayload); adrs.replaceLinks(decision.id, [ids.container, ids.externalOccurrence]); adrs.replaceRelationshipLinks(decision.id, [ids.childRelationship]);
+  const { app } = await recoveryHarness(page, repository, adrs);
+  try {
+    await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click();
+    await page.getByLabel('Diagram name', { exact: true }).fill('Dirty runtime');
+    await page.getByRole('button', { name: 'Decision', exact: true }).click();
+    await page.locator('.adr-list-item').filter({ hasText: decision.title }).click();
+    await page.getByLabel('Title required', { exact: true }).fill('Dirty local decision');
+    const parentDelete = page.locator('.saved-diagram-row').filter({ has: page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`) }).getByRole('button', { name: /^Delete/ });
+    await parentDelete.click(); await expect(page.getByRole('alertdialog')).toContainText('Payments'); await page.getByRole('button', { name: 'Move to trash', exact: true }).click();
+    await expect(page.getByRole('alertdialog')).toContainText('Resolve unsaved'); await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(page.getByLabel('Diagram name', { exact: true })).toHaveValue('Dirty runtime'); await expect(page.getByLabel('Title required', { exact: true })).toHaveValue('Dirty local decision'); expect(repository.get(ids.parentDiagram)?.status).toBe('active');
+    await parentDelete.click(); await page.getByRole('button', { name: 'Move to trash', exact: true }).click(); await page.getByRole('button', { name: 'Save and delete', exact: true }).click();
+    await expect.poll(() => repository.get(ids.parentDiagram)?.status).toBe('trashed'); expect(repository.get(ids.populatedChild)?.name).toBe('Dirty runtime'); expect(adrs.get(decision.id)?.title).toBe('Dirty local decision'); expect(adrs.get(decision.id)?.componentIds).toEqual([ids.container, ids.externalOccurrence]);
+    await page.getByRole('button', { name: 'Open recovery' }).click(); await page.locator(`.saved-diagram-trash-row[data-diagram-id="${ids.populatedChild}"]`).getByRole('button', { name: 'Restore' }).click(); await page.getByRole('button', { name: 'Restore diagrams' }).click();
+    await expect(page.getByLabel('Diagram name', { exact: true })).toHaveValue('Dirty runtime'); expect(adrs.get(decision.id)?.relationshipIds).toEqual([ids.childRelationship]);
+  } finally { await app.close(); }
+});
+
+test('links and supersedes local child decisions while protecting referenced artifacts and active sources', async ({ page }) => {
+  const repository = new DiagramRepository(); repository.create(makeParent()); repository.create(populatedChildFixture() as any);
+  const adrs = new AdrRepository(), replacement = adrs.create(ids.populatedChild, { ...completeAdrPayload, title: 'Replacement decision', status: 'accepted' });
+  const { app, behavior } = await recoveryHarness(page, repository, adrs);
+  try {
+    await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click(); await page.getByRole('button', { name: 'Decision', exact: true }).click();
+    await page.getByRole('button', { name: 'New decision', exact: true }).click();
+    for (const [label, value] of [['Title required', 'Local runtime choice'], ['Context required', 'Runtime responsibility'], ['Decision required', 'Use a local application'], ['Consequences required', 'Keep stable links']]) await page.getByLabel(label, { exact: true }).fill(value);
+    await page.locator('#adr-status').selectOption('accepted');
+    await page.getByRole('checkbox', { name: 'Payment API', exact: true }).check(); await page.getByRole('checkbox', { name: 'Ledger', exact: true }).check(); await page.getByRole('checkbox', { name: 'Relationship Payment API → Ledger · writes transactions', exact: true }).check();
+    await expect(page.getByRole('checkbox')).toHaveCount(3); await page.getByRole('button', { name: 'Save decision', exact: true }).click();
+    await expect.poll(() => adrs.listFull(ids.populatedChild).length).toBe(2);
+    const decision = adrs.listFull(ids.populatedChild).find(record => record.title === 'Local runtime choice')!;
+    await page.locator('#adr-status').selectOption('superseded'); await page.locator('#adr-replacement').selectOption(replacement.id); await page.getByRole('button', { name: 'Save decision', exact: true }).click();
+    await expect.poll(() => adrs.get(decision.id)?.status).toBe('superseded');
+    await page.getByRole('button', { name: 'View', exact: true }).first().click();
+    await page.getByLabel('Component name', { exact: true }).fill('Runtime API'); await page.getByRole('button', { name: 'Save component', exact: true }).click(); await page.getByRole('button', { name: 'Save', exact: true }).click(); await expect(page.getByText('Saved', { exact: true }).first()).toBeVisible();
+    await page.getByRole('button', { name: 'Delete component', exact: true }).click(); await expect(page.locator('.recovery-notice')).toContainText('Local runtime choice');
+    await page.locator('.react-flow__edge').first().click({ force: true }); await page.getByRole('button', { name: 'Delete relationship', exact: true }).click(); await expect(page.locator('.recovery-notice')).toContainText('Cannot remove relationship');
+    expect(repository.get(ids.populatedChild)?.relationships[0].id).toBe(ids.childRelationship);
+    expect(adrs.get(decision.id)).toMatchObject({ componentIds: [ids.container, ids.externalOccurrence], relationshipIds: [ids.childRelationship], replacementAdrId: replacement.id }); expect(adrs.listFull(ids.parentDiagram)).toEqual([]);
+    await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click(); behavior.unsupportedSourceSave = true;
+    await page.getByLabel('Diagram name', { exact: true }).fill('Rejected active source draft'); await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByRole('alert').filter({ hasText: ids.externalOccurrence }).first()).toContainText('active'); expect(repository.get(ids.parentDiagram)?.name).toBe('Payments architecture'); expect(adrs.get(decision.id)?.componentIds).toEqual([ids.container, ids.externalOccurrence]);
+  } finally { await app.close(); }
+});
+
+test('reconfirms a later trash batch and retries a failed post-recovery load without repeating restoration', async ({ page }) => {
+  const repository = new DiagramRepository(); repository.create(makeParent()); repository.create(populatedChildFixture() as any);
+  await new DiagramService(repository).trash(ids.parentDiagram, [ids.parentDiagram, ids.populatedChild]);
+  const { app, behavior } = await recoveryHarness(page, repository);
+  try {
+    await page.goto('/'); await page.getByRole('button', { name: 'Open recovery' }).click();
+    await page.locator(`.saved-diagram-trash-row[data-diagram-id="${ids.populatedChild}"]`).getByRole('button', { name: 'Restore' }).click();
+    behavior.staleRestore = true; await page.getByRole('button', { name: 'Restore diagrams' }).click();
+    await expect(page.getByRole('alertdialog')).toContainText('Payments architecture'); await expect(page.getByText('The recovery impact changed.', { exact: false })).toBeVisible(); expect(repository.get(ids.parentDiagram)?.status).toBe('trashed');
+    behavior.failChildLoad = true; behavior.failRecoveryRefresh = true; await page.getByRole('button', { name: 'Restore diagrams' }).click();
+    await expect(page.getByRole('button', { name: 'Retry recovery refresh' })).toBeVisible(); const committedRestores = behavior.restores;
+    await page.getByRole('button', { name: 'Retry recovery refresh' }).click(); expect(behavior.restores).toBe(committedRestores);
+    await expect(page.getByRole('button', { name: 'Retry loading diagram' })).toBeVisible(); expect(repository.get(ids.populatedChild)?.status).toBe('active'); const restores = behavior.restores;
+    await page.getByRole('button', { name: 'Retry loading diagram' }).click(); await expect(page.getByLabel('Diagram name', { exact: true })).toHaveValue('Payments'); expect(behavior.restores).toBe(restores);
+  } finally { await app.close(); }
+});
+
+test('restores the canonical child by keyboard through its owner and retains actionable recoverable source blockers', async ({ page }) => {
+  const repository = new DiagramRepository(); repository.create(makeParent()); repository.create(populatedChildFixture() as any); await new DiagramService(repository).trash(ids.populatedChild);
+  const { app, behavior } = await recoveryHarness(page, repository);
+  try {
+    await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click();
+    await page.getByRole('group', { name: 'Component Payments, Software System', exact: true }).first().click({ force: true });
+    const restore = page.getByRole('button', { name: 'Restore container diagram for Payments', exact: true }); await restore.focus(); await page.keyboard.press('Enter');
+    await expect(page.getByRole('alertdialog')).toContainText('Payments'); await page.keyboard.press('Escape'); expect(behavior.restores).toBe(0); await expect(restore).toBeFocused();
+    // A stale client can submit an unsupported type; the response must retain source/occurrence details and the draft.
+    behavior.unsupportedSourceSave = true; await page.getByLabel('Diagram name', { exact: true }).fill('Parent draft'); await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByRole('alert').filter({ hasText: ids.externalOccurrence }).first()).toBeVisible(); await expect(page.getByLabel('Diagram name', { exact: true })).toHaveValue('Parent draft'); expect(repository.get(ids.parentDiagram)?.name).toBe('Payments architecture');
+    behavior.unsupportedSourceSave = false; await page.getByRole('button', { name: 'Save', exact: true }).click(); await expect(page.getByText('Saved', { exact: true }).first()).toBeVisible();
+    await restore.click(); await page.getByRole('button', { name: 'Restore diagrams' }).click(); await expect(page.getByLabel('Diagram name', { exact: true })).toHaveValue('Payments'); expect(behavior.restores).toBe(1);
+  } finally { await app.close(); }
+});
 
 const childIds: Record<string, string> = {
   [ids.owner]: '99000000-0000-4000-8000-000000000001',
@@ -9,6 +124,71 @@ const childIds: Record<string, string> = {
   [ids.sourceSystem]: ids.populatedChild,
   '90000000-0000-4000-8000-000000000099': '99000000-0000-4000-8000-000000000004',
 };
+
+test('confirms a child-requested exact parent batch, cancels safely and separately restores earlier trash', async ({ page }) => {
+  const repository = new DiagramRepository(); repository.create(makeParent()); repository.create(populatedChildFixture() as any);
+  const earlier = emptyChildFixture(); earlier.scope.softwareSystemId = ids.duplicateOwner; repository.create(earlier as any);
+  const service = new DiagramService(repository); await service.trash(earlier.id); await service.trash(ids.parentDiagram, [ids.parentDiagram, ids.populatedChild]);
+  const app = buildApp(repository);
+  let restores = 0;
+  await page.route(/\/api\/(?:diagrams|adrs)(?:\/|$|\?)/, async route => {
+    const request = route.request(); if (request.method() === 'POST' && request.url().endsWith('/restore')) restores++;
+    const response = await app.inject({ method: request.method() as any, url: new URL(request.url()).pathname.replace(/^\/api/, ''), ...(request.postData() ? { payload: JSON.parse(request.postData()!) } : {}) });
+    await route.fulfill({ status: response.statusCode, contentType: response.headers['content-type'] as string, body: response.body });
+  });
+  try {
+    await page.goto('/'); await page.getByRole('button', { name: 'Open recovery' }).click();
+    const row = page.locator(`.saved-diagram-trash-row[data-diagram-id="${ids.emptyChild}"]`);
+    await row.first().getByRole('button', { name: 'Restore' }).click();
+    await expect(page.getByRole('alertdialog')).toContainText('Payments architecture');
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click(); expect(restores).toBe(0);
+    await row.first().getByRole('button', { name: 'Restore' }).click(); await page.getByRole('alertdialog').getByRole('button', { name: /Restore/ }).click();
+    await expect(page.locator('.saved-diagram-button[data-diagram-id="' + ids.parentDiagram + '"]')).toBeVisible();
+    await expect.poll(() => repository.get(ids.populatedChild)?.status).toBe('active');
+    expect(repository.get(ids.emptyChild)?.status).toBe('trashed');
+    await expect(page.getByRole('alertdialog')).toContainText('separate');
+    await page.getByRole('alertdialog').getByRole('button', { name: /Restore/ }).click();
+    await expect.poll(() => repository.get(ids.emptyChild)?.status).toBe('active'); expect(restores).toBe(2);
+  } finally { await app.close(); }
+});
+
+test('exports a saved child with subtype, protocol, scope and its offline local ADR links', async ({ page }) => {
+  const repository = new DiagramRepository(); repository.create(makeParent());
+  const child = diagramDocumentSchema.parse(populatedChildFixture());
+  child.name = 'Payments runtime'; child.components[0].description = 'Accepts 日本語 requests & records "payments". '.repeat(8);
+  child.components.push({ ...child.components[0], id: randomUUID(), name: 'Ledger datastore', containerType: 'datastore', technology: 'PostgreSQL', position: { x: 100, y: 340 } });
+  const fitted = fitContainerLayout(child.components.filter(c => c.role === 'container'), child.components.filter(c => c.role === 'external')); child.boundary = fitted.boundary;
+  child.components = child.components.map(c => fitted.externalComponents.find(e => e.id === c.id) ?? c); repository.create(child as any);
+  const adrs = new AdrRepository(), decision = adrs.create(child.id, completeAdrPayload); adrs.replaceLinks(decision.id, [ids.container, ids.externalOccurrence]); adrs.replaceRelationshipLinks(decision.id, [ids.childRelationship]);
+  const app = buildApp(repository, adrs);
+  await page.route(/\/api\/(?:diagrams|adrs)(?:\/|$|\?)/, async route => {
+    const response = await app.inject({ method: route.request().method() as any, url: new URL(route.request().url()).pathname.replace(/^\/api/, ''), ...(route.request().postData() ? { payload: JSON.parse(route.request().postData()!) } : {}) });
+    await route.fulfill({ status: response.statusCode, contentType: response.headers['content-type'] as string, body: response.body });
+  });
+  try {
+    await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click();
+    const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export HTML package' }).click();
+    const artifact = await download, artifactPath = (await artifact.path())!;
+    const zip = await JSZip.loadAsync(await readFile(artifactPath));
+    const html = await zip.file('index.html')!.async('string'); expect(html).toContain('Application'); expect(html).toContain('Datastore'); expect(html).toContain('HTTPS'); expect(html).toContain(ids.sourceSystem); expect(html).toContain(`adrs.html#adr-${decision.id}`);
+    const mermaid = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export Mermaid', exact: true }).click(); expect((await mermaid).suggestedFilename()).toMatch(/\.mmd$/);
+    const directory = resolve('test-results/container-offline-package'); await mkdir(directory, { recursive: true });
+    for (const file of ['index.html', 'adrs.html', 'styles.css', 'diagram.svg']) await writeFile(resolve(directory, file), await zip.file(file)!.async('string'));
+    await page.goto(pathToFileURL(resolve(directory, 'index.html')).href);
+    await expect(page.getByRole('heading', { name: 'Payments runtime', exact: true })).toBeVisible();
+    await page.screenshot({ path: 'test-results/container-export-html.png', fullPage: true });
+    await page.locator(`.diagram-component-link[href="#component-${ids.externalOccurrence}"]`).focus(); await page.keyboard.press('Enter');
+    await expect(page.locator(`#component-${ids.externalOccurrence}`)).toBeVisible();
+    await page.locator(`#component-${ids.externalOccurrence} a[href="adrs.html#adr-${decision.id}"]`).click();
+    await expect(page.locator(`#adr-${decision.id}`)).toBeVisible();
+    await page.locator(`#adr-${decision.id} a[href="index.html#relationship-${ids.childRelationship}"]`).click(); await expect(page.locator(`#relationship-${ids.childRelationship}`)).toBeVisible();
+    await page.goto(pathToFileURL(resolve(directory, 'diagram.svg')).href);
+    const clipped = await page.locator('svg').evaluate(svg => { const view = (svg as SVGSVGElement).viewBox.baseVal; return Array.from(svg.querySelectorAll('text')).filter(text => { const box = text.getBBox(); return box.x < view.x || box.y < view.y || box.x + box.width > view.x + view.width || box.y + box.height > view.y + view.height; }).map(text => text.textContent); });
+    expect(clipped).toEqual([]);
+    const covered = await page.locator('.diagram-component').evaluateAll(nodes => nodes.flatMap((node, index) => nodes.slice(index + 1).filter(other => { const a = node.getBBox(), b = other.getBBox(); return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y; }).map(other => other.id)));
+    expect(covered).toEqual([]); await page.screenshot({ path: 'test-results/container-export-svg.png' });
+  } finally { await app.close(); }
+});
 
 function makeParent() {
   const parent = groupedOwnerParentFixture() as any;
@@ -94,6 +274,13 @@ async function mockContainerApi(page: Page, options: { failFirstChildLoad?: bool
     const path = new URL(route.request().url()).pathname.replace(/^\/api/, '');
     const method = route.request().method();
     if (path === '/diagrams/trash') return fulfill(route, []);
+    const trashImpactPath = path.match(/^\/diagrams\/([^/]+)\/trash-impact$/);
+    if (method === 'GET' && trashImpactPath) {
+      const target = [parent, ...extraParents.values(), ...children.values()].find(d => d.id === trashImpactPath[1]);
+      if (!target) return fulfill(route, { message: 'Diagram not found' }, 404);
+      const affected = [target, ...[...children.values()].filter(d => d.scope?.parentDiagramId === target.id && d.status === 'active')];
+      return fulfill(route, { diagramId: target.id, affectedDiagramIds: affected.map(d => d.id), affectedDiagrams: affected.map(d => ({ id: d.id, name: d.name, status: d.status, kind: d.kind, scope: d.scope, createdAt: d.createdAt, updatedAt: d.updatedAt })) });
+    }
     const adrPath = path.match(/^\/diagrams\/([^/]+)\/adrs(?:\/full)?$/);
     if (adrPath && method === 'GET') return fulfill(route, [...adrs.values()].filter(adr => adr.diagramId === adrPath[1]));
     if (adrPath && method === 'POST') {

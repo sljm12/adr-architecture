@@ -2,6 +2,7 @@ import type { ArchitectureDecisionRecord } from '../domain/types';
 import type { HtmlExportSnapshot } from './html-snapshot';
 import { escapeMarkup, renderPlainText } from './escaping';
 import { renderDiagramSvg } from './svg-export';
+import { getComponentTypeLabel } from '../domain/c4';
 
 function linkedAdrs(snapshot: HtmlExportSnapshot, kind: 'component' | 'relationship', artifactId: string): ArchitectureDecisionRecord[] {
   return snapshot.adrs.filter(adr => kind === 'component'
@@ -16,6 +17,24 @@ function adrLinks(adrs: ArchitectureDecisionRecord[]): string {
 
 export function renderDiagramPage(snapshot: HtmlExportSnapshot): string {
   let html = renderDiagramPageLegacy(snapshot);
+  const scope = snapshot.diagram.scope;
+  const scopeDetails = scope ? `<section class="export-scope"><h2>Container diagram · ${escapeMarkup(scope.softwareSystemName)}</h2><p>Single-diagram snapshot. Parent: ${escapeMarkup(scope.parentDiagramName)} (${scope.parentDiagramId}); owner: ${scope.softwareSystemId}.</p>${scope.softwareSystemDescription ? `<p>${renderPlainText(scope.softwareSystemDescription)}</p>` : ''}</section>` : '<p class="export-scope">Single-diagram snapshot. Child container contents are not bundled.</p>';
+  html = html.replace('<main class="package-main">', `<main class="package-main">${scopeDetails}`);
+  for (const component of snapshot.diagram.components) {
+    const label = escapeMarkup(getComponentTypeLabel(component));
+    const metadata = `${component.technology ? `<dt>Technology</dt><dd>${renderPlainText(component.technology)}</dd>` : ''}${component.sourceComponentId ? `<dt>Source component</dt><dd>${component.sourceComponentId}</dd>` : ''}${component.containerType ? `<dt>Container subtype</dt><dd>${component.containerType}</dd>` : ''}`;
+    const heading = `<h2 id="component-heading-${component.id}">${escapeMarkup(component.name)}</h2><dl>`;
+    html = html.replace(heading, `${heading}${metadata}`);
+    const originalType = component.type === 'person' ? 'Person' : component.type === 'software-system' ? 'Software System' : 'Unclassified';
+    // Change only the component's detail section, preserving general index and ADR anchors.
+    html = html.replace(`${heading}${metadata}<dt>Type</dt><dd>${originalType}</dd>`, `${heading}${metadata}<dt>Type</dt><dd>${label}</dd>`);
+  }
+  for (const relationship of snapshot.diagram.relationships) {
+    if (relationship.protocol) {
+      const heading = `<h2 id="relationship-heading-${relationship.id}">${escapeMarkup(relationship.label || 'Relationship')}</h2><dl>`;
+      html = html.replace(heading, `${heading}<dt>Protocol</dt><dd>${renderPlainText(relationship.protocol)}</dd>`);
+    }
+  }
   html = html.replace('>Browse all ADRs</a>', `>Browse all ADRs (${snapshot.adrs.length})</a>`);
   if (snapshot.adrs.length === 0) {
     html = html.replace('<div class="diagram-panel">', '<p class="empty-state">No ADRs are included in this package.</p><div class="diagram-panel">');

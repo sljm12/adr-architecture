@@ -3,7 +3,6 @@ import { useDiagramStore } from '../state/diagram-store';
 import { diagramClient } from '../api/diagram-client';
 import type { DiagramSummary } from '../../../shared/src/index';
 import { defaultDiagramListSort, deriveDiagramGroups, type DiagramListSort, type DiagramListSortDirection, type DiagramListSortField } from '../state/diagram-list';
-import { ConfirmDialog } from './ConfirmDialog';
 import './saved-diagram-list.css';
 
 const formatLastSaved = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
@@ -13,8 +12,8 @@ type SavedDiagramListProps = { onSelect: (id: string) => void; onDelete: (id: st
 
 export function SavedDiagramList({ onSelect, onDelete, onCreate }: SavedDiagramListProps) {
   const documents = useDiagramStore(state => state.savedDocuments);
+  const recoveredTrash = useDiagramStore(state => state.trashedDocuments);
   const currentDocument = useDiagramStore(state => state.document);
-  const registerRestoredSavedDocument = useDiagramStore(state => state.registerRestoredSavedDocument);
   const status = useDiagramStore(state => state.savedDocumentsStatus);
   const error = useDiagramStore(state => state.savedDocumentsError);
   const deleteStatus = useDiagramStore(state => state.savedDocumentsDeleteStatus);
@@ -25,13 +24,13 @@ export function SavedDiagramList({ onSelect, onDelete, onCreate }: SavedDiagramL
   const [createdFrom, setCreatedFrom] = useState('');
   const [createdTo, setCreatedTo] = useState('');
   const [sort, setSort] = useState<DiagramListSort>(defaultDiagramListSort);
-  const [pendingDeletion, setPendingDeletion] = useState<{ id: string; name: string } | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [trash, setTrash] = useState<DiagramSummary[]>([]);
   const [recoveryMessage, setRecoveryMessage] = useState('');
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { setTrash(recoveredTrash); }, [recoveredTrash]);
 
   const list = useMemo(() => deriveDiagramGroups(documents, { nameQuery, createdFrom, createdTo }, sort), [documents, nameQuery, createdFrom, createdTo, sort]);
   const hasFilters = Boolean(nameQuery.trim() || createdFrom || createdTo);
@@ -51,7 +50,7 @@ export function SavedDiagramList({ onSelect, onDelete, onCreate }: SavedDiagramL
         {currentDocument?.id === document.id && <small className="saved-diagram-current">Current diagram</small>}
         <span>Created {created} - Last saved {lastSaved}</span><i aria-hidden="true">&gt;</i>
       </button>
-      <button className="saved-diagram-delete" type="button" onClick={() => setPendingDeletion({ id: document.id, name: document.name })} disabled={deleteStatus === 'deleting'} aria-label={`Delete ${scopeLabel(document)}`} title={`Delete ${scopeLabel(document)}`}>
+      <button className="saved-diagram-delete" type="button" onClick={() => onDelete(document.id)} disabled={deleteStatus === 'deleting'} aria-label={`Delete ${scopeLabel(document)}`} title={`Delete ${scopeLabel(document)}`}>
         <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-3 6h12l-.8 11.2a2 2 0 0 1-2 1.8H8.8a2 2 0 0 1-2-1.8L6 9Zm3 2v8h2v-8H9Zm4 0v8h2v-8h-2Z" /></svg>
       </button>
     </li>;
@@ -89,7 +88,6 @@ export function SavedDiagramList({ onSelect, onDelete, onCreate }: SavedDiagramL
         {group.children.length > 0 && <ul className="saved-diagram-children" aria-label={`Container diagrams under ${group.parentName}, parent ${group.parentId}`}>{group.children.map(renderRow)}</ul>}
       </li>)}</ul>}
     </>}
-    <footer className="saved-diagrams-recovery"><button className="text-action" type="button" onClick={() => { setRecoveryOpen(value => !value); if (!recoveryOpen) void diagramClient.listTrash().then(setTrash).catch(error => setRecoveryMessage(error instanceof Error ? error.message : 'Could not load trash.')); }} aria-expanded={recoveryOpen}> {recoveryOpen ? 'Hide recovery' : 'Open recovery'} </button>{recoveryOpen && <div className="saved-diagrams-trash" aria-label="Recoverable diagrams">{recoveryMessage && <p className="saved-diagrams-feedback saved-diagrams-error" role="alert">{recoveryMessage}</p>}{trash.length === 0 && !recoveryMessage && <p className="saved-diagrams-feedback">No diagrams in trash.</p>}{trash.map(item => <div className="saved-diagram-trash-row" key={item.id}><span><strong>{item.name}</strong><small>Created {formatCreatedDate(item.createdAt)}</small></span><button className="text-action" type="button" onClick={() => void diagramClient.restore(item.id).then(restored => { registerRestoredSavedDocument(restored); setTrash(current => current.filter(entry => entry.id !== item.id)); setRecoveryMessage(`${restored.name} restored.`); })}>Restore</button></div>)}</div>}</footer>
-    {pendingDeletion && <ConfirmDialog title={`Delete "${pendingDeletion.name}"?`} message={`This removes "${pendingDeletion.name}" from the active diagram list and moves it to recoverable trash. Its components, relationships, decisions, and links will remain available if you restore it.`} confirmLabel="Move to trash" onConfirm={() => { const id = pendingDeletion.id; setPendingDeletion(null); onDelete(id); }} onCancel={() => setPendingDeletion(null)} />}
+    <footer className="saved-diagrams-recovery"><button className="text-action" type="button" onClick={() => { setRecoveryOpen(value => !value); if (!recoveryOpen) void diagramClient.listTrash().then(setTrash).catch(error => setRecoveryMessage(error instanceof Error ? error.message : 'Could not load trash.')); }} aria-expanded={recoveryOpen}> {recoveryOpen ? 'Hide recovery' : 'Open recovery'} </button>{recoveryOpen && <div className="saved-diagrams-trash" aria-label="Recoverable diagrams">{recoveryMessage && <p className="saved-diagrams-feedback saved-diagrams-error" role="alert">{recoveryMessage}</p>}{trash.length === 0 && !recoveryMessage && <p className="saved-diagrams-feedback">No diagrams in trash.</p>}{trash.map(item => <div className="saved-diagram-trash-row" data-diagram-id={item.id} key={item.id}><span><strong>{item.name}</strong><small>{item.kind === 'container' ? `Container diagram · ${item.scope?.softwareSystemName}; parent ${item.scope?.parentDiagramName}; ${item.id}` : 'General diagram'} · Created {formatCreatedDate(item.createdAt)}</small></span><button className="text-action" type="button" onClick={() => window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind: 'restore', id: item.id } }))}>Restore</button></div>)}</div>}</footer>
   </section>;
 }

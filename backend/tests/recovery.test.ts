@@ -55,18 +55,18 @@ describe('recovery service', () => {
     expect(repository.get(diagramId)?.components.map(component => component.id)).toEqual([componentApiId]);
   });
 
-  it('moves a diagram to trash and restores its stable content', () => {
-    const repository = new DiagramRepository(); repository.create(document); const service = new DiagramService(repository); service.trash(diagramId);
+  it('moves a diagram to trash and restores its stable content', async () => {
+    const repository = new DiagramRepository(); repository.create(document); const service = new DiagramService(repository); await service.trash(diagramId);
     expect(repository.list()).toEqual([]); expect(repository.listTrash()[0].id).toBe(diagramId);
-    const restored = service.restore(diagramId);
+    const restored = await service.restore(diagramId);
     expect(restored.status).toBe('active'); expect(restored.components[0].id).toBe(componentApiId); expect(restored.relationships[0].id).toBe(relationshipId);
   });
 
-  it('preserves the original creation date through edit, trash, and restore', () => {
+  it('preserves the original creation date through edit, trash, and restore', async () => {
     const repository = new DiagramRepository(); repository.create(document); const service = new DiagramService(repository);
     const edited = repository.replace({ ...document, name: 'Renamed', createdAt: 'changed-by-client' });
-    expect(edited?.createdAt).toBe(document.createdAt); service.trash(diagramId);
-    expect(repository.listTrash()[0].createdAt).toBe(document.createdAt); expect(service.restore(diagramId).createdAt).toBe(document.createdAt);
+    expect(edited?.createdAt).toBe(document.createdAt); await service.trash(diagramId);
+    expect(repository.listTrash()[0].createdAt).toBe(document.createdAt); expect((await service.restore(diagramId)).createdAt).toBe(document.createdAt);
   });
 
   it('returns createdAt in trash summaries and preserves it after restore', async () => {

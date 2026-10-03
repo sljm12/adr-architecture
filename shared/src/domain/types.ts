@@ -45,6 +45,17 @@ export interface DiagramDependencyBlocker {
   nextAction: string;
 }
 
+export interface TrashImpact { diagramId: UUID; affectedDiagramIds: UUID[]; affectedDiagrams: DiagramSummary[] }
+export interface RestoreImpact {
+  requestedDiagramId: UUID;
+  restoreRootDiagramId: UUID;
+  trashBatchId: UUID | null;
+  affectedDiagramIds: UUID[];
+  affectedDiagrams: DiagramSummary[];
+  requestedDiagramIncluded: boolean;
+}
+export interface RestoreConfirmation { confirmedDiagramIds: UUID[]; confirmedTrashBatchId: UUID | null }
+
 export type AdrStatus = 'draft' | 'accepted' | 'superseded' | 'rejected';
 
 export interface ArchitectureDecisionRecord {

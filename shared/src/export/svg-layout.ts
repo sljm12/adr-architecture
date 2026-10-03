@@ -1,4 +1,6 @@
 import type { Component, DiagramDocument, Position, Relationship } from '../domain/types';
+import { fitContainerLayout } from '../domain/container-layout';
+import { containerLabelLines, wrapExportText } from './container-labels';
 
 export type ExportRect = Position & { width: number; height: number };
 export type ExportPoint = Position;
@@ -16,6 +18,7 @@ export type DiagramSvgLayout = {
   componentRects: Map<string, ExportRect>;
   groupRects: Map<string, ExportRect>;
   relationshipRoutes: RelationshipRoute[];
+  boundaryRect?: ExportRect;
 };
 
 const numberText = (value: number) => Number(value.toFixed(2)).toString();
@@ -87,6 +90,37 @@ function createRoute(relationship: Relationship, components: Map<string, Compone
 
 /** Calculates a stable SVG layout using validated domain positions and sizes. */
 export function layoutDiagramForSvg(diagram: DiagramDocument): DiagramSvgLayout {
+  let boundaryRect: ExportRect | undefined;
+  if (diagram.kind === 'container') {
+    let grown = diagram.components.map(component => {
+      const width = Math.max(component.size.width, 280), height = Math.max(component.size.height, 32 + containerLabelLines(component, width).length * 18);
+      return { ...component, size: { width, height } };
+    });
+    const placed: Component[] = [];
+    for (const component of grown.filter(c => c.role === 'container').sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x || a.id.localeCompare(b.id))) {
+      let candidate = component;
+      for (;;) {
+        const collisions = placed.filter(other => candidate.position.x < other.position.x + other.size.width && candidate.position.x + candidate.size.width > other.position.x && candidate.position.y < other.position.y + other.size.height && candidate.position.y + candidate.size.height > other.position.y);
+        if (!collisions.length) break;
+        candidate = { ...candidate, position: { x: candidate.position.x, y: Math.max(...collisions.map(other => other.position.y + other.size.height)) + 24 } };
+      }
+      placed.push(candidate);
+    }
+    const internalById = new Map(placed.map(component => [component.id, component]));
+    grown = grown.map(component => internalById.get(component.id) ?? component);
+    const internal = grown.filter(c => c.role === 'container');
+    let fitted = fitContainerLayout(internal, grown.filter(c => c.role === 'external'));
+    const headerLines = wrapExportText(diagram.scope?.softwareSystemName ?? '', fitted.boundary.size.width);
+    const extraHeaderHeight = Math.max(0, headerLines.length - 1) * 18;
+    if (extraHeaderHeight) {
+      // A render-only envelope reserves every owner-label line while retaining the original body bounds.
+      const { position, size } = fitted.boundary;
+      fitted = fitContainerLayout([...internal, { position: { x: position.x + 24, y: position.y + 68 - extraHeaderHeight }, size: { width: size.width - 48, height: size.height - 92 + extraHeaderHeight } }], grown.filter(c => c.role === 'external'));
+    }
+    const externalById = new Map(fitted.externalComponents.map(c => [c.id, c]));
+    diagram = { ...diagram, components: grown.map(c => externalById.get(c.id) ?? c) };
+    boundaryRect = { ...fitted.boundary.position, ...fitted.boundary.size };
+  }
   const componentRects = new Map(diagram.components.map(component => [component.id, { ...component.position, ...component.size }]));
   const groupRects = new Map((diagram.groups ?? []).map(group => [group.id, { ...group.position, ...group.size }]));
   const components = new Map(diagram.components.map(component => [component.id, component]));
@@ -106,8 +140,11 @@ export function layoutDiagramForSvg(diagram: DiagramDocument): DiagramSvgLayout 
   for (const rect of [...componentRects.values(), ...groupRects.values()]) {
     points.push({ x: rect.x, y: rect.y }, { x: rect.x + rect.width, y: rect.y + rect.height });
   }
+  if (boundaryRect) points.push({ x: boundaryRect.x, y: boundaryRect.y }, { x: boundaryRect.x + boundaryRect.width, y: boundaryRect.y + boundaryRect.height });
   for (const route of relationshipRoutes) {
     points.push(route.start, route.control, route.end, route.label);
+    const labelLines = wrapExportText([route.relationship.label, route.relationship.protocol].filter(Boolean).join('\n'), 260);
+    points.push({ x: route.label.x - 130, y: route.label.y - 18 }, { x: route.label.x + 130, y: route.label.y + labelLines.length * 18 });
     if (route.arrow) points.push(...route.arrow);
   }
   if (!points.length) return { viewBox: { x: 0, y: 0, width: 640, height: 320 }, componentRects, groupRects, relationshipRoutes };
@@ -116,7 +153,7 @@ export function layoutDiagramForSvg(diagram: DiagramDocument): DiagramSvgLayout 
   const minY = Math.min(...points.map(point => point.y)) - padding;
   const maxX = Math.max(...points.map(point => point.x)) + padding;
   const maxY = Math.max(...points.map(point => point.y)) + padding;
-  return { viewBox: { x: minX, y: minY, width: maxX - minX, height: maxY - minY }, componentRects, groupRects, relationshipRoutes };
+  return { viewBox: { x: minX, y: minY, width: maxX - minX, height: maxY - minY }, componentRects, groupRects, relationshipRoutes, boundaryRect };
 }
 
 export const formatSvgNumber = numberText;

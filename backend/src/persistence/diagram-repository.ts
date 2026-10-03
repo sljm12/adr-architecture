@@ -6,6 +6,7 @@ import { assertDiagramInvariants, diagramDocumentSchema } from '../../../shared/
 import * as schema from './schema';
 
 export type MaybePromise<T> = T | Promise<T>;
+export interface TrashProvenance { trashBatchId: string | null; trashRootDiagramId: string | null }
 
 export interface DiagramRepositoryLike {
   listAll(): MaybePromise<DiagramDocument[]>;
@@ -21,7 +22,8 @@ export interface DiagramRepositoryLike {
   replace(document: DiagramDocument): MaybePromise<DiagramDocument | undefined>;
   removeComponent(diagramId: string, componentId: string): MaybePromise<RemoveComponentResult | undefined>;
   removeRelationship(diagramId: string, relationshipId: string): MaybePromise<RemoveRelationshipResult | undefined>;
-  trash(id: string): MaybePromise<DiagramDocument | undefined>;
+  getTrashProvenance(id: string): MaybePromise<TrashProvenance>;
+  trash(id: string, provenance?: TrashProvenance): MaybePromise<DiagramDocument | undefined>;
   restore(id: string): MaybePromise<DiagramDocument | undefined>;
 }
 
@@ -43,6 +45,7 @@ const normalizedGroups = (document: DiagramDocument) => groupsOf(document).map(g
 /** Isolated repository used by tests; production injects PostgresDiagramRepository. */
 export class DiagramRepository implements DiagramRepositoryLike {
   private documents = new Map<string, DiagramDocument>();
+  private provenance = new Map<string, TrashProvenance>();
   private transactionTail: Promise<void> = Promise.resolve();
 
   listAll() { return [...this.documents.values()].map(d => this.resolve(d)); }
@@ -58,8 +61,9 @@ export class DiagramRepository implements DiagramRepositoryLike {
     this.transactionTail = new Promise<void>(resolve => { release = resolve; });
     await prior;
     const snapshot = new Map([...this.documents].map(([id, document]) => [id, clone(document)]));
+    const provenanceSnapshot = new Map([...this.provenance].map(([id, value]) => [id, { ...value }]));
     try { return await action(this, this); }
-    catch (error) { this.documents = snapshot; throw error; }
+    catch (error) { this.documents = snapshot; this.provenance = provenanceSnapshot; throw error; }
     finally { release(); }
   }
   findComponent(id: string) { for (const document of this.documents.values()) { const component = document.components.find(item => item.id === id); if (component) return { id: component.id, diagramId: component.diagramId, name: component.name, description:component.description, type:component.type, role:component.role ?? 'element', sourceComponentId:component.sourceComponentId ?? null }; } return undefined; }
@@ -120,12 +124,14 @@ export class DiagramRepository implements DiagramRepositoryLike {
     return { document: clone(updated) };
   }
 
-  trash(id: string) {
+  getTrashProvenance(id: string): TrashProvenance { return { ...(this.provenance.get(id) ?? { trashBatchId: null, trashRootDiagramId: null }) }; }
+  trash(id: string, provenance: TrashProvenance = { trashBatchId: crypto.randomUUID(), trashRootDiagramId: id }) {
     const document = this.documents.get(id);
     if (!document || document.status === 'trashed') return undefined;
     const now = new Date().toISOString();
     const updated = { ...document, status: 'trashed' as const, trashedAt: now, updatedAt: now };
     this.documents.set(id, clone(updated));
+    this.provenance.set(id, { ...provenance });
     return clone(updated);
   }
 
@@ -134,6 +140,7 @@ export class DiagramRepository implements DiagramRepositoryLike {
     if (!document || document.status !== 'trashed') return undefined;
     const updated = { ...document, status: 'active' as const, trashedAt: null, updatedAt: new Date().toISOString() };
     this.documents.set(id, clone(updated));
+    this.provenance.delete(id);
     return clone(updated);
   }
 
@@ -289,7 +296,8 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
     if (this.inTransaction) return await action(this, this.db);
     return this.db.transaction(async (transaction: PostgresTransaction) => {
       await transaction.select({ id:schema.diagrams.id }).from(schema.diagrams).where(eq(schema.diagrams.id, parentDiagramId)).for('update');
-      const ordered = [...new Set(childDiagramIds)].filter(id => id !== parentDiagramId).sort();
+      const currentChildren = await transaction.select({ id: schema.diagrams.id }).from(schema.diagrams).where(eq(schema.diagrams.parentDiagramId, parentDiagramId));
+      const ordered = [...new Set([...childDiagramIds, ...currentChildren.map(child => child.id)])].filter(id => id !== parentDiagramId).sort();
       for (const id of ordered) await transaction.select({ id:schema.diagrams.id }).from(schema.diagrams).where(eq(schema.diagrams.id, id)).for('update');
       const scoped = new PostgresDiagramRepository(transaction, true);
       return action(scoped, transaction);
@@ -373,18 +381,22 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
     return { document: (await this.get(diagramId))! };
   }
 
-  async trash(id: string): Promise<DiagramDocument | undefined> {
+  async getTrashProvenance(id: string): Promise<TrashProvenance> {
+    const [row] = await this.db.select({ trashBatchId: schema.diagrams.trashBatchId, trashRootDiagramId: schema.diagrams.trashRootDiagramId }).from(schema.diagrams).where(eq(schema.diagrams.id, id)).limit(1);
+    return row ?? { trashBatchId: null, trashRootDiagramId: null };
+  }
+  async trash(id: string, provenance: TrashProvenance = { trashBatchId: crypto.randomUUID(), trashRootDiagramId: id }): Promise<DiagramDocument | undefined> {
     const existing = await this.get(id);
     if (!existing || existing.status === 'trashed') return undefined;
     const now = new Date();
-    await this.db.update(schema.diagrams).set({ status: 'trashed', trashedAt: now, updatedAt: now }).where(eq(schema.diagrams.id, id));
+    await this.db.update(schema.diagrams).set({ status: 'trashed', trashedAt: now, updatedAt: now, ...provenance }).where(eq(schema.diagrams.id, id));
     return (await this.get(id))!;
   }
 
   async restore(id: string): Promise<DiagramDocument | undefined> {
     const existing = await this.get(id);
     if (!existing || existing.status !== 'trashed') return undefined;
-    await this.db.update(schema.diagrams).set({ status: 'active', trashedAt: null, updatedAt: new Date() }).where(eq(schema.diagrams.id, id));
+    await this.db.update(schema.diagrams).set({ status: 'active', trashedAt: null, updatedAt: new Date(), trashBatchId: null, trashRootDiagramId: null }).where(eq(schema.diagrams.id, id));
     return (await this.get(id))!;
   }
 

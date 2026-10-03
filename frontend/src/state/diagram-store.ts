@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { assertCanAddGroupMember, calculateGroupBounds, DEFAULT_COMPONENT_SIZE, fitGroupBoundsAfterLayout, getC4ArtifactTypeLabel, isC4ArtifactType, translateGroupWithMembers, type C4ArtifactType, type DiagramDocument, type DiagramSummary, type GroupMemberAddReason, type Position, type Relationship, type RelationshipDirection } from '../../../shared/src/index';
-import { DiagramApiError, diagramClient } from '../api/diagram-client';
+import { DiagramApiError, diagramClient, formatDiagramApiError } from '../api/diagram-client';
 import { BoundedHistory } from './history';
 import { assertDiagramInvariants, containerContextSchema, diagramDocumentSchema, fitContainerLayout, getContainerComponentMinimumSize, isContainerType, validateExternalPlacement, type ContainerContext, type ContainerType, type ComponentSize } from '../../../shared/src/index';
 
@@ -19,6 +19,7 @@ type State = {
   groupError: string | null;
   clearGroupError: () => void;
   savedDocuments: DiagramSummary[];
+  trashedDocuments: DiagramSummary[];
   savedDocumentsStatus: SavedDocumentsStatus;
   savedDocumentsError: string | null;
   savedDocumentsDeleteStatus: SavedDocumentDeleteStatus;
@@ -67,7 +68,8 @@ type State = {
   save: () => Promise<void>;
   retry: () => Promise<void>;
   refreshSavedDocuments: () => Promise<void>;
-  trashSavedDocument: (id: string) => Promise<boolean>;
+  trashSavedDocument: (id: string, confirmedDiagramIds?: string[]) => Promise<boolean>;
+  refreshRecoveryLists: (affectedIds?: string[]) => Promise<void>;
   registerRestoredSavedDocument: (document: DiagramDocument) => void;
   loadSavedDocument: (id: string, options?: { canCommit?: () => boolean }) => Promise<boolean>;
   createOrOpenContainerDiagram: (componentId: string, options?: { canCommit?: () => boolean }) => Promise<boolean>;
@@ -77,12 +79,15 @@ type State = {
 
 const history = new BoundedHistory<DiagramDocument>();
 let loadRequest = 0;
+let savedListRequest = 0;
+let recoveryRefreshes = 0;
 let session = 0;
 const copy = (document: DiagramDocument): DiagramDocument => ({ ...structuredClone(document), groups: document.groups ?? [] });
 const historyState = () => ({ canUndo: history.canUndo, canRedo: history.canRedo });
 const now = () => new Date().toISOString();
 const saveErrorMessage = (error: unknown): string => {
   if (error instanceof DiagramApiError) {
+    if (Array.isArray(error.details.diagramBlockers) || Array.isArray(error.details.blockers)) return formatDiagramApiError(error);
     const fields = error.details.fields;
     if (fields && typeof fields === 'object' && !Array.isArray(fields)) {
       const detail = Object.values(fields).find(value => typeof value === 'string' && value.trim());
@@ -171,7 +176,7 @@ export const useDiagramStore = create<State>((set, get) => ({
   error: null,
   groupError: null,
   clearGroupError: () => set({ groupError: null }),
-  savedDocuments: [], savedDocumentsStatus: 'idle', savedDocumentsError: null,
+  savedDocuments: [], trashedDocuments: [], savedDocumentsStatus: 'idle', savedDocumentsError: null,
   savedDocumentsDeleteStatus: 'idle', savedDocumentsDeleteError: null, savedDocumentsDeleteMessage: null,
   deletedSavedDocumentIds: [],
   loadError: null,
@@ -497,7 +502,7 @@ export const useDiagramStore = create<State>((set, get) => ({
           sourceComponentId,
           targetComponentId,
           direction: updates.direction ?? item.direction,
-          label: updates.label === undefined ? item.label : updates.label.trim() || null,
+          label: updates.label === undefined ? item.label : updates.label?.trim() || null,
           protocol: updates.protocol === undefined ? item.protocol : updates.protocol?.trim() || null,
           updatedAt: now(),
         }
@@ -547,10 +552,13 @@ export const useDiagramStore = create<State>((set, get) => ({
   },
   retry: async () => { await get().save(); },
   refreshSavedDocuments: async () => {
+    if (recoveryRefreshes) return;
+    const listRequest = ++savedListRequest;
     const before = new Map(get().savedDocuments.map(document => [document.id, document]));
     set({ savedDocumentsStatus: 'loading', savedDocumentsError: null });
     try {
       const savedDocuments = await diagramClient.list();
+      if (listRequest !== savedListRequest) return;
       const deletedIds = new Set(get().deletedSavedDocumentIds ?? []);
       const changed = get().savedDocuments.filter(document => before.get(document.id) !== document);
       const changedById = new Map(changed.map(document => [document.id, document]));
@@ -558,9 +566,18 @@ export const useDiagramStore = create<State>((set, get) => ({
       for (const document of changed) if (!reconciled.some(item => item.id === document.id)) reconciled.push(document);
       set({ savedDocuments: reconciled.filter(document => !deletedIds.has(document.id)), savedDocumentsStatus: 'loaded', savedDocumentsError: null });
     }
-    catch (error) { set({ savedDocumentsStatus: 'failed', savedDocumentsError: error instanceof Error ? error.message : 'Could not load saved diagrams.' }); }
+    catch (error) { if (listRequest === savedListRequest) set({ savedDocumentsStatus: 'failed', savedDocumentsError: error instanceof Error ? error.message : 'Could not load saved diagrams.' }); }
   },
-  trashSavedDocument: async id => {
+  refreshRecoveryLists: async (affectedIds = []) => {
+    const listRequest = ++savedListRequest;
+    recoveryRefreshes++;
+    try {
+      const [savedDocuments, trashedDocuments] = await Promise.all([diagramClient.list(), diagramClient.listTrash()]);
+      if (listRequest !== savedListRequest) return;
+      set(state => ({ savedDocuments, trashedDocuments, deletedSavedDocumentIds: state.deletedSavedDocumentIds.filter(id => !affectedIds.includes(id)), savedDocumentsStatus: 'loaded', savedDocumentsError: null }));
+    } finally { recoveryRefreshes--; }
+  },
+  trashSavedDocument: async (id, confirmedDiagramIds) => {
     if (get().savedDocumentsDeleteStatus === 'deleting') return false;
     if (!get().savedDocuments.some(document => document.id === id)) {
       set({ savedDocumentsDeleteStatus: 'failed', savedDocumentsDeleteError: 'That diagram is no longer available. Refresh the list and try again.', savedDocumentsDeleteMessage: null });
@@ -568,10 +585,10 @@ export const useDiagramStore = create<State>((set, get) => ({
     }
     set({ savedDocumentsDeleteStatus: 'deleting', savedDocumentsDeleteError: null, savedDocumentsDeleteMessage: null });
     try {
-      await diagramClient.trash(id);
+      if (confirmedDiagramIds) await diagramClient.trash(id, confirmedDiagramIds); else await diagramClient.trash(id);
       set(state => ({
-        savedDocuments: state.savedDocuments.filter(document => document.id !== id),
-        deletedSavedDocumentIds: [...new Set([...(state.deletedSavedDocumentIds ?? []), id])],
+        savedDocuments: state.savedDocuments.filter(document => !(confirmedDiagramIds ?? [id]).includes(document.id)),
+        deletedSavedDocumentIds: [...new Set([...(state.deletedSavedDocumentIds ?? []), ...(confirmedDiagramIds ?? [id])])],
         savedDocumentsDeleteStatus: 'succeeded',
         savedDocumentsDeleteError: null,
         savedDocumentsDeleteMessage: 'Diagram moved to recoverable trash.',
@@ -644,8 +661,10 @@ export const useDiagramStore = create<State>((set, get) => ({
     set({ containerOpenStatus: 'loading', containerOpenError: null, containerOpenComponentId: componentId });
     try {
       const availability = await diagramClient.containerAvailability(sourceDocument.id, componentId);
+      if (get().document !== sourceDocument || get().status !== 'saved' || options.canCommit?.() === false) throw new Error('The current diagram or decision changed while availability was loading. Try again from the current selection.');
       if (availability.availability === 'trashed') {
         const name = availability.diagram?.name ?? component.name;
+        if (availability.diagram && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind: 'restore', id: availability.diagram.id } }));
         throw new Error(`The container diagram “${name}” is in Trash. Restore it before opening; no replacement was created.`);
       }
       if (get().document !== sourceDocument || get().status !== 'saved' || options.canCommit?.() === false) throw new Error('The current diagram or decision changed while availability was loading. Try again from the current selection.');
@@ -662,6 +681,7 @@ export const useDiagramStore = create<State>((set, get) => ({
       void get().refreshSavedDocuments();
       return true;
     } catch (error) {
+      if (error instanceof DiagramApiError && error.details.code === 'RESTORE_REQUIRED' && typeof (error.details.diagram as any)?.id === 'string' && get().document === sourceDocument && options.canCommit?.() !== false && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind: 'restore', id: (error.details.diagram as any).id } }));
       set({ containerOpenStatus: 'failed', containerOpenError: saveErrorMessage(error) });
       return false;
     }

@@ -1,7 +1,25 @@
 import type { HtmlExportInput } from '../../../shared/src/index';
-import { buildHtmlPackage } from '../../../shared/src/index';
+import { buildHtmlPackage, containerContextSchema, validateExportDiagram } from '../../../shared/src/index';
 import { adrClient } from './adr-client';
-import { DiagramApiError } from './diagram-client';
+import { DiagramApiError, diagramClient } from './diagram-client';
+
+export async function resolveContainerExportInput(input: HtmlExportInput): Promise<HtmlExportInput> {
+  const captured = structuredClone(input);
+  if (captured.diagram.kind !== 'container') return captured;
+  const context = containerContextSchema.parse(await diagramClient.containerContext(captured.diagram.id));
+  const scope = captured.diagram.scope;
+  if (!scope || context.scope.parentDiagramId !== scope.parentDiagramId || context.scope.softwareSystemId !== scope.softwareSystemId) throw new Error('Export source context did not match the captured container scope. Refresh source details and retry.');
+  const sources = new Map(context.sources.map(source => [source.id, source]));
+  captured.diagram.scope = context.scope;
+  captured.diagram.components = captured.diagram.components.map(component => {
+    if (component.role !== 'external') return component;
+    const source = sources.get(component.sourceComponentId!);
+    if (!source) throw new Error(`External participant ${component.id} has no eligible source. Repair its parent reference and retry export.`);
+    return { ...component, name: source.name, description: source.description, type: source.type };
+  });
+  captured.diagram = validateExportDiagram(captured.diagram);
+  return captured;
+}
 
 function safeDiagramFilename(name: string): string {
   const slug = name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
@@ -35,8 +53,8 @@ export const exportClient = {
     URL.revokeObjectURL(url);
   },
   async downloadHtmlPackage(input: HtmlExportInput): Promise<void> {
-    const adrs = await adrClient.listFull(input.diagram.id);
-    const files = buildHtmlPackage({ ...input, adrs });
+    const [captured, adrs] = await Promise.all([resolveContainerExportInput(input), adrClient.listFull(input.diagram.id)]);
+    const files = buildHtmlPackage({ ...captured, adrs });
     const { default: JSZip } = await import('jszip');
     const zip = new JSZip();
     for (const [path, contents] of Object.entries(files)) zip.file(path, contents);

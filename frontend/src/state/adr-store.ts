@@ -109,7 +109,7 @@ export const useAdrStore = create<State>((set, get) => ({
       if (!sameIds(snapshot.componentIds, saved.componentIds)) saved = normalizeRecord(await adrClient.replaceLinks(saved.id, { componentIds: snapshot.componentIds }));
       if (!sameIds(snapshot.relationshipIds, saved.relationshipIds)) saved = normalizeRecord(await adrClient.replaceRelationshipLinks(saved.id, { relationshipIds: snapshot.relationshipIds }));
       if (get().draft !== snapshot) { set({ status: 'unsaved', error: null }); return false; }
-      history.reset({ ...saved }); set(state => ({ draft: saved, status: 'saved', error: null, fieldErrors: {}, records: replaceSummary(state.records, summary(saved!)), ...historyState() })); void get().loadComponentAdrCounts(snapshot.diagramId); if (get().componentSummaryComponentId) void get().loadComponentSummary(snapshot.diagramId, get().componentSummaryComponentId); return true;
+      history.reset({ ...saved }); set(state => ({ draft: saved, status: 'saved', error: null, fieldErrors: {}, records: replaceSummary(state.records, summary(saved!)), ...historyState() })); void get().loadComponentAdrCounts(snapshot.diagramId); if (get().componentSummaryComponentId) void get().loadComponentSummary(snapshot.diagramId, get().componentSummaryComponentId!); return true;
     }
     catch (error) {
       if (get().draft === snapshot) {
@@ -132,7 +132,7 @@ export const useAdrStore = create<State>((set, get) => ({
       history.reset(emptyDraft(diagramId));
       set(state => ({ records: state.records.filter(record => record.id !== deletedId), draft: null, status: 'idle', error: null, fieldErrors: {}, deleteStatus: 'succeeded', deleteError: null, deleteBlockers: [], deleteMessage: 'Decision deleted successfully.', ...historyState() }));
       void get().loadComponentAdrCounts(diagramId);
-      if (get().componentSummaryComponentId) void get().loadComponentSummary(diagramId, get().componentSummaryComponentId);
+      if (get().componentSummaryComponentId) void get().loadComponentSummary(diagramId, get().componentSummaryComponentId!);
       return true;
     } catch (error) {
       const blockers = error instanceof AdrApiError && Array.isArray(error.details.blockers)

@@ -47,7 +47,7 @@ function assignRouting(relationships:RoutedRelationship[]):Map<string,Relationsh
 }
 
 const positiveDimension=(value:unknown,fallback:number)=>typeof value==='number'&&Number.isFinite(value)&&value>0?value:fallback;
-export function getReactFlowNodeSize(node:Pick<Node,'measured'|'width'|'height'|'style'>,fallback=DEFAULT_COMPONENT_SIZE):ComponentSize{
+export function getReactFlowNodeSize(node:Pick<Node,'measured'|'width'|'height'|'style'>,fallback:ComponentSize=DEFAULT_COMPONENT_SIZE):ComponentSize{
   const style=node.style??{};
   const styleWidth=typeof style.width==='number'?style.width:undefined;
   const styleHeight=typeof style.height==='number'?style.height:undefined;

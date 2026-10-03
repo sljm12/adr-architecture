@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { DiagramApiError, diagramClient } from '../api/diagram-client';
+import { useEffect, useState } from 'react';
+import { DiagramApiError, diagramClient, formatDiagramApiError } from '../api/diagram-client';
 import { useDiagramStore } from '../state/diagram-store';
 import { ConfirmDialog } from './ConfirmDialog';
 import type { DiagramSummary } from '../../../shared/src/index';
@@ -13,30 +13,30 @@ export function formatComponentRemovalError(error: unknown, name: string): strin
     if (groupIds.length) {
       return `Cannot remove ${name}: it belongs to system group${groupIds.length === 1 ? '' : 's'} ${groupIds.join(', ')}. Remove membership or ungroup first.`;
     }
-    return `Cannot remove ${name}: ${error.message}`;
+    return `Cannot remove ${name}: ${formatDiagramApiError(error)}`;
   }
   return error instanceof Error ? `Could not remove ${name}: ${error.message}` : `Could not remove ${name}.`;
 }
 
 export function RecoveryControls({ selection, onSelectionClear }: { selection: Selection; onSelectionClear?: () => void }) {
   const document = useDiagramStore(state => state.document);
+  const recoveredTrash = useDiagramStore(state => state.trashedDocuments);
   const update = useDiagramStore(state => state.update);
-  const refreshSavedDocuments = useDiagramStore(state => state.refreshSavedDocuments);
-  const registerRestoredSavedDocument = useDiagramStore(state => state.registerRestoredSavedDocument);
   const [removal, setRemoval] = useState<{ componentId: string; name: string; relationshipCount: number } | null>(null);
   const [checking, setChecking] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [removingRelationship, setRemovingRelationship] = useState(false);
   const [notice, setNotice] = useState('');
   const [trash, setTrash] = useState<DiagramSummary[]>([]);
+  useEffect(() => { setTrash(recoveredTrash); }, [recoveredTrash]);
   if (!document) return null;
   const component = selection?.kind === 'component' ? document.components.find(item => item.id === selection.id) : undefined;
   const relationship = selection?.kind === 'relationship' ? document.relationships.find(item => item.id === selection.id) : undefined;
   const requestComponentRemoval = async () => {
     if (!component) return;
     setChecking(true); setRemoval(null); setNotice('Checking component relationships…');
-    try { const count = await diagramClient.dependencyCount(document.id, component.id); setRemoval({ componentId: component.id, name: component.name, relationshipCount: count.relationshipCount }); setNotice(''); }
-    catch (error) { setNotice(error instanceof Error ? `Could not check relationships: ${error.message}` : 'Could not check relationships. Try again.'); }
+    try { const count = await diagramClient.dependencyCount(document.id, component.id); if (count.diagramBlockers?.length || count.blockers?.length || count.groupIds?.length) throw new DiagramApiError('Repair dependent diagrams, decisions or groups before removal.', 409, count); setRemoval({ componentId: component.id, name: component.name, relationshipCount: count.relationshipCount }); setNotice(''); }
+    catch (error) { setNotice(error instanceof DiagramApiError && error.status === 409 ? formatComponentRemovalError(error, component.name) : error instanceof Error ? `Could not check relationships: ${error.message}` : 'Could not check relationships. Try again.'); }
     finally { setChecking(false); }
   };
   const removeComponent = async () => {
@@ -53,8 +53,8 @@ export function RecoveryControls({ selection, onSelectionClear }: { selection: S
     catch (error) { setNotice(error instanceof DiagramApiError && error.status === 409 ? `Cannot remove relationship: ${error.message}` : error instanceof Error ? `Could not remove relationship: ${error.message}` : 'Could not remove relationship.'); }
     finally { setRemovingRelationship(false); }
   };
-  const moveToTrash = async () => { await diagramClient.trash(document.id); await refreshSavedDocuments(); setNotice('Diagram moved to trash.'); setTrash(await diagramClient.listTrash()); };
-  const restore = async (id: string) => { const restored = await diagramClient.restore(id); registerRestoredSavedDocument(restored); setTrash(await diagramClient.listTrash()); setNotice(`${restored.name} restored.`); };
+  const moveToTrash = () => window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind: 'trash', id: document.id } }));
+  const restore = (id: string) => window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind: 'restore', id } }));
   const endpointName = (id: string) => document.components.find(item => item.id === id)?.name ?? 'Unknown component';
   return <section className="inspector-recovery" aria-label="Selected item actions">
     {component && <><p className="inspector-meta">Component</p><h2>{component.name}</h2><p className="inspector-copy">Select and drag this building block on the canvas to refine its position.</p><button className="danger-action" type="button" onClick={() => void requestComponentRemoval()} disabled={checking}>{checking ? 'Checking…' : 'Delete component'}</button></>}

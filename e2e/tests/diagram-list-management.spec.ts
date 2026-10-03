@@ -1,20 +1,34 @@
 import { type Page, type Route } from '@playwright/test';
 import { expect, test } from '@playwright/test';
-import type { DiagramDocument, DiagramSummary } from '../../shared/src/index';
+import type { DiagramDocument, DiagramSummary, TrashImpact, RestoreImpact } from '../../shared/src/index';
 import { activeDiagramListFixtures, recoverableDiagramFixture } from '../../frontend/tests/diagram-list-fixtures';
 
-type JsonValue = DiagramDocument | DiagramSummary | DiagramSummary[] | { message: string };
+type JsonValue = DiagramDocument | DiagramSummary | DiagramSummary[] | TrashImpact | RestoreImpact | { message: string };
 
 const fulfillJson = (route: Route, body: JsonValue, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+const activeRows = new WeakMap<Page, DiagramSummary[]>();
+const trashRows = new WeakMap<Page, DiagramSummary[]>();
 
 /** Mock the active summary endpoint without intercepting create or document-load requests. */
 export async function mockActiveDiagramSummaries(page: Page, summaries: DiagramSummary[]) {
-  await page.route('**/api/diagrams', route => route.request().method() === 'GET' ? fulfillJson(route, summaries) : route.fallback());
+  activeRows.set(page, [...summaries]); trashRows.set(page, []);
+  await page.route('**/api/diagrams', route => route.request().method() === 'GET' ? fulfillJson(route, activeRows.get(page) ?? []) : route.fallback());
+  await page.route('**/api/diagrams/trash', route => fulfillJson(route, trashRows.get(page) ?? []));
+  await page.route('**/api/diagrams/*/trash-impact', route => {
+    const id = route.request().url().split('/').at(-2)!;
+    const document = summaries.find(row => row.id === id);
+    return document ? fulfillJson(route, { diagramId: id, affectedDiagramIds: [id], affectedDiagrams: [document] }) : route.fallback();
+  });
 }
 
 /** Mock the existing recoverable-trash list and restore endpoints. */
 export async function mockTrashAndRestore(page: Page, trash: DiagramSummary[], restored: Record<string, DiagramDocument> = {}) {
   await page.route('**/api/diagrams/trash', route => route.request().method() === 'GET' ? fulfillJson(route, trash) : route.fallback());
+  await page.route('**/api/diagrams/*/restore-impact', route => {
+    const id = route.request().url().split('/').at(-2)!;
+    const document = trash.find(row => row.id === id);
+    return document ? fulfillJson(route, { requestedDiagramId: id, restoreRootDiagramId: id, trashBatchId: null, affectedDiagramIds: [id], affectedDiagrams: [document], requestedDiagramIncluded: true }) : route.fallback();
+  });
   await page.route('**/api/diagrams/*/restore', route => {
     if (route.request().method() !== 'POST') return route.fallback();
     const id = route.request().url().split('/').at(-2) ?? '';
@@ -24,7 +38,13 @@ export async function mockTrashAndRestore(page: Page, trash: DiagramSummary[], r
 
 /** Mock a successful recoverable deletion for one stable diagram UUID. */
 export async function mockSuccessfulDiagramDeletion(page: Page, diagramId: string) {
-  await page.route(`**/api/diagrams/${diagramId}`, route => route.request().method() === 'DELETE' ? route.fulfill({ status: 204 }) : route.fallback());
+  await page.route(`**/api/diagrams/${diagramId}`, route => {
+    if (route.request().method() !== 'DELETE') return route.fallback();
+    const rows = activeRows.get(page) ?? [], deleted = rows.find(row => row.id === diagramId);
+    activeRows.set(page, rows.filter(row => row.id !== diagramId));
+    if (deleted) trashRows.set(page, [...trashRows.get(page) ?? [], { ...deleted, status: 'trashed' }]);
+    return route.fulfill({ status: 204 });
+  });
 }
 
 /** Mock a deletion failure while leaving the API response actionable. */
@@ -164,6 +184,7 @@ test.describe('delete diagrams safely', () => {
 
   test('requires resolving unsaved current work before deletion can proceed', async ({ page }) => {
     const current = { ...recoverableDiagramFixture, id: '00000000-0000-4000-8000-000000000420', name: 'Current draft', status: 'active' as const, trashedAt: null };
+    await page.route(`**/api/diagrams/${current.id}/trash-impact`, route => fulfillJson(route, { diagramId: current.id, affectedDiagramIds: [current.id], affectedDiagrams: [current] }));
     await page.route('**/api/diagrams', route => {
       if (route.request().method() === 'GET') return fulfillJson(route, []);
       if (route.request().method() === 'POST') return fulfillJson(route, current);

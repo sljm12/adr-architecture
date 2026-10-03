@@ -62,7 +62,7 @@ function artifactErrorFromZod(error: z.ZodError, input: unknown, kind: 'diagram'
     ? (root[collection] as Array<Record<string, unknown>>)[index]
     : undefined;
   const artifactKind = collection === 'components' ? 'component' : collection === 'relationships' ? 'relationship' : collection === 'groups' ? 'group' : 'diagram';
-  return new HtmlExportError(artifactKind, typeof record?.id === 'string' ? record.id : undefined, field, issue.message);
+  return new HtmlExportError(artifactKind, typeof record?.id === 'string' ? record.id : undefined, field, issue.message, issue.path.at(-1) === 'containerType' ? 'Choose Application or Datastore in the editor, then retry export.' : undefined);
 }
 
 function invariantError(message: string, diagram: DiagramDocument): HtmlExportError {
@@ -88,7 +88,7 @@ function assertUniqueIds(kind: HtmlExportError['artifactKind'], items: Array<{ i
   }
 }
 
-function validateDiagram(input: DiagramDocument): DiagramDocument {
+export function validateExportDiagram(input: DiagramDocument): DiagramDocument {
   let diagram: DiagramDocument;
   try { diagram = diagramDocumentSchema.parse(input) as DiagramDocument; }
   catch (error) { if (error instanceof z.ZodError) throw artifactErrorFromZod(error, input, 'diagram'); throw error; }
@@ -101,13 +101,19 @@ function validateDiagram(input: DiagramDocument): DiagramDocument {
 
   validateText(diagram.name, 'diagram', diagram.id, 'name');
   for (const component of diagram.components) {
-    if (component.type !== null && !isC4ArtifactType(component.type)) {
+    if (component.role !== 'container' && component.type !== null && !isC4ArtifactType(component.type)) {
       throw new HtmlExportError('component', component.id, 'type', `Unsupported component type "${component.type}". Use Person or Software System, or clear the type.`);
     }
     validateText(component.name, 'component', component.id, 'name');
     validateText(component.description, 'component', component.id, 'description');
+    validateText(component.technology ?? null, 'component', component.id, 'technology');
   }
-  for (const relationship of diagram.relationships) validateText(relationship.label, 'relationship', relationship.id, 'label');
+  if (diagram.scope) {
+    validateText(diagram.scope.parentDiagramName, 'diagram', diagram.id, 'scope.parentDiagramName');
+    validateText(diagram.scope.softwareSystemName, 'diagram', diagram.id, 'scope.softwareSystemName');
+    validateText(diagram.scope.softwareSystemDescription, 'diagram', diagram.id, 'scope.softwareSystemDescription');
+  }
+  for (const relationship of diagram.relationships) { validateText(relationship.label, 'relationship', relationship.id, 'label'); validateText(relationship.protocol ?? null, 'relationship', relationship.id, 'protocol'); }
   for (const group of diagram.groups ?? []) validateText(group.name, 'group', group.id, 'name');
   return structuredClone(diagram);
 }
@@ -158,7 +164,7 @@ function validateAdrs(values: unknown, diagram: DiagramDocument): ArchitectureDe
 export function validateHtmlExportSnapshot(input: HtmlExportInput): HtmlExportSnapshot {
   const capturedAt = input.capturedAt ?? new Date().toISOString();
   if (!Number.isFinite(Date.parse(capturedAt))) throw new HtmlExportError('diagram', input.diagram?.id, 'capturedAt', 'Must be a valid timestamp.');
-  const diagram = validateDiagram(input.diagram);
+  const diagram = validateExportDiagram(input.diagram);
   const savedAdrs = validateAdrs(input.adrs, diagram);
   const byId = new Map(savedAdrs.map((adr, index) => [adr.id, index]));
 

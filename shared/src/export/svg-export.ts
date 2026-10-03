@@ -1,6 +1,9 @@
 import type { Component, DiagramDocument } from '../domain/types';
 import { escapeMarkup } from './escaping';
 import { formatSvgNumber, layoutDiagramForSvg } from './svg-layout';
+import { validateExportDiagram } from './html-snapshot';
+import { containerLabelLines, wrapExportText } from './container-labels';
+import { getComponentTypeLabel } from '../domain/c4';
 
 export type SvgExportOptions = { standalone?: boolean };
 
@@ -30,15 +33,20 @@ function wrappedLines(value: string, width: number): string[] {
   return lines;
 }
 
-function componentMarkup(component: Component, rect: { x: number; y: number; width: number; height: number }): string {
+function componentMarkup(component: Component, rect: { x: number; y: number; width: number; height: number }, child = false): string {
   const type = component.type ?? 'unclassified';
-  const typeLabel = displayType(component.type);
+  const typeLabel = child ? getComponentTypeLabel(component) : displayType(component.type);
   const cx = rect.x + rect.width / 2;
   const cy = rect.y + rect.height / 2;
-  const isPerson = component.type === 'person';
+  const isPerson = component.type === 'person' && !child;
   const shape = isPerson
     ? `<ellipse class="component-shape component-person-shape" cx="${formatSvgNumber(cx)}" cy="${formatSvgNumber(cy)}" rx="${formatSvgNumber(rect.width / 2)}" ry="${formatSvgNumber(rect.height / 2)}"/>`
     : `<rect class="component-shape component-${escapeMarkup(type)}-shape" x="${formatSvgNumber(rect.x)}" y="${formatSvgNumber(rect.y)}" width="${formatSvgNumber(rect.width)}" height="${formatSvgNumber(rect.height)}" rx="8"/>`;
+  if (child) {
+    const lines = containerLabelLines(component, rect.width);
+    const text = lines.map((line, index) => `<tspan x="${formatSvgNumber(cx)}" dy="${index ? 18 : 0}">${escapeMarkup(line)}</tspan>`).join('');
+    return `<a href="#component-${component.id}" class="diagram-component-link" tabindex="0" aria-label="${escapeMarkup(`${component.name}, ${typeLabel}`)}"><g id="visual-component-${component.id}" class="diagram-component component-type-${escapeMarkup(type)}" data-artifact-id="${component.id}"${component.sourceComponentId ? ` data-source-component-id="${component.sourceComponentId}"` : ''}><title>${escapeMarkup(`${component.name} — ${typeLabel}`)}</title>${shape}<text class="component-name" x="${formatSvgNumber(cx)}" y="${formatSvgNumber(rect.y + 24)}" text-anchor="middle">${text}</text></g></a>`;
+  }
   const lines = wrappedLines(component.name, rect.width);
   const nameY = cy - ((lines.length - 1) * 8) + 8;
   const typeY = nameY - 18;
@@ -49,6 +57,7 @@ function componentMarkup(component: Component, rect: { x: number; y: number; wid
 const relationshipName = (diagram: DiagramDocument, id: string) => diagram.components.find(component => component.id === id)?.name ?? 'Unknown component';
 
 export function renderDiagramSvg(diagram: DiagramDocument, options: SvgExportOptions = {}): string {
+  diagram = validateExportDiagram(diagram);
   const layout = layoutDiagramForSvg(diagram);
   const viewBox = layout.viewBox;
   const groups = (diagram.groups ?? []).map(group => {
@@ -57,8 +66,9 @@ export function renderDiagramSvg(diagram: DiagramDocument, options: SvgExportOpt
   }).join('');
   const relationships = layout.relationshipRoutes.map(route => {
     const relationship = route.relationship;
-    const label = relationship.label
-      ? `<text class="relationship-label" x="${formatSvgNumber(route.label.x)}" y="${formatSvgNumber(route.label.y)}" text-anchor="middle">${escapeMarkup(relationship.label)}</text>`
+    const labelText = [relationship.label, ...(diagram.kind === 'container' ? [relationship.protocol] : [])].filter(Boolean).join('\n');
+    const label = labelText
+      ? `<text class="relationship-label" x="${formatSvgNumber(route.label.x)}" y="${formatSvgNumber(route.label.y)}" text-anchor="middle">${wrapExportText(labelText, 260).map((line, index) => `<tspan x="${formatSvgNumber(route.label.x)}" dy="${index ? 18 : 0}">${escapeMarkup(line)}</tspan>`).join('')}</text>`
       : '';
     const arrow = route.arrow
       ? `<polygon class="relationship-arrow" points="${route.arrow.map(point => `${formatSvgNumber(point.x)},${formatSvgNumber(point.y)}`).join(' ')}"/>`
@@ -66,10 +76,13 @@ export function renderDiagramSvg(diagram: DiagramDocument, options: SvgExportOpt
     const accessibleLabel = `Relationship from ${relationshipName(diagram, relationship.sourceComponentId)} to ${relationshipName(diagram, relationship.targetComponentId)}${relationship.label ? `: ${relationship.label}` : ''}`;
     return `<a href="#relationship-${relationship.id}" class="diagram-relationship-link" tabindex="0" aria-label="${escapeMarkup(accessibleLabel)}"><g id="visual-relationship-${relationship.id}" class="diagram-relationship" data-artifact-id="${relationship.id}"><path class="relationship-path" d="${route.path}"/>${arrow}${label}</g></a>`;
   }).join('');
-  const components = diagram.components.map(component => componentMarkup(component, layout.componentRects.get(component.id)!)).join('');
+  const components = diagram.components.map(component => componentMarkup(component, layout.componentRects.get(component.id)!, diagram.kind === 'container')).join('');
+  const rect = layout.boundaryRect;
+  const boundary = rect && diagram.scope ? `<g class="system-boundary" role="group" aria-label="${escapeMarkup(`Software System boundary for ${diagram.scope.softwareSystemName}`)}" data-parent-diagram-id="${diagram.scope.parentDiagramId}" data-owner-component-id="${diagram.scope.softwareSystemId}"><rect class="system-group-shape" x="${formatSvgNumber(rect.x)}" y="${formatSvgNumber(rect.y)}" width="${formatSvgNumber(rect.width)}" height="${formatSvgNumber(rect.height)}" rx="8"/><text class="system-group-label" x="${formatSvgNumber(rect.x + 14)}" y="${formatSvgNumber(rect.y + 28)}">${wrapExportText(diagram.scope.softwareSystemName, rect.width).map((line, index) => `<tspan x="${formatSvgNumber(rect.x + 14)}" dy="${index ? 18 : 0}">${escapeMarkup(line)}</tspan>`).join('')}</text></g>` : '';
   const standaloneStyle = options.standalone ? `<style>
     .component-shape{fill:#fff;stroke:#707780;stroke-width:2}.component-person-shape{stroke-dasharray:6 4}.component-type-software-system .component-shape{stroke-dasharray:none}.component-type-person .component-shape{stroke-dasharray:6 4}.component-type-unclassified .component-shape{stroke-dasharray:2 3}.component-type-label,.system-group-label{font:600 12px system-ui,sans-serif;fill:#5f6368}.component-name{font:600 15px system-ui,sans-serif;fill:#1d1d1f}.system-group-shape{fill:#f5f5f7;fill-opacity:.5;stroke:#7a7a7a;stroke-width:2;stroke-dasharray:8 6}.relationship-path{fill:none;stroke:#5f6368;stroke-width:2}.relationship-arrow{fill:#5f6368}.relationship-label{font:600 13px system-ui,sans-serif;fill:#1d1d1f;paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
   </style>` : '';
-  const title = `<title id="architecture-diagram-title">Architecture diagram: ${escapeMarkup(diagram.name)}</title>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${formatSvgNumber(viewBox.x)} ${formatSvgNumber(viewBox.y)} ${formatSvgNumber(viewBox.width)} ${formatSvgNumber(viewBox.height)}" role="img" aria-labelledby="architecture-diagram-title">${title}${standaloneStyle}<g class="diagram-groups">${groups}</g><g class="diagram-relationships">${relationships}</g><g class="diagram-components">${components}</g></svg>`;
+  const scopeText = diagram.scope ? `Container diagram for ${diagram.scope.softwareSystemName}; parent ${diagram.scope.parentDiagramName}.` : 'Single-diagram snapshot. Child container contents are not bundled.';
+  const title = `<title id="architecture-diagram-title">Architecture diagram: ${escapeMarkup(diagram.name)}</title><desc id="architecture-diagram-scope">${escapeMarkup(scopeText)}</desc>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${formatSvgNumber(viewBox.x)} ${formatSvgNumber(viewBox.y)} ${formatSvgNumber(viewBox.width)} ${formatSvgNumber(viewBox.height)}" role="img" aria-labelledby="architecture-diagram-title" aria-describedby="architecture-diagram-scope">${title}${standaloneStyle}<g class="diagram-groups">${boundary}${groups}</g><g class="diagram-relationships">${relationships}</g><g class="diagram-components">${components}</g></svg>`;
 }

@@ -6,6 +6,11 @@ import { ApiValidationError } from '../api/errors';
 import { ContainerContextService } from './container-context';
 import { GraphTransaction } from '../persistence/graph-transaction';
 import { ApiConflictError } from '../api/errors';
+import type { DiagramSummary, RestoreConfirmation, RestoreImpact, TrashImpact } from '../../../shared/src/index';
+
+const summary = (d: DiagramDocument): DiagramSummary => ({ id: d.id, name: d.name, status: d.status, kind: d.kind ?? 'general', scope: d.scope ?? null, createdAt: d.createdAt, updatedAt: d.updatedAt });
+const sameIds = (a: string[], b: string[]) => a.length === b.length && new Set(a).size === a.length && [...a].sort().every((id, index) => id === [...b].sort()[index]);
+const occurrenceBlocker = (child: DiagramDocument, occurrence: DiagramDocument['components'][number]): DiagramDependencyBlocker => ({ diagramId: child.id, name: child.name, status: child.status, componentId: occurrence.id, sourceComponentId: occurrence.sourceComponentId ?? undefined, reason: 'This source is used by an external participant occurrence.', nextAction: `${child.status === 'trashed' ? 'Restore this child (and confirm parent recovery first if needed), then open it' : 'Open this child'} and explicitly remove occurrence ${occurrence.id} after resolving its relationship and ADR links. Keep the source as Person or Software System until all occurrences are removed.` });
 
 export class DiagramNotFoundError extends Error {}
 export class DiagramConflictError extends Error {}
@@ -143,7 +148,7 @@ export class DiagramService {
       if (!ownerValid) blockers.push({ diagramId:child.id, name:child.name, status:child.status, componentId:child.scope.softwareSystemId, reason:'This Software System owns a container diagram.', nextAction:'Keep the owning Software System as an ordinary Software System or trash the parent diagram.' });
       for (const occurrence of child.components.filter(component => component.role === 'external')) {
         const source = incoming.components.find(component => component.id === occurrence.sourceComponentId);
-        if (!source || (source.role ?? 'element') !== 'element' || !isC4ArtifactType(source.type)) blockers.push({ diagramId:child.id, name:child.name, status:child.status, sourceComponentId:occurrence.sourceComponentId ?? undefined, reason:'This source is used by an external participant occurrence.', nextAction:'Keep the source as a Person or Software System until its occurrences are removed.' });
+        if (!source || (source.role ?? 'element') !== 'element' || !isC4ArtifactType(source.type)) blockers.push(occurrenceBlocker(child, occurrence));
       }
     }
     return blockers.filter((blocker, index, all) => all.findIndex(candidate => candidate.diagramId === blocker.diagramId && candidate.componentId === blocker.componentId && candidate.sourceComponentId === blocker.sourceComponentId) === index);
@@ -177,6 +182,20 @@ export class DiagramService {
     return isPromise(result) ? result.then(resolve) : resolve(result);
   }
 
+  async componentDependencies(diagramId: string, componentId: string) {
+    const initial = await this.repository.get(diagramId);
+    if (!initial) throw new DiagramNotFoundError('Diagram not found');
+    const parentId = initial.scope?.parentDiagramId ?? diagramId;
+    return this.graph.run(parentId, (await this.repository.findChildren(parentId)).map(c => c.id), async ({ diagrams, adrs }) => {
+      const current = await diagrams.get(diagramId);
+      if (!current || current.status !== 'active' || !current.components.some(c => c.id === componentId)) throw new DiagramNotFoundError('Diagram or component not found');
+      if (current.kind === 'container') await this.containerContext.hydrateAndValidateDocument(current, diagrams);
+      const relationships = current.relationships.filter(r => r.sourceComponentId === componentId || r.targetComponentId === componentId);
+      const blockers = adrs ? (await Promise.all([adrs.componentBlockers(componentId), ...relationships.map(r => adrs.relationshipBlockers(r.id))])).flat() : [];
+      return { relationshipCount: relationships.length, groupIds: current.groups.filter(g => g.memberComponentIds.includes(componentId)).map(g => g.id), blockers: blockers.filter((b, i, all) => all.findIndex(other => other.adrId === b.adrId) === i), diagramBlockers: this.findHierarchyBlockers({ ...current, components: current.components.filter(c => c.id !== componentId) }, await diagrams.findChildren(diagramId)) };
+    });
+  }
+
   async removeComponent(diagramId: string, componentId: string): Promise<Extract<RemoveComponentResult, { document: DiagramDocument }>> {
     const initial = await this.repository.get(diagramId);
     if (!initial || initial.status !== 'active' || !initial.components.some(component => component.id === componentId)) throw new DiagramNotFoundError('Diagram or component not found');
@@ -186,12 +205,13 @@ export class DiagramService {
     return this.graph.run(parentDiagramId, children.map(child => child.id), async ({ diagrams, adrs }) => {
       const current = await diagrams.get(diagramId);
       if (!current || current.status !== 'active' || !current.components.some(component => component.id === componentId)) throw new DiagramNotFoundError('Diagram or component not found');
+      if (current.kind === 'container') await this.containerContext.hydrateAndValidateDocument(current, diagrams);
       if (current.kind === 'general') {
         const blockers: DiagramDependencyBlocker[] = [];
         for (const child of await diagrams.findChildren(diagramId)) {
           if (child.kind !== 'container' || !child.scope) continue;
           if (child.scope.softwareSystemId === componentId) blockers.push({ diagramId:child.id, name:child.name, status:child.status, componentId, reason:'This Software System owns a container diagram.', nextAction:'Keep the owning Software System or trash the parent diagram.' });
-          if (child.components.some(component => component.role === 'external' && component.sourceComponentId === componentId)) blockers.push({ diagramId:child.id, name:child.name, status:child.status, sourceComponentId:componentId, reason:'This source is used by an external participant occurrence.', nextAction:'Remove its external occurrences after resolving their local dependencies.' });
+          for (const occurrence of child.components.filter(component => component.role === 'external' && component.sourceComponentId === componentId)) blockers.push(occurrenceBlocker(child, occurrence));
         }
         if (blockers.length) throw new ApiConflictError('Component cannot be removed while container diagrams depend on it.', 'DIAGRAM_DEPENDENCY', undefined, undefined, blockers);
       }
@@ -215,6 +235,7 @@ export class DiagramService {
     return this.graph.run(parentDiagramId, children.map(child => child.id), async ({ diagrams, adrs }) => {
       const current = await diagrams.get(diagramId);
       if (!current || current.status !== 'active' || !current.relationships.some(relationship => relationship.id === relationshipId)) throw new DiagramNotFoundError('Diagram or relationship not found');
+      if (current.kind === 'container') await this.containerContext.hydrateAndValidateDocument(current, diagrams);
       const blockers = adrs ? await adrs.relationshipBlockers(relationshipId) : [];
       if (blockers.length) throw new RelationshipDependencyConflictError(relationshipId, blockers);
       const removal = await diagrams.removeRelationship(diagramId, relationshipId);
@@ -224,24 +245,77 @@ export class DiagramService {
     });
   }
 
-  trash(id: string): MaybePromise<DiagramDocument> {
-    const result = this.repository.trash(id);
-    const resolve = (document: DiagramDocument | undefined) => {
-      if (!document) throw new DiagramNotFoundError('Active diagram not found');
-      return document;
-    };
-    return isPromise(result) ? result.then(resolve) : resolve(result);
+  private async recoveryTransaction<T>(id: string, action: (repository: DiagramRepositoryLike) => Promise<T>): Promise<T> {
+    const initial = await this.repository.get(id);
+    if (!initial) throw new DiagramNotFoundError('Diagram not found');
+    const parentId = initial.kind === 'container' ? initial.scope?.parentDiagramId : id;
+    if (!parentId) throw new ApiConflictError('Repair the missing container parent reference.', 'DIAGRAM_REFERENCE_BROKEN');
+    const children = await this.repository.findChildren(parentId);
+    return this.graph.run(parentId, children.map(child => child.id), ({ diagrams }) => action(diagrams));
   }
 
-  restore(id: string): MaybePromise<DiagramDocument> {
-    const result = this.repository.restore(id);
-    const resolve = (document: DiagramDocument | undefined) => {
-      if (document) return document;
-      const existing = this.repository.get(id);
-      if (isPromise(existing)) return existing.then(found => { if (found) throw new DiagramConflictError('Diagram is not trashed'); throw new DiagramNotFoundError('Diagram not found'); });
-      if (existing) throw new DiagramConflictError('Diagram is not trashed');
-      throw new DiagramNotFoundError('Diagram not found');
-    };
-    return isPromise(result) ? result.then(resolve) : resolve(result);
+  private async trashSnapshot(id: string, repository: DiagramRepositoryLike): Promise<TrashImpact> {
+    const root = await repository.get(id);
+    if (!root || root.status !== 'active') throw new DiagramNotFoundError('Active diagram not found');
+    const children = root.kind === 'general' ? (await repository.findChildren(id)).filter(child => child.status === 'active') : [];
+    const affected = [root, ...children].sort((a, b) => a.id.localeCompare(b.id));
+    return { diagramId: id, affectedDiagramIds: affected.map(d => d.id), affectedDiagrams: affected.map(summary) };
+  }
+
+  trashImpact(id: string): Promise<TrashImpact> { return this.recoveryTransaction(id, repository => this.trashSnapshot(id, repository)); }
+
+  async trash(id: string, confirmedDiagramIds?: string[]): Promise<DiagramDocument> {
+    return this.recoveryTransaction(id, async repository => {
+      const impact = await this.trashSnapshot(id, repository);
+      if ((confirmedDiagramIds && !sameIds(confirmedDiagramIds, impact.affectedDiagramIds)) || (!confirmedDiagramIds && impact.affectedDiagramIds.length > 1)) throw new ApiConflictError('The affected diagrams changed or require confirmation. Preview and confirm the full named set again.', 'TRASH_IMPACT_CHANGED');
+      const provenance = { trashBatchId: crypto.randomUUID(), trashRootDiagramId: id };
+      for (const affectedId of impact.affectedDiagramIds) {
+        if (!await repository.trash(affectedId, provenance)) throw new DiagramConflictError('Diagram activity changed while moving the batch to trash.');
+      }
+      return (await repository.get(id))!;
+    });
+  }
+
+  private async restoreSnapshot(id: string, repository: DiagramRepositoryLike): Promise<RestoreImpact> {
+    const requested = await repository.get(id);
+    if (!requested) throw new DiagramNotFoundError('Diagram not found');
+    if (requested.status !== 'trashed') throw new DiagramConflictError('Diagram is not trashed');
+    let root = requested;
+    if (requested.kind === 'container') {
+      const parent = requested.scope && await repository.get(requested.scope.parentDiagramId);
+      if (!parent) throw new ApiConflictError('Repair the missing parent reference before restoring.', 'DIAGRAM_REFERENCE_BROKEN');
+      if (parent.status === 'trashed') root = parent;
+    }
+    const provenance = await repository.getTrashProvenance(root.id);
+    const affected = [root];
+    if (root.kind === 'general' && provenance.trashBatchId && provenance.trashRootDiagramId === root.id) {
+      for (const child of await repository.findChildren(root.id)) {
+        const childProvenance = await repository.getTrashProvenance(child.id);
+        if (child.status === 'trashed' && childProvenance.trashRootDiagramId === root.id && childProvenance.trashBatchId === provenance.trashBatchId) affected.push(child);
+      }
+    }
+    affected.sort((a, b) => a.id.localeCompare(b.id));
+    return { requestedDiagramId: id, restoreRootDiagramId: root.id, trashBatchId: provenance.trashBatchId, affectedDiagramIds: affected.map(d => d.id), affectedDiagrams: affected.map(summary), requestedDiagramIncluded: affected.some(d => d.id === id) };
+  }
+
+  restoreImpact(id: string): Promise<RestoreImpact> { return this.recoveryTransaction(id, repository => this.restoreSnapshot(id, repository)); }
+
+  async restore(id: string, confirmation?: RestoreConfirmation): Promise<DiagramDocument> {
+    return this.recoveryTransaction(id, async repository => {
+      const impact = await this.restoreSnapshot(id, repository);
+      if (impact.restoreRootDiagramId !== id) throw new ApiConflictError('Restore the parent and its confirmed trash batch before restoring this child.', 'PARENT_INACTIVE', undefined, undefined, undefined, impact.restoreRootDiagramId);
+      if (!confirmation && impact.affectedDiagramIds.length > 1) throw new ApiConflictError('Preview and confirm every diagram in this restoration batch.', 'RESTORE_CONFIRMATION_REQUIRED', undefined, undefined, undefined, id);
+      if (confirmation && (!sameIds(confirmation.confirmedDiagramIds, impact.affectedDiagramIds) || confirmation.confirmedTrashBatchId !== impact.trashBatchId)) throw new ApiConflictError('The restoration set or trash batch changed. Preview and confirm again.', 'RESTORE_IMPACT_CHANGED', undefined, undefined, undefined, id);
+      // Stage the entire post-restore graph on the transaction. Any invalid reference rolls it all back.
+      const ordered = [id, ...impact.affectedDiagramIds.filter(affectedId => affectedId !== id)];
+      for (const affectedId of ordered) if (!await repository.restore(affectedId)) throw new DiagramConflictError('Diagram activity changed during restoration.');
+      for (const affectedId of ordered) {
+        const document = (await repository.get(affectedId))!;
+        if (document.kind === 'container') await this.containerContext.hydrateAndValidateDocument(document, repository);
+        else assertApiInvariants(document);
+      }
+      const restored = (await repository.get(id))!;
+      return restored.kind === 'container' ? this.containerContext.hydrateAndValidateDocument(restored, repository) : restored;
+    });
   }
 }
