@@ -4,9 +4,11 @@ import type { DiagramRepositoryLike } from '../persistence/diagram-repository';
 import { sendError } from './errors';
 
 export function registerDiagramRoutes(app: FastifyInstance, repository: DiagramRepositoryLike, service: DiagramService): void {
-  const summary = (document: Awaited<ReturnType<DiagramRepositoryLike['list']>>[number]) => ({ id: document.id, name: document.name, status: document.status, createdAt: document.createdAt, updatedAt: document.updatedAt, kind:document.kind ?? 'general', scope:document.scope ?? null });
   const completeDocument = (document: Awaited<ReturnType<DiagramRepositoryLike['get']>>) => document ? { ...document, groups: document.groups ?? [] } : document;
-  app.get('/diagrams', async () => (await repository.list()).map(summary));
+  app.get('/diagrams', async (_request, reply) => {
+    try { return await service.listSummaries(); }
+    catch (error) { return sendError(reply, error); }
+  });
 
   app.post('/diagrams', async (request, reply) => {
     try { return reply.code(201).send(await service.create((request.body as { name?: unknown } | undefined)?.name as string)); }

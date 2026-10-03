@@ -4,7 +4,10 @@ import { ComponentDependencyConflictError, DiagramConflictError, DiagramNotFound
 import { sendError } from './errors';
 export function registerRecoveryRoutes(app: FastifyInstance, repository: DiagramRepositoryLike, service: DiagramService) {
   const missing = (error: unknown, reply: any) => error instanceof DiagramNotFoundError ? reply.code(404).send({ message: error.message }) : undefined;
-  app.get('/diagrams/trash', async () => (await repository.listTrash()).map(document => ({ id: document.id, name: document.name, status: document.status, createdAt: document.createdAt, updatedAt: document.updatedAt, kind:document.kind ?? 'general', scope:document.scope ?? null })));
+  app.get('/diagrams/trash', async (_request, reply) => {
+    try { return await service.listSummaries('trashed'); }
+    catch (error) { return sendError(reply, error); }
+  });
   app.get<{ Params: { diagramId: string; componentId: string } }>('/diagrams/:diagramId/components/:componentId/dependencies', async (request, reply) => { try { return { relationshipCount: await service.dependencyCount(request.params.diagramId, request.params.componentId) }; } catch (error) { return missing(error, reply); } });
   app.delete<{ Params: { diagramId: string; componentId: string } }>('/diagrams/:diagramId/components/:componentId', async (request, reply) => { try { return reply.code(200).send(await service.removeComponent(request.params.diagramId, request.params.componentId)); } catch (error) { if (error instanceof ComponentDependencyConflictError) { const dependency = { message: error.message, componentId: error.componentId, relationshipCount: error.relationshipCount, groupIds: error.groupIds }; return reply.code(409).send(error.blockers.length ? { ...dependency, code:'DIAGRAM_DEPENDENCY', blockers: error.blockers } : dependency); } const notFound = missing(error, reply); return notFound ?? sendError(reply, error); } });
   app.delete<{ Params: { diagramId: string } }>('/diagrams/:diagramId', async (request, reply) => { try { await service.trash(request.params.diagramId); return reply.code(204).send(); } catch (error) { return missing(error, reply); } });

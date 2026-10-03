@@ -31,7 +31,7 @@ test('confirms before discarding unsaved edits for a new diagram', async ({ page
   await inspector.getByRole('button', { name: 'Add component' }).click();
 
   await page.getByRole('button', { name: 'New diagram' }).click();
-  await expect(page.getByRole('alertdialog', { name: 'Discard unsaved changes?' })).toBeVisible();
+  await expect(page.getByRole('alertdialog', { name: 'Save changes before creating a new diagram?' })).toBeVisible();
   await page.getByRole('button', { name: 'Discard and create' }).click();
   await expect(page.getByLabel('Diagram name')).toBeVisible();
 });

@@ -26,4 +26,23 @@ for(const postgres of [false,true]) describe.skipIf(postgres&&!enabled)(`contain
     const before=(await repository.get(populatedChildFixture().id))!;const parent=await repository.get(generalParentFixture().id);const service=new DiagramService(repository);
     for(const mutate of [(d:any)=>d.components[0].containerType=null,(d:any)=>d.components[0].containerType='queue',(d:any)=>d.components[1].sourceComponentId=d.components[0].id,(d:any)=>d.components[1].position={x:100,y:100},(d:any)=>d.relationships[0].label=' ']){const input=structuredClone(before);mutate(input);await expect(service.save(input.id,input)).rejects.toThrow();expect(await repository.get(input.id)).toEqual(before);expect(await repository.get(parent!.id)).toEqual(parent);}
   });
+  it('batch lists active/trash children with current sources while preserving independent name and local timestamps', async () => {
+    const service = new DiagramService(repository);
+    const original = (await repository.get(populatedChildFixture().id))!;
+    const parent = (await repository.get(generalParentFixture().id))!;
+    const sourceId = original.components[1].sourceComponentId;
+    await service.save(parent.id, { ...parent, components: parent.components.map(c => c.id === sourceId ? { ...c, description: 'Previous source details' } : c) });
+    await service.save(original.id, { ...original, name: 'Independent runtime' });
+    const childBefore = (await repository.get(original.id))!;
+    const currentParent = (await repository.get(parent.id))!;
+    await service.save(parent.id, { ...currentParent, name: 'Current parent', components: currentParent.components.map(c => c.id === sourceId ? { ...c, name: 'Current source', description: null, type: 'person' } : c.id === original.scope!.softwareSystemId ? { ...c, name: 'Current owner' } : c) });
+    const loaded = await service.load(original.id);
+    expect(loaded).toMatchObject({ id: original.id, name: 'Independent runtime', updatedAt: childBefore.updatedAt, boundary: childBefore.boundary, scope: { parentDiagramName: 'Current parent', softwareSystemName: 'Current owner' } });
+    expect(loaded.components[1]).toMatchObject({ name: 'Current source', description: null, type: 'person', position: original.components[1].position });
+    const active = await service.listSummaries();
+    expect(active).toHaveLength(2); expect(active.find(d => d.id === original.id)).toMatchObject({ name: 'Independent runtime', kind: 'container', scope: loaded.scope, createdAt: original.createdAt });
+    await repository.trash(original.id);
+    expect(await service.listSummaries('trashed')).toEqual([expect.objectContaining({ id: original.id, name: 'Independent runtime', scope: loaded.scope })]);
+    await repository.restore(original.id);
+  });
 });

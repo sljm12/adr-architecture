@@ -51,6 +51,7 @@ export class DiagramService {
   containerAvailability(diagramId: string, componentId: string) { return this.containerContext.availability(diagramId, componentId); }
   createOrOpenContainerDiagram(diagramId: string, componentId: string) { return this.containerContext.createOrOpen(diagramId, componentId); }
   containerSourceContext(diagramId: string) { return this.containerContext.context(diagramId); }
+  listSummaries(status: 'active' | 'trashed' = 'active') { return this.containerContext.summaries(status); }
 
   create(name: string): MaybePromise<DiagramDocument> {
     const input = diagramCreateSchema.parse({ name });

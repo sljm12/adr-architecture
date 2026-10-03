@@ -37,7 +37,7 @@ describe('core workflow accessibility contract', () => {
     expect(inspector).toContain('htmlFor="relationship-direction"');
     expect(workspace).toContain('>New diagram</button>');
     expect(workspace).toContain('adr-mode');
-    expect(workspace).toContain('Discard unsaved changes?');
+    expect(workspace).toContain('Save changes before creating a new diagram?');
   });
 
   it('keeps dialog focus inside the confirmation flow and restores the trigger focus', () => {
@@ -53,7 +53,7 @@ describe('core workflow accessibility contract', () => {
     expect(switchDialog).toContain('aria-modal="true"');
     expect(switchDialog).toContain("event.key === 'Escape'");
     expect(switchDialog).toContain('previouslyFocused?.focus()');
-    expect(savedList).toContain('aria-label={`Delete ${document.name}`}');
+    expect(savedList).toContain('aria-label={`Delete ${scopeLabel(document)}`}');
     expect(savedList).toContain('aria-busy={deleteStatus === \'deleting\'}');
     expect(deletionDialog).toContain('Save and delete');
     expect(deletionDialog).toContain('Discard and delete');

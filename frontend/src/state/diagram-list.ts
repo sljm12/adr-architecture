@@ -80,3 +80,33 @@ export function deriveDiagramList(diagrams: readonly DiagramSummary[], filters: 
 }
 
 export const filterAndSortDiagrams = deriveDiagramList;
+
+export interface DiagramLibraryGroup {
+  parentId: string;
+  parentName: string;
+  parent: DiagramSummary | null;
+  parentMatches: boolean;
+  children: DiagramSummary[];
+}
+
+/** Filtering applies to each own artifact; parent headings provide context only. */
+export function deriveDiagramGroups(diagrams: readonly DiagramSummary[], filters: DiagramListFilters = {}, sort: DiagramListSort = defaultDiagramListSort): DiagramListView & { groups: DiagramLibraryGroup[] } {
+  const view = deriveDiagramList(diagrams, filters, sort);
+  if (view.rangeError) return { ...view, groups: [] };
+  const parents = new Map(diagrams.filter(d => d.kind !== 'container').map(d => [d.id, d]));
+  const matches = new Set(view.items.map(d => d.id));
+  const groups = new Map<string, DiagramLibraryGroup>();
+  // Pick scope fallback from the full set, independent of filtering/input order.
+  for (const child of diagrams.filter(d => d.kind === 'container').slice().sort((a, b) => compareText(a.id, b.id))) {
+    const parentId = child.scope?.parentDiagramId ?? child.id;
+    if (groups.has(parentId)) continue;
+    const parent = parents.get(parentId) ?? null;
+    groups.set(parentId, { parentId, parentName: parent?.name ?? child.scope?.parentDiagramName ?? 'Unknown parent', parent, parentMatches: Boolean(parent && matches.has(parent.id)), children: [] });
+  }
+  for (const diagram of view.items) {
+    if (diagram.kind === 'container') groups.get(diagram.scope?.parentDiagramId ?? diagram.id)!.children.push(diagram);
+    else if (!groups.has(diagram.id)) groups.set(diagram.id, { parentId: diagram.id, parentName: diagram.name, parent: diagram, parentMatches: true, children: [] });
+  }
+  const fallbackSummary = (group: DiagramLibraryGroup): DiagramSummary => group.parent ?? { id: group.parentId, name: group.parentName, status: 'active', createdAt: '', updatedAt: '' };
+  return { ...view, groups: [...groups.values()].filter(g => g.parentMatches || g.children.length > 0).sort((a, b) => compareSummaries(fallbackSummary(a), fallbackSummary(b), sort)) };
+}

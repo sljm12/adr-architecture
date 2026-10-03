@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { listDiagramsCommand } from '../src/diagrams-command';
+import { emptyChildFixture } from '../../shared/tests/container-fixtures';
 
 const rows = [
   { id: '00000000-0000-4000-8000-000000000001', name: 'Payments API', status: 'active' as const, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-02T00:00:00Z' },
@@ -9,6 +10,17 @@ const rows = [
 const client = { listDiagrams: vi.fn().mockResolvedValue(rows) };
 
 describe('diagrams list command', () => {
+  it('keeps transport flat, preserves child own-name filters and identifies canonical scope in table and JSON', async () => {
+    const child = emptyChildFixture(); child.name = 'Runtime';
+    const scopeRows = [{ ...rows[0], kind: 'general', scope: null }, { id: child.id, name: child.name, kind: child.kind, scope: child.scope, status: child.status, createdAt: child.createdAt, updatedAt: child.updatedAt }];
+    const output = vi.fn();
+    await listDiagramsCommand({ listDiagrams: async () => scopeRows as any }, { write: output });
+    expect(output.mock.calls[0][0]).toContain('Container'); expect(output.mock.calls[0][0]).toContain(child.scope.parentDiagramId); expect(output.mock.calls[0][0]).toContain(child.scope.softwareSystemId);
+    await listDiagramsCommand({ listDiagrams: async () => scopeRows as any }, { format: 'json', name: 'runtime', write: output });
+    expect(JSON.parse(output.mock.calls[1][0])).toEqual([scopeRows[1]]);
+    await listDiagramsCommand({ listDiagrams: async () => scopeRows as any }, { name: child.scope.parentDiagramName, write: output });
+    expect(output.mock.calls[2][0]).toMatch(/No diagrams match/);
+  });
   it('shows all summary fields and keeps duplicate names distinguishable by ID', async () => {
     const output = vi.fn();
     await listDiagramsCommand(client, { write: output });

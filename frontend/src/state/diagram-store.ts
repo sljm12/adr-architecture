@@ -26,6 +26,12 @@ type State = {
   savedDocumentsDeleteMessage: string | null;
   deletedSavedDocumentIds: string[];
   loadError: string | null;
+  navigationStatus: 'idle' | 'loading';
+  savePending: boolean;
+  revision: number;
+  sourceContext: ContainerContext | null;
+  sourceContextStatus: 'idle' | 'loading' | 'loaded' | 'failed';
+  sourceContextError: string | null;
   containerOpenStatus: ContainerOpenStatus;
   containerOpenError: string | null;
   containerOpenComponentId: string | null;
@@ -63,11 +69,15 @@ type State = {
   refreshSavedDocuments: () => Promise<void>;
   trashSavedDocument: (id: string) => Promise<boolean>;
   registerRestoredSavedDocument: (document: DiagramDocument) => void;
-  loadSavedDocument: (id: string) => Promise<boolean>;
-  createOrOpenContainerDiagram: (componentId: string) => Promise<boolean>;
+  loadSavedDocument: (id: string, options?: { canCommit?: () => boolean }) => Promise<boolean>;
+  createOrOpenContainerDiagram: (componentId: string, options?: { canCommit?: () => boolean }) => Promise<boolean>;
+  applyContainerContext: (context: ContainerContext) => boolean;
+  refreshContainerContext: () => Promise<boolean>;
 };
 
 const history = new BoundedHistory<DiagramDocument>();
+let loadRequest = 0;
+let session = 0;
 const copy = (document: DiagramDocument): DiagramDocument => ({ ...structuredClone(document), groups: document.groups ?? [] });
 const historyState = () => ({ canUndo: history.canUndo, canRedo: history.canRedo });
 const now = () => new Date().toISOString();
@@ -83,6 +93,20 @@ const saveErrorMessage = (error: unknown): string => {
 };
 const summary = (document: DiagramDocument): DiagramSummary => ({ id: document.id, name: document.name, status: document.status, createdAt: document.createdAt, updatedAt: document.updatedAt, kind: document.kind ?? 'general', scope: document.scope ?? null });
 const replaceSummary = (items: DiagramSummary[], next: DiagramSummary) => items.some(item => item.id === next.id) ? items.map(item => item.id === next.id ? next : item) : [...items, next];
+const assertSaveIdentity = (request: DiagramDocument, response: DiagramDocument) => {
+  if (response.id !== request.id || response.name?.trim() !== request.name.trim() || (response.kind ?? 'general') !== (request.kind ?? 'general') || response.scope?.parentDiagramId !== request.scope?.parentDiagramId || response.scope?.softwareSystemId !== request.scope?.softwareSystemId) throw new Error('The save response did not match the diagram identity, name or parent/owner association. Your draft was kept. Retry saving this diagram.');
+};
+const overlayContext = (document: DiagramDocument, context: ContainerContext | null): DiagramDocument => {
+  if (!context || document.kind !== 'container') return copy(document);
+  if (context.scope.parentDiagramId !== document.scope?.parentDiagramId || context.scope.softwareSystemId !== document.scope.softwareSystemId) throw new Error('Source context did not match this container diagram. Refresh its source details.');
+  const sources = new Map(context.sources.map(source => [source.id, source]));
+  return { ...copy(document), scope: { ...context.scope }, components: document.components.map(component => {
+    if (component.role !== 'external') return structuredClone(component);
+    const source = sources.get(component.sourceComponentId!);
+    if (!source) throw new Error(`External participant ${component.id} no longer has an eligible parent source. Repair the source before continuing.`);
+    return { ...structuredClone(component), name: source.name, description: source.description, type: source.type };
+  }) };
+};
 const normalizedGroupName = (name: string) => name.trim().toLocaleLowerCase();
 const validContainerDetails = (details: ContainerEdit) => isContainerType(details.containerType) && Boolean(details.name.trim()) && details.name.trim().length <= 200 && Boolean(details.description.trim()) && Boolean(details.technology.trim()) && details.technology.trim().length <= 200;
 const fitChild = (document: DiagramDocument): DiagramDocument => {
@@ -151,20 +175,23 @@ export const useDiagramStore = create<State>((set, get) => ({
   savedDocumentsDeleteStatus: 'idle', savedDocumentsDeleteError: null, savedDocumentsDeleteMessage: null,
   deletedSavedDocumentIds: [],
   loadError: null,
+  navigationStatus: 'idle', savePending: false, revision: 0,
+  sourceContext: null, sourceContextStatus: 'idle', sourceContextError: null,
   containerOpenStatus: 'idle',
   containerOpenError: null,
   containerOpenComponentId: null,
   canUndo: false,
   canRedo: false,
   open: input => {
+    session++; loadRequest++;
     const document = history.reset(copy(input));
-    set({ document, status: 'saved', error: null, groupError: null, loadError: null, containerOpenStatus: 'idle', containerOpenError: null, containerOpenComponentId: null, ...historyState() });
+    set({ document, status: 'saved', revision: 0, navigationStatus: 'idle', sourceContext: null, sourceContextStatus: 'idle', sourceContextError: null, error: null, groupError: null, loadError: null, containerOpenStatus: 'idle', containerOpenError: null, containerOpenComponentId: null, ...historyState() });
   },
-  startNew: () => set({ document: null, status: 'idle', error: null, groupError: null, containerOpenStatus: 'idle', containerOpenError: null, containerOpenComponentId: null, canUndo: false, canRedo: false }),
+  startNew: () => { session++; loadRequest++; set({ document: null, status: 'idle', revision: 0, navigationStatus: 'idle', sourceContext: null, sourceContextStatus: 'idle', sourceContextError: null, error: null, groupError: null, containerOpenStatus: 'idle', containerOpenError: null, containerOpenComponentId: null, canUndo: false, canRedo: false }); },
   create: async name => {
     const created = await diagramClient.create(name);
-    const document = history.reset(copy(created));
-    set(state => ({ document, status: 'saved', error: null, loadError: null, savedDocuments: replaceSummary(state.savedDocuments, summary(document)), ...historyState() }));
+    get().open(created);
+    set(state => ({ savedDocuments: replaceSummary(state.savedDocuments, summary(created)) }));
   },
   update: fn => {
     const current = get().document;
@@ -173,21 +200,22 @@ export const useDiagramStore = create<State>((set, get) => ({
       let next = copy(fn(copy(current)));
       if (current.kind === 'container') {
         if (next.kind !== current.kind || next.id !== current.id || next.scope?.parentDiagramId !== current.scope?.parentDiagramId || next.scope?.softwareSystemId !== current.scope?.softwareSystemId) throw new Error('Container ownership cannot be changed.');
-        next = diagramDocumentSchema.parse(fitChild(next)) as DiagramDocument;
+        const geometry = (document: DiagramDocument) => JSON.stringify(document.components.map(({ id, role, position, size }) => ({ id, role, position, size })));
+        next = diagramDocumentSchema.parse(geometry(next) === geometry(current) ? next : fitChild(next)) as DiagramDocument;
         assertDiagramInvariants(next);
       }
       if (JSON.stringify(next) === JSON.stringify(current)) return;
       const document = history.push(next);
-      set({ document, status: 'unsaved', error: null, groupError: null, ...historyState() });
+      set(state => ({ document, revision: state.revision + 1, status: 'unsaved', error: null, groupError: null, ...historyState() }));
     } catch (error) { set({ error: saveErrorMessage(error) }); }
   },
   undo: () => {
     const document = history.undo();
-    if (document) set({ document: copy(document), status: 'unsaved', error: null, groupError: null, ...historyState() });
+    if (document) set(state => ({ document: overlayContext(document, state.sourceContext), revision: state.revision + 1, status: 'unsaved', error: null, groupError: null, ...historyState() }));
   },
   redo: () => {
     const document = history.redo();
-    if (document) set({ document: copy(document), status: 'unsaved', error: null, groupError: null, ...historyState() });
+    if (document) set(state => ({ document: overlayContext(document, state.sourceContext), revision: state.revision + 1, status: 'unsaved', error: null, groupError: null, ...historyState() }));
   },
   addComponent: (name, type, description = null) => {
     const document = get().document;
@@ -495,29 +523,40 @@ export const useDiagramStore = create<State>((set, get) => ({
     }));
   },
   save: async () => {
-    if (get().status === 'saving') return;
+    if (get().savePending || get().status === 'saving' || get().navigationStatus === 'loading' || get().containerOpenStatus === 'loading') return;
     const documentAtSaveStart = get().document;
     if (!documentAtSaveStart) return;
-    set({ status: 'saving', error: null });
+    const captured = copy(documentAtSaveStart), revision = get().revision, saveSession = session;
+    set({ status: 'saving', savePending: true, error: null });
     try {
-      const saved = await diagramClient.save(documentAtSaveStart);
-      if (get().document === documentAtSaveStart) {
-        const normalized = copy(saved);
-        set(state => ({ document: normalized, status: 'saved', error: null, savedDocuments: replaceSummary(state.savedDocuments, summary(normalized)) }));
+      const response = await diagramClient.save(captured);
+      assertSaveIdentity(captured, response);
+      const saved = diagramDocumentSchema.parse(response) as DiagramDocument;
+      if (session === saveSession) {
+        set(state => {
+          const sourceContext = state.sourceContext && saved.scope ? { ...state.sourceContext, scope: saved.scope, sources: state.sourceContext.sources.map(source => {
+            const occurrence = saved.components.find(component => component.role === 'external' && component.sourceComponentId === source.id);
+            return occurrence ? { id: source.id, name: occurrence.name, description: occurrence.description, type: occurrence.type as C4ArtifactType } : source;
+          }) } : state.sourceContext;
+          return { sourceContext, savedDocuments: replaceSummary(state.savedDocuments, summary(saved)), ...(state.revision === revision ? { document: overlayContext(saved, sourceContext), status: 'saved' as const, error: null } : {}) };
+        });
       }
     } catch (error) {
-      if (get().document === documentAtSaveStart) {
-        set({ status: 'failed', error: saveErrorMessage(error) });
-      }
-    }
+      if (session === saveSession) set({ ...(get().revision === revision ? { status: 'failed' as const } : {}), error: saveErrorMessage(error) });
+    } finally { set({ savePending: false }); }
   },
   retry: async () => { await get().save(); },
   refreshSavedDocuments: async () => {
+    const before = new Map(get().savedDocuments.map(document => [document.id, document]));
     set({ savedDocumentsStatus: 'loading', savedDocumentsError: null });
     try {
       const savedDocuments = await diagramClient.list();
       const deletedIds = new Set(get().deletedSavedDocumentIds ?? []);
-      set({ savedDocuments: savedDocuments.filter(document => !deletedIds.has(document.id)), savedDocumentsStatus: 'loaded', savedDocumentsError: null });
+      const changed = get().savedDocuments.filter(document => before.get(document.id) !== document);
+      const changedById = new Map(changed.map(document => [document.id, document]));
+      const reconciled = savedDocuments.map(document => changedById.get(document.id) ?? document);
+      for (const document of changed) if (!reconciled.some(item => item.id === document.id)) reconciled.push(document);
+      set({ savedDocuments: reconciled.filter(document => !deletedIds.has(document.id)), savedDocumentsStatus: 'loaded', savedDocumentsError: null });
     }
     catch (error) { set({ savedDocumentsStatus: 'failed', savedDocumentsError: error instanceof Error ? error.message : 'Could not load saved diagrams.' }); }
   },
@@ -550,18 +589,46 @@ export const useDiagramStore = create<State>((set, get) => ({
     savedDocumentsDeleteError: null,
     savedDocumentsDeleteMessage: null,
   })),
-  loadSavedDocument: async id => {
-    set({ loadError: null });
+  loadSavedDocument: async (id, options = {}) => {
+    if (get().savePending || get().status === 'saving' || get().containerOpenStatus === 'loading') return false;
+    const request = ++loadRequest, source = get().document, revision = get().revision, loadSession = session;
+    set({ loadError: null, navigationStatus: 'loading' });
     try {
       const document = await diagramClient.get(id);
       if (document.id !== id) throw new Error('The selected diagram identity did not match the requested diagram.');
+      if (request !== loadRequest) return false;
+      if (session !== loadSession || get().document?.id !== source?.id || get().revision !== revision || options.canCommit?.() === false) throw new Error('Your diagram or decision changed while loading. Your work was kept; review Save, Discard or Cancel before continuing.');
       get().open(document);
+      set(state => ({ savedDocuments: replaceSummary(state.savedDocuments, summary(document)) }));
       return true;
     }
-    catch (error) { set({ loadError: error instanceof Error ? error.message : 'Could not load the selected diagram.' }); return false; }
+    catch (error) { if (request === loadRequest) set({ loadError: error instanceof Error ? error.message : 'Could not load the selected diagram.' }); return false; }
+    finally { if (request === loadRequest) set({ navigationStatus: 'idle' }); }
   },
-  createOrOpenContainerDiagram: async componentId => {
-    if (get().containerOpenStatus === 'loading') return false;
+  applyContainerContext: input => {
+    const document = get().document;
+    if (!document || document.kind !== 'container') return false;
+    try {
+      const context = containerContextSchema.parse(input);
+      const refreshed = overlayContext(document, context);
+      assertDiagramInvariants(refreshed);
+      set(state => ({ document: refreshed, sourceContext: context, sourceContextStatus: 'loaded', sourceContextError: null, savedDocuments: state.savedDocuments.map(item => item.id === document.id ? { ...item, scope: context.scope } : item) }));
+      return true;
+    } catch (error) { set({ sourceContextStatus: 'failed', sourceContextError: saveErrorMessage(error) }); return false; }
+  },
+  refreshContainerContext: async () => {
+    const document = get().document;
+    if (!document || document.kind !== 'container' || get().sourceContextStatus === 'loading') return false;
+    const contextSession = session;
+    set({ sourceContextStatus: 'loading', sourceContextError: null });
+    try {
+      const context = await diagramClient.containerContext(document.id);
+      if (contextSession !== session) return false;
+      return get().applyContainerContext(context);
+    } catch (error) { if (contextSession === session) set({ sourceContextStatus: 'failed', sourceContextError: saveErrorMessage(error) }); return false; }
+  },
+  createOrOpenContainerDiagram: async (componentId, options = {}) => {
+    if (get().containerOpenStatus === 'loading' || get().savePending || get().status === 'saving' || get().navigationStatus === 'loading') return false;
     const sourceDocument = get().document;
     const component = sourceDocument?.components.find(item => item.id === componentId);
     const isOwnerElement = sourceDocument?.kind !== 'container' && (component?.role ?? 'element') === 'element' && component?.type === 'software-system';
@@ -581,17 +648,17 @@ export const useDiagramStore = create<State>((set, get) => ({
         const name = availability.diagram?.name ?? component.name;
         throw new Error(`The container diagram “${name}” is in Trash. Restore it before opening; no replacement was created.`);
       }
-      if (get().document !== sourceDocument || get().status !== 'saved') throw new Error('The current diagram changed while availability was loading. Try again from the current selection.');
+      if (get().document !== sourceDocument || get().status !== 'saved' || options.canCommit?.() === false) throw new Error('The current diagram or decision changed while availability was loading. Try again from the current selection.');
       const createdOrExisting = await diagramClient.createOrOpenContainerDiagram(sourceDocument.id, componentId);
-      if (get().document !== sourceDocument || get().status !== 'saved') throw new Error('The current diagram changed while the container diagram was opening. It is safe to retry.');
+      if (get().document !== sourceDocument || get().status !== 'saved' || options.canCommit?.() === false) throw new Error('The current diagram or decision changed while the container diagram was opening. It is safe to retry.');
       const loaded = await diagramClient.get(createdOrExisting.id);
-      if (get().document !== sourceDocument || get().status !== 'saved') throw new Error('The current diagram changed while loading. Your current work was kept; try opening again.');
+      if (get().document !== sourceDocument || get().status !== 'saved' || options.canCommit?.() === false) throw new Error('The current diagram or decision changed while loading. Your current work was kept; try opening again.');
       if (loaded.id !== createdOrExisting.id || loaded.kind !== 'container' || loaded.scope?.parentDiagramId !== availability.parentDiagramId || loaded.scope?.softwareSystemId !== availability.softwareSystemId) {
         throw new Error('The loaded container diagram did not match the selected Software System. Try again.');
       }
       const opened = copy(loaded);
-      history.reset(opened);
-      set(state => ({ document: opened, status: 'saved', error: null, groupError: null, loadError: null, containerOpenStatus: 'idle', containerOpenError: null, containerOpenComponentId: null, savedDocuments: replaceSummary(state.savedDocuments, summary(opened)), ...historyState() }));
+      get().open(opened);
+      set(state => ({ savedDocuments: replaceSummary(state.savedDocuments, summary(opened)) }));
       void get().refreshSavedDocuments();
       return true;
     } catch (error) {

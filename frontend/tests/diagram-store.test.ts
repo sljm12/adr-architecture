@@ -29,7 +29,7 @@ afterEach(() => {
 describe('explicit diagram saving', () => {
   it('keeps edits, undo, and redo local until the user saves', async () => {
     vi.useFakeTimers();
-    const save = vi.spyOn(diagramClient, 'save').mockResolvedValue(structuredClone(document));
+    const save = vi.spyOn(diagramClient, 'save').mockImplementation(async captured => structuredClone(captured));
     reset();
 
     useDiagramStore.getState().update(current => ({ ...current, name: 'Edited system' }));

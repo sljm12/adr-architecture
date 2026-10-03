@@ -60,3 +60,25 @@ Pointer movement, completed resizing and keyboard movement use validated domain 
 An initial unrestricted-worker Vitest run timed out during concurrent API startup; the bounded-worker full run passed. A broader browser run exposed general-selection regressions, which were corrected and its affected grouping suite rerun successfully. These failures are resolved; the remaining full feature/release gates, export support, recovery work and observed usability timing belong to later tasks. The current nine-scenario browser result supersedes the earlier six-scenario combined-run uncertainty without completing T088.
 
 Current library mechanisms were verified through Context7: React Flow controlled changes, resize and keyboard selection/movement (`/websites/reactflow_dev`), and Drizzle named PostgreSQL CHECK constraints (`/drizzle-team/drizzle-orm-docs`). No runtime dependencies were added.
+
+## Phase 5 implementation results
+
+Captured on 2026-10-03 for T048–T060 only. All 13 US3 tasks are complete; T061–T090 remain outstanding. No dependency, lockfile or migration changes were made, and no implementation extension hooks are configured.
+
+Child saves use the existing PUT endpoint and validate returned identity, own name, kind and canonical scope before committing. Failed or mismatched responses retain the draft for retry; edits made during a save remain unsaved. Superseded loads and older library responses cannot overwrite the current document or a newly saved summary. Repeated saves retain one summary per child UUID, creation time, subtypes and parent data.
+
+The API resolves current parent/owner/source details from a batched repository snapshot; PostgreSQL reads use a repeatable-read, read-only transaction. Active and trash listings report broken references explicitly. Source descriptions cleared to null remain cleared. The library nests children under parent UUIDs, separates own name from owner/level, keeps absent parents as refreshable context, and counts only matching diagrams during filtering. CLI tables show level, parent and owner; flat JSON and validated documents retain scope and subtype fields.
+
+Parent, library, new-diagram and external-source navigation guard both diagram and ADR drafts with Save/Discard/Cancel, retain failed intent and re-guard edits during loading. Parent return uses persisted scope, highlights the owner and focuses the heading. Source refresh updates display context outside undo history while preserving local identity, name, geometry and edits. ADR list progress is separate from draft progress, and stale list requests cannot overwrite a switched context. The named-child and nested-library browser screenshots were visually inspected.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Test-first phase 5 batch | Expected failures observed | Save-response mismatches, missing nested projection/current scope, stale navigation and broken-reference handling failed before implementation. CLI scope columns and concurrent/stale ADR list tests also failed before their fixes. |
+| `RUN_POSTGRES_TESTS=1; npx.cmd vitest run --maxWorkers=4` | Passed, no skips | 77 files and 374 tests, including actual PostgreSQL persistence, migration, concurrency and ADR acceptance checks, plus API, frontend state, library and CLI regressions. |
+| `npm.cmd run build` | Passed | Shared, backend, frontend and CLI builds; existing Vite main-chunk size warning remains. |
+| Navigation/library Playwright batch, one worker | Passed | All 28 scenarios across container diagrams, diagram-list management, new diagrams and saved diagrams. A temporary headless override used the existing configured browser and was removed after validation. |
+| Enhanced source and keyboard browser checks | Passed | The parent rename/regroup and dirty-ADR source-navigation scenario passed after its additions. The nested child keyboard open/delete-cancel/focus scenario also passed after its additions. |
+| Additional general browser regressions | Passed | Seven general grouping, two performance and one responsive scenario passed in the broader browser batch. |
+| `git diff --check` | Passed | No whitespace errors. |
+
+The broader browser batch initially exposed repeated ADR list loading and ancestor list selectors made ambiguous by nesting. Both were fixed; all affected scenarios passed in the clean 28-test navigation/library rerun. Drizzle transaction isolation/access-mode options were verified through Context7 (`/drizzle-team/drizzle-orm-docs`). These results establish Phase 5 behavior without completing the later recovery/export or full release-validation tasks.

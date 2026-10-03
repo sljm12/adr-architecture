@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createApiClient, getApiBaseUrl } from '../src/api-client';
+import { populatedChildFixture } from '../../shared/tests/container-fixtures';
 
 const diagramId = '00000000-0000-4000-8000-000000000001';
 const summary = { id: diagramId, name: 'Payments', status: 'active', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-02T00:00:00Z', kind: 'general', scope: null };
@@ -10,6 +11,12 @@ function response(body: unknown, status = 200): Response {
 }
 
 describe('API client', () => {
+  it.each(['application', 'datastore'])('retains the saved child own name, scope and %s subtype on GET and flat listing', async containerType => {
+    const child = populatedChildFixture(); child.name = 'Runtime'; child.components[0].containerType = containerType;
+    const summary = { id: child.id, name: child.name, kind: child.kind, scope: child.scope, status: child.status, createdAt: child.createdAt, updatedAt: child.updatedAt };
+    const client = createApiClient({ fetch: vi.fn().mockResolvedValueOnce(response([summary])).mockResolvedValueOnce(response(child)) });
+    expect(await client.listDiagrams()).toEqual([summary]); expect(await client.getDiagram(child.id)).toEqual(child);
+  });
   it('uses the default and configured service URL', () => {
     expect(getApiBaseUrl({})).toBe('http://localhost:3000');
     expect(getApiBaseUrl({ ADR_DIAGRAM_API_URL: 'https://diagram.example/api/' })).toBe('https://diagram.example/api');

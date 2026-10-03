@@ -10,6 +10,8 @@ export type AdrDraft = AdrWritePayload & { id?: string; diagramId: string; compo
 type State = {
   diagramId: string | null;
   records: AdrSummary[];
+  recordsStatus: 'idle' | 'loading' | 'loaded' | 'failed';
+  recordsError: string | null;
   draft: AdrDraft | null;
   status: AdrSaveStatus;
   error: string | null;
@@ -36,6 +38,7 @@ type State = {
   load: (diagramId: string) => Promise<void>;
   select: (id: string) => Promise<void>;
   startNew: (diagramId?: string) => void;
+  clear: () => void;
   open: (record: ArchitectureDecisionRecord) => void;
   update: (fn: (draft: AdrDraft) => AdrDraft) => void;
   setComponentIds: (componentIds: string[]) => void;
@@ -56,6 +59,7 @@ type State = {
 };
 
 const history = new BoundedHistory<AdrDraft>();
+let listRequest = 0;
 const copy = (draft: AdrDraft) => structuredClone(draft);
 const historyState = () => ({ canUndo: history.canUndo, canRedo: history.canRedo });
 const emptyDraft = (diagramId: string): AdrDraft => ({ diagramId, title: '', context: '', decision: '', consequences: '', alternativesOrConstraints: null, status: 'draft', replacementAdrId: null, componentIds: [], relationshipIds: [] });
@@ -66,10 +70,22 @@ const replaceSummary = (records: AdrSummary[], next: AdrSummary) => records.some
 const sameIds = (left: string[], right: string[]) => left.length === right.length && left.every((id, index) => id === right[index]);
 
 export const useAdrStore = create<State>((set, get) => ({
-  diagramId: null, records: [], draft: null, status: 'idle', error: null, fieldErrors: {}, deleteStatus: 'idle', deleteError: null, deleteBlockers: [], deleteMessage: null, componentSummaries: [], componentSummaryComponentId: null, componentSummaryStatus: 'idle', componentSummaryError: null, relationshipSummaries: [], relationshipSummaryRelationshipId: null, relationshipSummaryStatus: 'idle', relationshipSummaryError: null, componentAdrCounts: {}, componentAdrCountsDiagramId: null, componentAdrCountsStatus: 'idle', componentAdrCountsError: null, componentAdrCountsRequest: 0, canUndo: false, canRedo: false,
-  load: async diagramId => { set({ diagramId, status: 'loading', error: null }); try { const records = await adrClient.list(diagramId); set(state => { const keepDraft = state.draft?.diagramId === diagramId; return { records, status: keepDraft ? state.status : 'idle', draft: keepDraft ? state.draft : null, fieldErrors: keepDraft ? state.fieldErrors : {}, ...historyState() }; }); } catch (error) { set({ status: 'failed', error: error instanceof Error ? error.message : 'Could not load ADRs.' }); } },
+  diagramId: null, records: [], recordsStatus: 'idle', recordsError: null, draft: null, status: 'idle', error: null, fieldErrors: {}, deleteStatus: 'idle', deleteError: null, deleteBlockers: [], deleteMessage: null, componentSummaries: [], componentSummaryComponentId: null, componentSummaryStatus: 'idle', componentSummaryError: null, relationshipSummaries: [], relationshipSummaryRelationshipId: null, relationshipSummaryStatus: 'idle', relationshipSummaryError: null, componentAdrCounts: {}, componentAdrCountsDiagramId: null, componentAdrCountsStatus: 'idle', componentAdrCountsError: null, componentAdrCountsRequest: 0, canUndo: false, canRedo: false,
+  load: async diagramId => {
+    const request = ++listRequest;
+    set({ ...(get().diagramId !== diagramId ? { draft: null, status: 'idle' as const, fieldErrors: {} } : {}), diagramId, recordsStatus: 'loading', recordsError: null });
+    try {
+      const records = await adrClient.list(diagramId);
+      if (request !== listRequest || get().diagramId !== diagramId) return;
+      set(state => {
+        const keepDraft = state.draft?.diagramId === diagramId;
+        return { records, recordsStatus: 'loaded', status: keepDraft ? state.status : 'idle', draft: keepDraft ? state.draft : null, fieldErrors: keepDraft ? state.fieldErrors : {}, ...historyState() };
+      });
+    } catch (error) { if (request === listRequest && get().diagramId === diagramId) set({ recordsStatus: 'failed', recordsError: error instanceof Error ? error.message : 'Could not load ADRs.' }); }
+  },
   select: async id => { set({ status: 'loading', error: null, deleteStatus: 'idle', deleteError: null, deleteBlockers: [], deleteMessage: null }); try { const record = normalizeRecord(await adrClient.get(id)); const draft = history.reset({ ...record }); set({ draft, diagramId: record.diagramId, status: 'saved', error: null, fieldErrors: {}, ...historyState() }); } catch (error) { set({ status: 'failed', error: error instanceof Error ? error.message : 'Could not load ADR.' }); } },
-  startNew: diagramId => { const id = diagramId ?? get().diagramId; if (!id) return; const draft = history.reset(emptyDraft(id)); get().invalidateComponentAdrCounts(id); set({ diagramId: id, draft, status: 'idle', error: null, fieldErrors: {}, deleteStatus: 'idle', deleteError: null, deleteBlockers: [], deleteMessage: null, ...historyState() }); },
+  startNew: diagramId => { const id = diagramId ?? get().diagramId; if (!id) return; listRequest++; const switching = get().diagramId !== id; const draft = history.reset(emptyDraft(id)); get().invalidateComponentAdrCounts(id); set({ ...(switching ? { records: [], componentSummaries: [], componentSummaryComponentId: null, componentSummaryStatus: 'idle' as const, relationshipSummaries: [], relationshipSummaryRelationshipId: null, relationshipSummaryStatus: 'idle' as const } : {}), diagramId: id, draft, status: 'idle', error: null, fieldErrors: {}, deleteStatus: 'idle', deleteError: null, deleteBlockers: [], deleteMessage: null, ...historyState() }); },
+  clear: () => { listRequest++; set({ diagramId: null, draft: null, records: [], status: 'idle', error: null, fieldErrors: {}, canUndo: false, canRedo: false, componentSummaries: [], componentSummaryComponentId: null, componentSummaryStatus: 'idle', relationshipSummaries: [], relationshipSummaryRelationshipId: null, relationshipSummaryStatus: 'idle', componentAdrCounts: {}, componentAdrCountsDiagramId: null, componentAdrCountsStatus: 'idle', componentAdrCountsRequest: get().componentAdrCountsRequest + 1 }); },
   open: record => { const normalized = normalizeRecord(record); const draft = history.reset({ ...normalized }); set({ diagramId: normalized.diagramId, draft, status: 'saved', error: null, fieldErrors: {}, deleteStatus: 'idle', deleteError: null, deleteBlockers: [], deleteMessage: null, ...historyState() }); },
   update: fn => { const current = get().draft; if (!current) return; const draft = history.push(copy(fn(copy(current)))); set({ draft, status: 'unsaved', error: null, fieldErrors: {}, ...historyState() }); },
   setComponentIds: componentIds => { const unique = [...new Set(componentIds)]; get().update(current => ({ ...current, componentIds: unique })); },

@@ -8,6 +8,7 @@ import * as schema from './schema';
 export type MaybePromise<T> = T | Promise<T>;
 
 export interface DiagramRepositoryLike {
+  listAll(): MaybePromise<DiagramDocument[]>;
   list(): MaybePromise<DiagramDocument[]>;
   listTrash(): MaybePromise<DiagramDocument[]>;
   get(id: string): MaybePromise<DiagramDocument | undefined>;
@@ -43,6 +44,8 @@ const normalizedGroups = (document: DiagramDocument) => groupsOf(document).map(g
 export class DiagramRepository implements DiagramRepositoryLike {
   private documents = new Map<string, DiagramDocument>();
   private transactionTail: Promise<void> = Promise.resolve();
+
+  listAll() { return [...this.documents.values()].map(d => this.resolve(d)); }
 
   list() { return [...this.documents.values()].filter(d => d.status === 'active').map(d => this.resolve(d)); }
   listTrash() { return [...this.documents.values()].filter(d => d.status === 'trashed').map(d => this.resolve(d)); }
@@ -209,7 +212,7 @@ function mapDocument(
     components: componentRows.map(component => ({
       id: component.id, diagramId: component.diagramId,
       name: component.role === 'external' && component.sourceComponentId ? sourceComponents.get(component.sourceComponentId)?.name ?? component.name : component.name,
-      description: component.role === 'external' && component.sourceComponentId ? sourceComponents.get(component.sourceComponentId)?.description ?? component.description : component.description,
+      description: component.role === 'external' && component.sourceComponentId && sourceComponents.has(component.sourceComponentId) ? sourceComponents.get(component.sourceComponentId)!.description : component.description,
       type: component.role === 'external' && component.sourceComponentId ? sourceComponents.get(component.sourceComponentId)?.type ?? component.type : component.type,
       role: component.role as NonNullable<DiagramDocument['components'][number]['role']>,
       containerType: component.containerType as DiagramDocument['components'][number]['containerType'],
@@ -241,13 +244,38 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
   constructor(private readonly db: PostgresExecutor, private readonly inTransaction = false) {}
 
   async list(): Promise<DiagramDocument[]> {
-    const rows = await this.db.select().from(schema.diagrams).where(eq(schema.diagrams.status, 'active')).orderBy(asc(schema.diagrams.updatedAt));
-    return Promise.all(rows.map(row => this.load(row.id)) as Promise<DiagramDocument>[]);
+    return (await this.listAll()).filter(document => document.status === 'active');
   }
 
   async listTrash(): Promise<DiagramDocument[]> {
-    const rows = await this.db.select().from(schema.diagrams).where(eq(schema.diagrams.status, 'trashed')).orderBy(asc(schema.diagrams.updatedAt));
-    return Promise.all(rows.map(row => this.load(row.id)) as Promise<DiagramDocument>[]);
+    return (await this.listAll()).filter(document => document.status === 'trashed');
+  }
+
+  /** One read snapshot and a fixed query count, regardless of child/occurrence count. */
+  async listAll(): Promise<DiagramDocument[]> {
+    if (!this.inTransaction) return this.db.transaction(tx => new PostgresDiagramRepository(tx, true).listAll(), { isolationLevel: 'repeatable read', accessMode: 'read only' });
+    const diagrams = await this.db.select().from(schema.diagrams).orderBy(asc(schema.diagrams.updatedAt), asc(schema.diagrams.id));
+    const components = await this.db.select().from(schema.components).orderBy(asc(schema.components.createdAt), asc(schema.components.id));
+    const relationships = await this.db.select().from(schema.relationships).orderBy(asc(schema.relationships.createdAt), asc(schema.relationships.id));
+    const groups = await this.db.select().from(schema.systemGroups).orderBy(asc(schema.systemGroups.createdAt), asc(schema.systemGroups.id));
+    const members = await this.db.select().from(schema.systemGroupMembers).orderBy(asc(schema.systemGroupMembers.createdAt), asc(schema.systemGroupMembers.componentId));
+    const diagramsById = new Map(diagrams.map(d => [d.id, d]));
+    const componentsById = new Map(components.map(c => [c.id, c]));
+    const byDiagram = <T extends { diagramId: string }>(rows: T[]) => {
+      const result = new Map<string, T[]>();
+      for (const row of rows) { const batch = result.get(row.diagramId) ?? []; batch.push(row); result.set(row.diagramId, batch); }
+      return result;
+    };
+    const componentsByDiagram = byDiagram(components), relationshipsByDiagram = byDiagram(relationships), groupsByDiagram = byDiagram(groups);
+    const membersByGroup = new Map<string, typeof members>();
+    for (const member of members) { const batch = membersByGroup.get(member.groupId) ?? []; batch.push(member); membersByGroup.set(member.groupId, batch); }
+    return diagrams.map(diagram => {
+      const parent = diagram.parentDiagramId ? diagramsById.get(diagram.parentDiagramId) : undefined;
+      const owner = diagram.ownerComponentId ? componentsById.get(diagram.ownerComponentId) : undefined;
+      const scope = diagram.kind === 'container' && parent && owner ? { parentDiagramId: parent.id, softwareSystemId: owner.id, parentDiagramName: parent.name, softwareSystemName: owner.name, softwareSystemDescription: owner.description } : null;
+      const localGroups = groupsByDiagram.get(diagram.id) ?? [];
+      return mapDocument(diagram, componentsByDiagram.get(diagram.id) ?? [], relationshipsByDiagram.get(diagram.id) ?? [], localGroups, localGroups.flatMap(group => membersByGroup.get(group.id) ?? []), scope, componentsById);
+    });
   }
 
   async get(id: string): Promise<DiagramDocument | undefined> { return this.load(id); }

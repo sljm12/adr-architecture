@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
-import { diagramDocumentSchema } from '../../shared/src/index';
+import { calculateGroupBounds, diagramDocumentSchema } from '../../shared/src/index';
 import { containerFixtureIds as ids, emptyChildFixture, groupedOwnerParentFixture, populatedChildFixture } from '../../shared/tests/container-fixtures';
 
 const childIds: Record<string, string> = {
@@ -47,18 +47,35 @@ function makeSourceOccurrenceChild(parent: any) {
   }) as any;
 }
 
-async function mockContainerApi(page: Page, options: { failFirstChildLoad?: boolean; failFirstAvailability?: boolean; sourceOccurrence?: boolean } = {}) {
+async function mockContainerApi(page: Page, options: { failFirstChildLoad?: boolean; failFirstAvailability?: boolean; sourceOccurrence?: boolean; duplicateParent?: boolean } = {}) {
   let parent = makeParent();
   const children = new Map<string, any>();
   const allocatedChildIds = new Map<string, string>();
   let failFirstChildLoad = options.failFirstChildLoad ?? false;
   let failFirstAvailability = options.failFirstAvailability ?? false;
+  let failNextSave = false;
+  const savedPaths: string[] = [];
+  const adrs = new Map<string, any>();
+  const extraParents = new Map<string, any>();
+  if (options.duplicateParent) {
+    const otherParent = { ...makeParent(), id: randomUUID(), components: [] as any[], relationships: [], groups: [] };
+    const owner = { ...parent.components[0], id: randomUUID(), diagramId: otherParent.id };
+    otherParent.components = [owner]; extraParents.set(otherParent.id, otherParent);
+    children.set(ids.owner, { ...makeChild(parent, ids.owner), name: 'Runtime' });
+    children.set(owner.id, { ...makeChild(otherParent, owner.id), name: 'Runtime' });
+  }
+  const sourceParent = (child: any) => child.scope.parentDiagramId === parent.id ? parent : extraParents.get(child.scope.parentDiagramId);
+  const resolved = (document: any) => {
+    if (document.kind !== 'container') return document;
+    const p = sourceParent(document), owner = p.components.find((c: any) => c.id === document.scope.softwareSystemId);
+    return { ...document, scope: { ...document.scope, parentDiagramName: p.name, softwareSystemName: owner.name, softwareSystemDescription: owner.description }, components: document.components.map((c: any) => { const source = p.components.find((s: any) => s.id === c.sourceComponentId); return c.role === 'external' && source ? { ...c, name: source.name, description: source.description, type: source.type } : c; }) };
+  };
   if (options.sourceOccurrence) {
     const sourceChild = makeSourceOccurrenceChild(parent);
     children.set(ids.sourceSystem, sourceChild);
     children.set(ids.owner, makeChild(parent, ids.owner));
   }
-  const activeSummaries = () => [parent, ...children.values()].map((document: any) => ({
+  const activeSummaries = () => [parent, ...extraParents.values(), ...children.values()].map(resolved).map((document: any) => ({
     id: document.id, name: document.name, status: document.status, createdAt: document.createdAt, updatedAt: document.updatedAt,
     kind: document.kind, scope: document.scope,
   }));
@@ -77,7 +94,12 @@ async function mockContainerApi(page: Page, options: { failFirstChildLoad?: bool
     const path = new URL(route.request().url()).pathname.replace(/^\/api/, '');
     const method = route.request().method();
     if (path === '/diagrams/trash') return fulfill(route, []);
-    if (method === 'GET' && /^\/diagrams\/[^/]+\/adrs(?:\/full)?$/.test(path)) return fulfill(route, []);
+    const adrPath = path.match(/^\/diagrams\/([^/]+)\/adrs(?:\/full)?$/);
+    if (adrPath && method === 'GET') return fulfill(route, [...adrs.values()].filter(adr => adr.diagramId === adrPath[1]));
+    if (adrPath && method === 'POST') {
+      const adr = { ...route.request().postDataJSON(), id: randomUUID(), diagramId: adrPath[1], componentIds: [], relationshipIds: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      adrs.set(adr.id, adr); return fulfill(route, adr, 201);
+    }
     if (method === 'GET' && /^\/diagrams\/[^/]+\/component-adr-counts$/.test(path)) return fulfill(route, []);
     if (method === 'GET' && /^\/diagrams\/[^/]+\/(?:components\/[^/]+\/adrs|relationships\/[^/]+\/adrs)$/.test(path)) return fulfill(route, []);
     const entry = path.match(/^\/diagrams\/([^/]+)\/components\/([^/]+)\/container-diagram$/);
@@ -104,34 +126,145 @@ async function mockContainerApi(page: Page, options: { failFirstChildLoad?: bool
     const contextPath = path.match(/^\/diagrams\/([^/]+)\/container-context$/);
     if (contextPath) {
       const child=[...children.values()].find(d=>d.id===contextPath[1]);
-      return fulfill(route,{scope:child.scope,sources:parent.components.filter((c:any)=>c.id!==child.scope.softwareSystemId).map((c:any)=>({id:c.id,name:c.name,description:c.description,type:c.type})),capturedAt:new Date().toISOString()});
+      return fulfill(route,{scope:resolved(child).scope,sources:sourceParent(child).components.filter((c:any)=>c.id!==child.scope.softwareSystemId).map((c:any)=>({id:c.id,name:c.name,description:c.description,type:c.type})),capturedAt:new Date().toISOString()});
     }
     const diagramPath = path.match(/^\/diagrams\/([^/]+)$/);
     if (diagramPath) {
       const [, id] = diagramPath;
-      const found = id === parent.id ? parent : [...children.values()].find(document => document.id === id);
+      const found = id === parent.id ? parent : extraParents.get(id) ?? [...children.values()].find(document => document.id === id);
       if (!found) return fulfill(route, { message: 'Diagram not found.' }, 404);
       if (method === 'GET') {
         if (found.kind === 'container' && failFirstChildLoad) {
           failFirstChildLoad = false;
           return fulfill(route, { message: 'Temporary child load failure.' }, 503);
         }
-        return fulfill(route, found);
+        return fulfill(route, resolved(found));
       }
       if (method === 'PUT') {
+        savedPaths.push(id);
+        if (failNextSave) { failNextSave = false; return fulfill(route, { message: 'Temporary save failure.' }, 503); }
         const saved = diagramDocumentSchema.parse(JSON.parse(route.request().postData() ?? '{}'));
         if (id === parent.id) parent = saved as any;
+        else if (extraParents.has(id)) extraParents.set(id, saved);
         else {
           const ownerId = (saved as any).scope.softwareSystemId;
           children.set(ownerId, saved as any);
         }
-        return fulfill(route, saved);
+        return fulfill(route, resolved(saved));
       }
     }
     return fulfill(route, { message: `No mock for ${method} ${path}` }, 404);
   });
-  return { get parent() { return parent; }, children };
+  return { get parent() { return parent; }, children, extraParents, savedPaths, adrs, failSave: () => { failNextSave = true; } };
 }
+
+test('keeps a named child under its parent across repeated saves, guarded return, refresh and failed-save retry', async ({ page }) => {
+  test.setTimeout(60_000);
+  const mock = await mockContainerApi(page, { sourceOccurrence: true });
+  const beforeParent = structuredClone(mock.parent);
+  const child = mock.children.get(ids.sourceSystem);
+  await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${child.id}"]`).click();
+  await page.getByLabel('Diagram name', { exact: true }).fill('Ledger runtime');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator(`.saved-diagram-children .saved-diagram-button[data-diagram-id="${child.id}"]`)).toContainText('Ledger runtime');
+  await page.getByLabel('Diagram name', { exact: true }).fill('Ledger runtime two');
+  mock.failSave(); await page.getByRole('button', { name: /Return to .*Payments architecture/ }).click();
+  await page.getByRole('button', { name: 'Save and load', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Temporary save failure' }).first()).toBeVisible();
+  await expect(page.getByLabel('Diagram name', { exact: true })).toHaveValue('Ledger runtime two');
+  await page.getByRole('button', { name: 'Save and load', exact: true }).click();
+  await expect(page.locator('#diagram-heading')).toHaveText('Payments architecture');
+  await expect(page.locator('#diagram-heading')).toBeFocused();
+  await expect(page.locator(`.react-flow__node[data-id="${ids.sourceSystem}"] .component-node`)).toHaveClass(/is-selected/);
+  expect(mock.parent).toEqual(beforeParent); expect(mock.savedPaths).toEqual([child.id, child.id, child.id]);
+  await page.reload(); await page.locator(`.saved-diagram-button[data-diagram-id="${child.id}"]`).click();
+  await expect(page.getByLabel('Diagram name', { exact: true })).toHaveValue('Ledger runtime two');
+  expect(mock.children.get(ids.sourceSystem).scope.parentDiagramId).toBe(ids.parentDiagram);
+  await page.getByLabel('Diagram name', { exact: true }).fill('Canceled draft');
+  await page.getByRole('button', { name: /Return to .*Payments architecture/ }).click(); await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.getByLabel('Diagram name', { exact: true })).toHaveValue('Canceled draft');
+  await page.getByRole('button', { name: /Return to .*Payments architecture/ }).click(); await page.getByRole('button', { name: 'Discard and load', exact: true }).click();
+  await expect(page.locator('#diagram-heading')).toHaveText('Payments architecture');
+  expect(mock.children.get(ids.sourceSystem).name).toBe('Ledger runtime two');
+});
+
+test('groups identically named children by parent UUID and counts own-field filter matches only', async ({ page }) => {
+  const mock = await mockContainerApi(page, { duplicateParent: true }); await page.goto('/');
+  const children = [...mock.children.values()];
+  await expect(page.locator('.saved-diagram-group')).toHaveCount(2);
+  for (const child of children) await expect(page.locator(`.saved-diagram-group[data-parent-diagram-id="${child.scope.parentDiagramId}"] .saved-diagram-children`)).toContainText('Runtime');
+  await page.getByLabel('Filter diagrams by name').fill('runtime');
+  await expect(page.locator('#saved-diagrams-filter-status')).toHaveText('2 of 4 diagrams match the filters.');
+  await expect(page.locator('.saved-diagram-parent-context')).toHaveCount(2);
+  await page.getByLabel('Sort diagrams by').selectOption('name'); await page.getByLabel('Sort direction').selectOption('ascending');
+  const first = page.locator(`.saved-diagram-button[data-diagram-id="${children[0].id}"]`); await first.focus(); await page.keyboard.press('Enter');
+  await expect(first).toHaveAttribute('aria-current', 'true');
+  await page.getByLabel('Diagram name', { exact: true }).fill('Runtime renamed'); await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator(`.saved-diagram-button[data-diagram-id="${children[0].id}"]`)).toHaveCount(1);
+  const deleteAction = page.locator('.saved-diagram-row').filter({ has: page.locator(`.saved-diagram-button[data-diagram-id="${children[0].id}"]`) }).getByRole('button', { name: /^Delete Runtime renamed,/ });
+  await deleteAction.focus(); await page.keyboard.press('Enter'); await expect(page.getByRole('alertdialog')).toContainText('Delete "Runtime renamed"?');
+  await page.keyboard.press('Escape'); await expect(deleteAction).toBeFocused(); expect(mock.children.size).toBe(2);
+  await page.getByLabel('Filter diagrams by name').fill('payments architecture');
+  await expect(page.locator('#saved-diagrams-filter-status')).toHaveText('2 of 4 diagrams match the filters.'); await expect(page.locator('.saved-diagram-children')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Clear filters', exact: true }).click(); await expect(page.locator('.saved-diagram-children')).toHaveCount(2);
+  await page.screenshot({ path: 'test-results/container-library.png' });
+  await page.getByLabel('Created from', { exact: true }).fill('2026-01-02'); await page.getByLabel('Created to', { exact: true }).fill('2026-01-01'); await expect(page.locator('#saved-diagrams-filter-status')).toContainText('End date must be');
+});
+
+test('refreshes source names independently of local edits and guards a dirty ADR before library and new navigation', async ({ page }) => {
+  const mock = await mockContainerApi(page, { sourceOccurrence: true }); await page.goto('/');
+  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click();
+  await page.getByLabel('Diagram name', { exact: true }).fill('Own runtime name');
+  mock.parent.name = 'Renamed overview'; mock.parent.components.find((c: any) => c.id === ids.sourceSystem).name = 'Renamed owner'; mock.parent.components.find((c: any) => c.id === ids.owner).name = 'Renamed source';
+  const regroupedIds = [ids.owner, ids.duplicateOwner];
+  mock.parent.groups = [{ ...mock.parent.groups[0], name: 'Regrouped systems', memberComponentIds: regroupedIds, ...calculateGroupBounds(mock.parent.components.filter((c: any) => regroupedIds.includes(c.id))) }];
+  await page.getByRole('button', { name: 'Refresh source details', exact: true }).click();
+  await expect(page.locator('#container-diagram-heading')).toHaveText('Renamed owner'); await expect(page.getByRole('group', { name: 'Component Renamed source, Software System' })).toBeVisible();
+  await page.getByRole('button', { name: 'Undo', exact: true }).click(); await expect(page.getByLabel('Diagram name', { exact: true })).toHaveValue('Ledger'); await expect(page.locator('#container-diagram-heading')).toHaveText('Renamed owner');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  const savedChild = structuredClone(mock.children.get(ids.sourceSystem));
+  await page.getByRole('button', { name: /Return to Renamed overview/ }).click();
+  await expect(page.locator('#diagram-heading')).toHaveText('Renamed overview');
+  await expect(page.locator(`.react-flow__node[data-id="${ids.group}"]`)).toContainText('Regrouped systems');
+  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click();
+  await expect(page.locator('#container-diagram-heading')).toHaveText('Renamed owner');
+  expect(mock.children.get(ids.sourceSystem)).toEqual(savedChild);
+  await page.getByRole('button', { name: 'Decision', exact: true }).click(); await page.getByLabel('Title required').fill('Unsaved decision');
+  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click(); await expect(page.getByRole('alertdialog')).toBeVisible(); await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.getByLabel('Title required')).toHaveValue('Unsaved decision');
+  await page.getByRole('button', { name: 'New diagram', exact: true }).click(); await expect(page.getByRole('alertdialog')).toContainText('decision'); await page.getByRole('button', { name: 'Cancel', exact: true }).click(); await expect(page.getByLabel('Title required')).toHaveValue('Unsaved decision');
+});
+
+test('saves both child and decision before navigation and discards both only after a successful load', async ({ page }) => {
+  const mock = await mockContainerApi(page, { sourceOccurrence: true });
+  await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click();
+  await page.getByLabel('Diagram name', { exact: true }).fill('Child and decision');
+  await page.getByRole('button', { name: 'Decision', exact: true }).click();
+  for (const [label, value] of [['Title required', 'Keep the decision'], ['Context required', 'Scope context'], ['Decision required', 'Use a boundary'], ['Consequences required', 'Stable scope']]) await page.getByLabel(label, { exact: true }).fill(value);
+  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click(); await page.getByRole('button', { name: 'Save and load', exact: true }).click();
+  await expect(page.locator('#diagram-heading')).toHaveText('Payments architecture');
+  expect(mock.children.get(ids.sourceSystem).name).toBe('Child and decision'); expect([...mock.adrs.values()]).toEqual([expect.objectContaining({ diagramId: ids.populatedChild, title: 'Keep the decision' })]);
+  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click();
+  await page.getByLabel('Diagram name', { exact: true }).fill('Discarded diagram'); await page.getByRole('button', { name: 'Decision', exact: true }).click(); await page.getByLabel('Title required', { exact: true }).fill('Discarded ADR');
+  await page.getByRole('button', { name: /Return to .*Payments architecture/ }).click(); await page.getByRole('button', { name: 'Discard and load', exact: true }).click();
+  await expect(page.locator('#diagram-heading')).toHaveText('Payments architecture');
+  expect(mock.children.get(ids.sourceSystem).name).toBe('Child and decision'); expect(mock.adrs.size).toBe(1);
+  await page.getByRole('button', { name: 'Decision', exact: true }).click(); await expect(page.getByLabel('Title required', { exact: true })).toHaveValue('');
+});
+
+test('re-guards a decision edited during a slow parent load and retains the current child', async ({ page }) => {
+  await mockContainerApi(page, { sourceOccurrence: true }); await page.goto('/');
+  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click();
+  await page.getByRole('button', { name: 'Decision', exact: true }).click();
+  await expect(page.getByText('No decisions yet. Create one to capture the reasoning behind this diagram.')).toBeVisible();
+  let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+  let requested = false;
+  await page.route(`**/api/diagrams/${ids.parentDiagram}`, async route => { requested = true; await gate; await route.fallback(); });
+  await page.getByRole('button', { name: /Return to .*Payments architecture/ }).click(); await expect.poll(() => requested).toBe(true);
+  await page.getByLabel('Title required', { exact: true }).fill('Edited during load'); release();
+  await expect(page.getByRole('alertdialog')).toBeVisible(); await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.getByLabel('Title required', { exact: true })).toHaveValue('Edited during load'); await expect(page.locator('#container-diagram-heading')).toHaveText('Ledger');
+});
 
 test('creates distinct empty children from grouped duplicate-name systems, keeps ordinary selection, and opens by keyboard action', async ({ page }) => {
   const mock = await mockContainerApi(page);

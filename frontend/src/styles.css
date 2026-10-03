@@ -144,3 +144,8 @@ html,body,#root{overflow:hidden}
 .component-responsibility, .component-technology { white-space: pre-wrap; overflow-wrap: anywhere; text-overflow: clip; overflow: visible; line-height: 1.47; }
 .component-responsibility, .component-technology { font-size: 17px; font-weight: 400; }
 .canvas-edit-feedback { position: absolute; bottom: 16px; left: 64px; right: 16px; background: var(--canvas, #fff); padding: 12px 20px; border: 1px solid var(--hairline, rgba(0,0,0,.08)); border-radius: 8px; z-index: 10; }
+.diagram-context-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; width: 100%; }
+.diagram-context-controls label { font-size: 14px; font-weight: 600; }
+.diagram-context-controls input { min-height: 44px; max-width: 320px; min-width: 0; padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 11px; background: #fff; color: #1d1d1f; font: inherit; }
+.diagram-context-controls input:focus-visible, #diagram-heading:focus-visible, #container-diagram-heading:focus-visible { outline: 2px solid #0066cc; outline-offset: 3px; }
+.diagram-context-controls button { min-height: 44px; }

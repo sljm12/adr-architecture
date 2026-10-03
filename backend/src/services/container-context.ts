@@ -1,4 +1,4 @@
-import { assertDiagramInvariants, diagramDocumentSchema, isC4ArtifactType, type ContainerAvailability, type ContainerContext, type DiagramDocument } from '../../../shared/src/index';
+import { assertDiagramInvariants, diagramDocumentSchema, isC4ArtifactType, type ContainerAvailability, type ContainerContext, type DiagramDocument, type DiagramSummary } from '../../../shared/src/index';
 import type { DiagramRepositoryLike } from '../persistence/diagram-repository';
 import { GraphTransaction } from '../persistence/graph-transaction';
 import { ApiConflictError, ApiValidationError } from '../api/errors';
@@ -16,6 +16,23 @@ export class ContainerContextService {
 
   constructor(private readonly repository: DiagramRepositoryLike) { this.graph = new GraphTransaction(repository); }
 
+  async summaries(status: 'active' | 'trashed'): Promise<DiagramSummary[]> {
+    const documents = await this.repository.listAll();
+    const byId = new Map(documents.map(document => [document.id, document]));
+    return documents.filter(document => document.status === status).map(document => {
+      if (document.kind !== 'container') return this.summary(document);
+      const parent = document.scope ? byId.get(document.scope.parentDiagramId) : undefined;
+      const owner = parent?.components.find(component => component.id === document.scope?.softwareSystemId);
+      if (!parent || parent.kind !== 'general' || !owner || owner.diagramId !== parent.id || (owner.role ?? 'element') !== 'element' || owner.type !== 'software-system') throw new ApiConflictError(`Container diagram ${document.id} has a broken parent or owner reference. Repair the referenced Software System.`, 'DIAGRAM_REFERENCE_BROKEN');
+      if (status === 'active' && parent.status !== 'active') throw new ApiConflictError(`Restore parent diagram ${parent.name} before opening its container diagrams.`, 'PARENT_INACTIVE');
+      for (const occurrence of document.components.filter(component => component.role === 'external')) {
+        const source = parent.components.find(component => component.id === occurrence.sourceComponentId);
+        if (!source || (source.role ?? 'element') !== 'element' || !isC4ArtifactType(source.type) || source.id === owner.id) throw new ApiConflictError(`External participant ${occurrence.id} has a broken source. Repair its parent reference.`, 'DIAGRAM_REFERENCE_BROKEN');
+      }
+      return this.summary({ ...document, scope: { parentDiagramId: parent.id, softwareSystemId: owner.id, parentDiagramName: parent.name, softwareSystemName: owner.name, softwareSystemDescription: owner.description } });
+    });
+  }
+
   async availability(diagramId: string, componentId: string): Promise<ContainerAvailability> {
     const resolved = await this.resolveOwner(diagramId, componentId, this.repository);
     const child = await this.repository.findContainerForOwner(resolved.owner.id);
@@ -26,7 +43,7 @@ export class ContainerContextService {
       parentDiagramId: resolved.parent.id,
       softwareSystemId: resolved.owner.id,
       availability: !child ? 'none' : child.status === 'active' ? 'active' : 'trashed',
-      diagram: child ? this.summary(child) : null,
+      diagram: child ? this.summary({ ...child, scope: resolved.scope }) : null,
     };
   }
 

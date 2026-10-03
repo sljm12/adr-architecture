@@ -8,7 +8,7 @@ const formatDate = (value: string) => new Intl.DateTimeFormat(undefined, { dateS
 
 export function AdrList({ diagramId }: { diagramId: string }) {
   const [filterStatus, setFilterStatus] = useState<AdrStatus | 'all'>('all');
-  const records = useAdrStore(state => state.records); const status = useAdrStore(state => state.status); const error = useAdrStore(state => state.error); const draft = useAdrStore(state => state.draft); const load = useAdrStore(state => state.load); const select = useAdrStore(state => state.select); const startNew = useAdrStore(state => state.startNew);
+  const records = useAdrStore(state => state.records); const status = useAdrStore(state => state.recordsStatus); const error = useAdrStore(state => state.recordsError); const draft = useAdrStore(state => state.draft); const load = useAdrStore(state => state.load); const select = useAdrStore(state => state.select); const startNew = useAdrStore(state => state.startNew);
   const visibleRecords = filterStatus === 'all' ? records : records.filter(record => record.status === filterStatus);
   useEffect(() => { void load(diagramId); }, [diagramId, load]);
   return <section className="adr-list adr-list-panel" aria-labelledby="adr-list-heading">

@@ -1,6 +1,6 @@
 # Quickstart Validation: C4 Container Diagrams
 
-This guide validates the complete revised feature after implementation. Foundation, entry points and phase 4 container authoring, including migrations 0005/0006, are implemented; see [validation.md](./validation.md) for recorded results. Later save/list behavior, confirmed child-initiated parent recovery, occurrence-specific source-type feedback and container exports remain implementation work. Use [plan.md](./plan.md) for the requirement matrix, [data-model.md](./data-model.md) for artifact rules, and [contracts/openapi.yaml](./contracts/openapi.yaml) for endpoint shapes.
+This guide validates the complete revised feature after implementation. Foundation, entry points, container authoring and phase 5 save/list/navigation behavior, including migrations 0005/0006, are implemented; see [validation.md](./validation.md) for recorded results. Confirmed child-initiated parent recovery, occurrence-specific source-type feedback and container exports remain implementation work. Use [plan.md](./plan.md) for the requirement matrix, [data-model.md](./data-model.md) for artifact rules, and [contracts/openapi.yaml](./contracts/openapi.yaml) for endpoint shapes.
 
 ## Prerequisites
 

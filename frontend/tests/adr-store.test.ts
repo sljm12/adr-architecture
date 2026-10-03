@@ -8,6 +8,32 @@ const record: ArchitectureDecisionRecord = { id: '00000000-0000-0000-0000-000000
 afterEach(() => { vi.restoreAllMocks(); useAdrStore.setState({ diagramId: null, records: [], draft: null, status: 'idle', error: null, fieldErrors: {}, canUndo: false, canRedo: false }); });
 
 describe('ADR draft state', () => {
+  it('finishes listing without changing the saved or dirty draft status', async () => {
+    useAdrStore.getState().open(record);
+    vi.spyOn(adrClient, 'list').mockResolvedValue([]);
+    await useAdrStore.getState().load(record.diagramId);
+    expect(useAdrStore.getState()).toMatchObject({ status: 'saved', draft: expect.objectContaining({ id: record.id }) });
+    useAdrStore.getState().update(draft => ({ ...draft, title: 'Local edit' }));
+    await useAdrStore.getState().load(record.diagramId);
+    expect(useAdrStore.getState()).toMatchObject({ status: 'unsaved', draft: expect.objectContaining({ title: 'Local edit' }) });
+  });
+  it('keeps draft status independent from repeated concurrent list requests', async () => {
+    useAdrStore.getState().startNew(record.diagramId);
+    vi.spyOn(adrClient, 'list').mockResolvedValue([]);
+    await Promise.all([useAdrStore.getState().load(record.diagramId), useAdrStore.getState().load(record.diagramId)]);
+    expect(useAdrStore.getState().status).toBe('idle');
+    useAdrStore.getState().update(draft => ({ ...draft, title: 'Dirty ADR' }));
+    await Promise.all([useAdrStore.getState().load(record.diagramId), useAdrStore.getState().load(record.diagramId)]);
+    expect(useAdrStore.getState().status).toBe('unsaved');
+  });
+  it('ignores an ADR listing that arrives after navigation resets the decision context', async () => {
+    useAdrStore.getState().open(record);
+    let release!: (rows: any[]) => void;
+    vi.spyOn(adrClient, 'list').mockImplementation(() => new Promise(resolve => { release = resolve; }));
+    const loading = useAdrStore.getState().load(record.diagramId);
+    const nextId = crypto.randomUUID(); useAdrStore.getState().startNew(nextId); release([record]); await loading;
+    expect(useAdrStore.getState()).toMatchObject({ diagramId: nextId, records: [], draft: expect.objectContaining({ diagramId: nextId }), status: 'idle' });
+  });
   it('validates required fields before save and retains the draft', async () => {
     const create = vi.spyOn(adrClient, 'create');
     useAdrStore.getState().startNew(record.diagramId);

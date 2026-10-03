@@ -70,7 +70,9 @@ export function createApiClient(options: { baseUrl?: string; fetch?: FetchLike }
     },
     async getDiagram(diagramId: string) {
       const path = `/diagrams/${encodeURIComponent(diagramId)}`;
-      return parse(await getJson(path), diagramDocumentSchema, `${baseUrl}${path}`);
+      const document = parse(await getJson(path), diagramDocumentSchema, `${baseUrl}${path}`);
+      if (document.id !== diagramId) throw new ApiClientError('ADR Diagram service returned a diagram identity that does not match the requested saved diagram.');
+      return document;
     },
     async listFullAdrs(diagramId: string) {
       const path = `/diagrams/${encodeURIComponent(diagramId)}/adrs/full`;

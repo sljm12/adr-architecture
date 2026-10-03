@@ -124,7 +124,7 @@ test.describe('delete diagrams safely', () => {
     await mockSuccessfulDiagramDeletion(page, target.id);
     await page.goto('/');
 
-    const row = page.locator(`li:has(.saved-diagram-button[data-diagram-id="${target.id}"])`);
+    const row = page.locator(`.saved-diagram-row:has(.saved-diagram-button[data-diagram-id="${target.id}"])`);
     await row.getByRole('button', { name: `Delete ${target.name}` }).click();
     await expect(page.getByRole('alertdialog')).toContainText(`Delete "${target.name}"?`);
     await expect(page.getByRole('alertdialog')).toContainText('recoverable trash');
@@ -143,7 +143,7 @@ test.describe('delete diagrams safely', () => {
     await mockActiveDiagramSummaries(page, activeDiagramListFixtures);
     await mockFailedDiagramDeletion(page, target.id, 'Diagram is unavailable.');
     await page.goto('/');
-    const row = page.locator(`li:has(.saved-diagram-button[data-diagram-id="${target.id}"])`);
+    const row = page.locator(`.saved-diagram-row:has(.saved-diagram-button[data-diagram-id="${target.id}"])`);
     await row.getByRole('button', { name: `Delete ${target.name}` }).click();
     await page.getByRole('button', { name: 'Move to trash' }).click();
     await expect(row).toBeVisible();
