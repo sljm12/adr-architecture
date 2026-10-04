@@ -1,6 +1,6 @@
 # Quickstart Validation: C4 Container Diagrams
 
-This guide validates the complete revised feature after implementation. Foundation, entry points, container authoring and phase 5 save/list/navigation behavior, including migrations 0005/0006, are implemented; see [validation.md](./validation.md) for recorded results. Confirmed child-initiated parent recovery, occurrence-specific source-type feedback and container exports remain implementation work. Use [plan.md](./plan.md) for the requirement matrix, [data-model.md](./data-model.md) for artifact rules, and [contracts/openapi.yaml](./contracts/openapi.yaml) for endpoint shapes.
+This guide validates the complete revised feature. Phases 1–6 implement entry points, authoring, canonical saves/nested lists, occurrence-specific source protection, confirmed child-initiated parent recovery and container exports, including migrations 0005/0006. Phase 7 records release evidence and observed usability separately; see [validation.md](./validation.md) for actual outcomes and outstanding gates. Use [plan.md](./plan.md) for the requirement matrix, [data-model.md](./data-model.md) for artifact rules, and [OpenAPI 1.2.0](./contracts/openapi.yaml) for endpoint shapes.
 
 ## Prerequisites
 
@@ -27,6 +27,11 @@ npm.cmd run build
 npm.cmd run dev
 ```
 
+Deployment order: preserve applied migration 0005, apply pending 0006 transactionally, then deploy
+the runtime requiring `containerType`. Only existing internal rows receive the Application
+compatibility default; new child writes must explicitly provide Application/Datastore. Do not run
+these migration commands against an already-migrated schema without tracking which are pending.
+
 For an existing validation database, apply only pending migrations in order through its migration runner. Preserve applied 0005; 0006 is now available. Seed an older database before 0005 and verify its IDs, timestamps, groups, relationships and ADR links remain unchanged. Separately seed a 0005 database with active and trashed children containing generic internal containers, then apply 0006. Verify only their new containerType is backfilled to application, all existing IDs/timestamps/type/details/layout/links persist, and general/external subtypes remain null. Application is the compatibility default; authors can change an existing data store to Datastore afterward.
 
 Open http://localhost:5173; API health is http://localhost:3000/health. Keep DATABASE_URL available to backend/test processes.
@@ -40,6 +45,14 @@ $env:RUN_POSTGRES_TESTS = '1'
 npm.cmd test
 npm.cmd run test:e2e -- e2e/tests/container-diagrams.spec.ts
 ```
+
+For a stable complete release run, use `npm.cmd test -- --no-file-parallelism` and
+`npm.cmd run test:e2e -- --workers=1`. A headless test configuration can override the existing
+Windows browser launch setting without changing product behavior. Scale coverage lives in
+`shared/tests/container-scale.test.ts` and `e2e/tests/performance.spec.ts`: 100 internal containers,
+100 distinct externals and 300 relationships, compared with a general diagram of the same size
+and the existing five-component baseline. Timings describe the validation machine and API harness;
+they are not observed author/reviewer success rates or a product limit.
 
 Vitest must include shared schema/layout/export, frontend state/adapter/UI, backend contract and real PostgreSQL feature tests. A skipped PostgreSQL suite is not a pass. Feature file names in plan.md are planned; task generation can align them with repository conventions.
 
@@ -125,3 +138,40 @@ Choose a nonexistent output file. Expected: the child's own name and canonical s
 Measure SC-001 creation and SC-003 modeling using prepared information; record completion/time/errors. For SC-004, ask reviewers to identify scope, containers/technologies and externals without color dependence. Complete create/edit/save/return with keyboard alone as described in [ui-contract.md](./contracts/ui-contract.md).
 
 Before reporting implementation complete, record migration/old-payload results, executed/skipped PostgreSQL counts, relevant browser checks, export inspections and usability outcomes against the plan matrix. Planning review alone does not establish these implementation results.
+
+### Participant observation protocol (T089)
+
+Use first-time authors for SC-001 and reviewers unfamiliar with the prepared model for SC-004.
+Record anonymized participant IDs; count failed attempts and timeouts in the denominator. Do not
+coach participants during a timed attempt or substitute browser automation for participant results.
+Record the sample size and entry-point distribution so a success percentage can be assessed.
+
+1. **Creation (SC-001):** Start with the saved Payments Software System visible. Ask the author to
+   open its internal architecture, without separate control instructions. Start the clock when the
+   task is shown and stop when its labeled child is open. Record double-click or selected action,
+   elapsed seconds, success within 30 seconds, errors and any assistance. Target: at least 90%.
+2. **Modeling (SC-003):** Supply the Web application (React/customer interface), Payments service
+   (TypeScript/orchestration), Payments data store (PostgreSQL/transaction records), Customer and
+   Ledger information above. Require Web → service (`Submits payment`, HTTPS), service → data store
+   (`Stores payment`, SQL), and Customer → Web (`Makes payment`, HTTPS), with Customer included from
+   the parent. Stop when three containers with complete metadata and those interactions are visible.
+   Record elapsed seconds, errors/assistance and success under 300 seconds.
+3. **Readability (SC-004):** Show the prepared diagram without explaining the legend. Ask the reviewer
+   to name its owning system, all three internal containers and their technologies, and the external
+   participants. Stop when the answers are complete or at 60 seconds. Record each answer, elapsed
+   time, errors and success within one minute. Verify labels/shapes rather than color-only answers.
+
+| Participant | Check | Entry point / answers | Seconds | Success within target | Errors / assistance |
+| --- | --- | --- | ---: | --- | --- |
+| Fill after observation | SC-001 / SC-003 / SC-004 | Record actual behavior | — | — | — |
+
+For SC-001 and SC-004 report `successful participants / attempted participants × 100`, sample sizes,
+times and errors separately. For SC-003 report each author's time and completeness. An empty
+worksheet means **not observed**, not a pass. Append actual outcomes to `validation.md` and keep
+T089 and the final T090 gate unchecked until the required evidence exists.
+
+Offline inspection uses the extracted package with the application unavailable: follow a container,
+external occurrence and relationship to its ADR, then return to the same local anchor. Check empty
+and populated boundaries, both subtype labels, full Unicode/multiline metadata, SVG bounds and
+the absence of network-dependent links. The automated offline browser scenario supplies artifact
+evidence separately from participant timing/readability.

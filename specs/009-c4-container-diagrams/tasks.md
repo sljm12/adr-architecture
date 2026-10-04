@@ -12,7 +12,7 @@
 
 **Clarification reconciliation**: Updated against the 2026-10-02 FR-015/FR-017 decisions and OpenAPI 1.2.0. Expand the pending US4 source-protection/recovery tasks, corresponding tests, requirement coverage, and final validation without changing the current T001–T090 IDs or any completion markers. New coverage is required for occurrence-specific blockers across active/recoverable children and confirmed child-initiated parent-batch restoration; the prior implementation evidence does not establish these clarified behaviors.
 
-**Status**: 90 tasks: 84 completed, 6 outstanding. Phases 1–6 (T001–T084) are complete. Migration 0005 remains unchanged and subtype work uses forward migration 0006; phase 6 adds no migration or dependency. Validation is recorded in [validation.md](./validation.md). Phase 7 release, scale, documentation and observed usability gates remain outstanding in T085–T090.
+**Status**: 90 tasks: 88 completed, 2 outstanding. Phases 1–6 (T001–T084) and Phase 7 automated scale/documentation/release tasks T085–T088 are complete. Migration 0005 remains unchanged and subtype work uses forward migration 0006; phase 7 adds no migration or dependency. The build, 418 tests with actual PostgreSQL and no skips, and all 66 browser scenarios pass. Evidence is recorded in [validation.md](./validation.md). T089 observed participant checks and dependent T090 final sign-off remain outstanding; the user requested the observation worksheet and leaving that gate open because participant results are unavailable.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -186,10 +186,10 @@
 
 **Purpose**: Establish implementation evidence and compatibility across the complete feature.
 
-- [ ] T085 [P] Add the 100-container/100-external/300-relationship validation/layout/export envelope and general-diagram baseline comparison in `shared/tests/container-scale.test.ts` and `e2e/tests/performance.spec.ts`; record timing and batched-resolution behavior in `specs/009-c4-container-diagrams/validation.md` without introducing a product limit or per-source lookup loop.
-- [ ] T086 [P] Update `README.md` and `specs/009-c4-container-diagrams/quickstart.md` for preserved 0005 and forward 0006, application-only compatibility backfill/deployment order, exactly-two-choice editing, stale form reset, both entry points, source editing, canonical child save/retry, nested library filters/counts and navigation. Document active/recoverable occurrence blockers and explicit removal, restore-impact root/batch confirmation, stale preview retry, earlier-independent-child exclusion/separate restore, browser-draft versus saved CLI exports and empty Mermaid alternatives; keep examples aligned with implemented OpenAPI 1.2.0 behavior.
-- [ ] T087 Run `npm.cmd run build` and `npm.cmd test` from `package.json` with a dedicated DATABASE_URL and RUN_POSTGRES_TESTS enabled; verify clean installation through 0006 and populated 0005-to-0006 upgrade, subtype round trips, active/recoverable source-type protection, occurrence blocker identities and artifact preservation, restore-impact/confirmation contracts, stale set/batch rejection and whole-batch rollback. Require real PostgreSQL races to execute without skips and existing general/group/ADR/CLI/export compatibility to pass; fix failures and record results in `specs/009-c4-container-diagrams/validation.md`.
-- [ ] T088 Run the feature browser suite in `e2e/tests/container-diagrams.spec.ts` plus affected saved-diagram, grouping, ADR, recovery and HTML-portability workflows in `e2e/tests/`; rerun the previously inconclusive combined entry suite and cover SC-009 subtype/navigation and SC-010 repeated-save/list/failure cases. Verify clarified FR-015/FR-017 occurrence feedback, child-initiated parent confirmation/cancel, earlier-independent-child separate restore, stale preview retry and full list reconciliation. Complete the keyboard-only select/create/edit/connect/save/return journey and focus/error checks; fix failures and record outcomes in `specs/009-c4-container-diagrams/validation.md` (depends on T087).
+- [X] T085 [P] Add the 100-container/100-external/300-relationship validation/layout/export envelope and general-diagram baseline comparison in `shared/tests/container-scale.test.ts` and `e2e/tests/performance.spec.ts`; record timing and batched-resolution behavior in `specs/009-c4-container-diagrams/validation.md` without introducing a product limit or per-source lookup loop.
+- [X] T086 [P] Update `README.md` and `specs/009-c4-container-diagrams/quickstart.md` for preserved 0005 and forward 0006, application-only compatibility backfill/deployment order, exactly-two-choice editing, stale form reset, both entry points, source editing, canonical child save/retry, nested library filters/counts and navigation. Document active/recoverable occurrence blockers and explicit removal, restore-impact root/batch confirmation, stale preview retry, earlier-independent-child exclusion/separate restore, browser-draft versus saved CLI exports and empty Mermaid alternatives; keep examples aligned with implemented OpenAPI 1.2.0 behavior.
+- [X] T087 Run `npm.cmd run build` and `npm.cmd test` from `package.json` with a dedicated DATABASE_URL and RUN_POSTGRES_TESTS enabled; verify clean installation through 0006 and populated 0005-to-0006 upgrade, subtype round trips, active/recoverable source-type protection, occurrence blocker identities and artifact preservation, restore-impact/confirmation contracts, stale set/batch rejection and whole-batch rollback. Require real PostgreSQL races to execute without skips and existing general/group/ADR/CLI/export compatibility to pass; fix failures and record results in `specs/009-c4-container-diagrams/validation.md`.
+- [X] T088 Run the feature browser suite in `e2e/tests/container-diagrams.spec.ts` plus affected saved-diagram, grouping, ADR, recovery and HTML-portability workflows in `e2e/tests/`; rerun the previously inconclusive combined entry suite and cover SC-009 subtype/navigation and SC-010 repeated-save/list/failure cases. Verify clarified FR-015/FR-017 occurrence feedback, child-initiated parent confirmation/cancel, earlier-independent-child separate restore, stale preview retry and full list reconciliation. Complete the keyboard-only select/create/edit/connect/save/return journey and focus/error checks; fix failures and record outcomes in `specs/009-c4-container-diagrams/validation.md` (depends on T087).
 - [ ] T089 Perform observed SC-001 creation, SC-003 modeling, and SC-004 readability checks using prepared architecture information in `specs/009-c4-container-diagrams/quickstart.md`; record participant counts, observed times, success rates, and errors against the 90%/30-second, five-minute, and 90%/one-minute targets in `specs/009-c4-container-diagrams/validation.md`, and inspect exported SVG/HTML/ADR links offline (depends on T088).
 - [ ] T090 Reconcile FR-001–FR-024 and SC-001–SC-010 evidence in `specs/009-c4-container-diagrams/validation.md` against `specs/009-c4-container-diagrams/plan.md` and `specs/009-c4-container-diagrams/contracts/`; require new evidence for subtype/save/list gates and clarified FR-015/FR-017 source preservation and confirmed parent-batch recovery. Confirm unchanged identities/creation times, no unsupported export omission/placeholders and accurate completion in `specs/009-c4-container-diagrams/tasks.md`; leave unexecuted/failed gates explicitly outstanding (depends on T085–T089).
 
@@ -320,8 +320,8 @@ T062 and T064 have additional disjoint ADR/database test files; T069 browser add
 | US2 (P1) | 19 | 19 | 0 |
 | US3 (P2) | 13 | 13 | 0 |
 | US4 (P2) | 24 | 24 | 0 |
-| Polish | 6 | 0 | 6 |
-| **Total** | **90** | **84** | **6** |
+| Polish | 6 | 4 | 2 |
+| **Total** | **90** | **88** | **2** |
 
 ## Implementation Strategy
 
@@ -329,8 +329,8 @@ T062 and T064 have additional disjoint ADR/database test files; T069 browser add
 
 1. Preserve completed Setup/Foundation/US1 and their recorded database and contract checks.
 2. US1 remains the first demo milestone: saved Software System -> Create/Open -> same empty labeled child with parent-save/retry safeguards.
-3. The 20 current container scenarios pass together alongside 29 affected general/ADR/recovery/offline-export scenarios. Complete the remaining release journey in T088.
-4. Continue at Phase 7. The story checkpoints are implemented; release-scale, documentation and observed usability evidence remain outstanding.
+3. The 21 current container scenarios pass together within the clean 66-scenario release run, including general/ADR/recovery/offline-export, scale and keyboard workflows. T088 is complete.
+4. Continue at T089 after participant observations are available, then finalize T090. The story checkpoints and automated release gates are implemented; the observation worksheet and provisional requirement matrix are ready.
 
 ### Incremental Delivery
 
@@ -355,4 +355,4 @@ Use the listed disjoint test-authoring batches and performance/documentation pai
 - Child-requested recovery with a trashed parent previews and confirms the parent's exact batch first. An earlier independently trashed requested child stays trashed until separately confirmed afterward; a restored root response is not a child response. Recheck both IDs and batch identity under lock, and preserve work/focus on cancel or failure.
 - Unsupported source reclassification cannot bypass active or recoverable occurrence dependencies. Identify the exact child/source/occurrence IDs and require explicit occurrence removal through existing relationship/ADR safeguards; never silently unlink or cascade-delete. These decisions reuse 0005 provenance and require no additional recovery migration.
 - Do not introduce auth, collaboration, deeper C4 levels, permanent deletion, ownership detachment, recursive packages, a new import workflow or revision-history subsystem.
-- Keep T001–T028 completion flags/evidence unchanged. T029–T084 have phase 4–6 implementation/validation evidence; T085–T090 remain unchecked until their required work and validation exist.
+- Keep T001–T028 completion flags/evidence unchanged. T029–T084 retain phase 4–6 evidence, and T085–T088 have phase 7 implementation/validation evidence. Leave T089–T090 unchecked until observed participant results and final sign-off exist.

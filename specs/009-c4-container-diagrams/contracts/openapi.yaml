@@ -8,8 +8,8 @@ info:
     All graph mutations lock the source parent before affected children and validate dependencies
     within the same transaction. Revised design includes internal container subtypes and
     canonical child save identity, confirmed child-initiated parent recovery and occurrence-specific
-    source reclassification blockers; existing foundation/entry endpoints are implemented,
-    while remaining behavior is planned.
+    source reclassification blockers. Phases 1–6 implement these operations;
+    release and observed usability evidence is recorded separately in validation.md.
 paths:
   /diagrams:
     get:
@@ -361,10 +361,10 @@ components:
       enum: [null]
     SourceElement:
       type: object
-      required: [id, diagramId, name, description, type]
+      required: [id, name, description, type]
+      description: Source summary in scope.parentDiagramId; no parent layout is copied
       properties:
         id: { type: string, format: uuid }
-        diagramId: { type: string, format: uuid }
         name: { type: string }
         description: { type: string, nullable: true }
         type: { type: string, enum: [person, software-system] }

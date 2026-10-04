@@ -110,3 +110,159 @@ Browser HTML export clones the current child and ADR draft before source lookup,
 | `git diff --check` | Passed | No whitespace errors. Ignore files already cover the generated screenshots/packages and build outputs. |
 
 Mermaid quoted labels, entities, subgraphs and directed labeled edges were verified with Context7 (`/mermaid-js/mermaid`). Phase 6 completes the US4 checkpoint and updates the task summary to 84 completed/6 outstanding. The phase 7 scale envelope, documentation, full release journey, observed participant timing/readability and final requirement reconciliation are still unchecked; these story-level results do not substitute for those gates.
+
+## Phase 7 release validation
+
+Captured on 2026-10-05. T085–T088 are complete; the final combined browser run passed all 66 scenarios.
+T089 and the final T090 sign-off remain outstanding. The user explicitly requested an observation
+worksheet and leaving the usability gate open because participant results are not available.
+Earlier phase records above are historical; this section records the current release evidence.
+
+No runtime dependency, lockfile, migration or artifact schema changed in this phase. Migration 0005
+is preserved; deployment guidance requires forward 0006 before the subtype-aware runtime. The
+feature pointer still selects `specs/009-c4-container-diagrams`. The 16-item requirements checklist
+passed and its markers were not edited. Existing Git/Docker ignore patterns cover generated output;
+the packages are private and no publishing ignore file is required. `.specify/extensions.yml` is
+absent, so there are no pre/post implementation hooks.
+
+### Changes and checks
+
+- T085 adds a deterministic fixture with 100 internal containers (both subtypes), 100 distinct
+  external sources (both source types), and 300 directed relationships. A general diagram with
+  independent UUIDs provides the same-size comparison. Shared tests validate complete Mermaid,
+  SVG and HTML output, all component/relationship identities, immutable input, SVG bounds,
+  deterministic displacement and clearance. Browser checks load all 200 cards and 300 edges,
+  edit/save the same diagram, preserve the parent and export Mermaid/HTML. This is an exercised
+  envelope, not a product limit.
+- T086 updates README and quickstart for migration/deployment order, exactly-two-choice editing,
+  form reset, both entry points, source editing, child save/retry, nested filters/counts, guarded
+  navigation, occurrence-specific source blockers and explicit removal, exact root/batch recovery,
+  stale confirmation and earlier-independent-child restoration. Browser draft versus saved CLI
+  export and empty Mermaid alternatives are explicit. Quickstart includes the participant protocol
+  and blank recording worksheet.
+- The keyboard-only journey exposed a general-canvas selection gap: Enter on a focused node did
+  not update the inspector. General Enter/Space/Escape now use the existing controlled selection
+  path, retaining Shift semantics and ignoring nested interactive controls. Child selection and
+  arrow movement retain their established React Flow path. The journey reaches controls via Tab
+  and uses keyboard input for selection, child creation, adding/editing containers, interaction
+  creation, saving and parent return. It uses no pointer actions or programmatic focus.
+- The old general performance test timed the entire authoring sequence as save latency. Its
+  three-second save assertion now starts immediately before Save; authoring time is reported
+  separately. The grouping drag regression now fits the viewport before pointer coordinates,
+  waits for enclosure rather than sleeping, and compares sizes in diagram units. Its previous
+  screen-space/off-screen drag assumptions failed during the broader run; the corrected scenario
+  passed three consecutive repetitions.
+- Contract reconciliation corrected `SourceElement` to the implemented `id/name/description/type`
+  summary. Parent identity is supplied once by `scope.parentDiagramId`; the shared strict context
+  schema and resolver already use this shape. No API payload/runtime change was introduced.
+  The OpenAPI 1.2.0 introduction now describes completed behavior. All 77 reference targets and
+  11 local README/quickstart links resolve. This was a reference-target check, not a new YAML parse.
+
+| Check | Result | Evidence / limits |
+| --- | --- | --- |
+| `npm.cmd run build` | Passed | Shared/backend/frontend/CLI; existing Vite large-chunk warning remains. |
+| `RUN_POSTGRES_TESTS=1; npm.cmd test -- --no-file-parallelism` | Passed, no skips | 87 files, 418 tests; JSON result reports 418 passed, zero failed/pending. |
+| Dedicated PostgreSQL installation | Passed | Fresh `spec009_phase7_*` database created by this run and installed through 0006; no configured application database migration or fixture cleanup was performed. |
+| Existing populated 0005 → 0006 upgrade | Passed | All three migration cases execute in isolated schemas: legacy preservation/constraints and populated active/trashed subtype backfill with explicit null/unsupported subtype rejection. |
+| PostgreSQL feature persistence/races | Passed | Four canonical-creation cases, six editing round trips, 14 recovery cases (memory plus actual PostgreSQL), graph/write-guard/ADR suites; all enabled and executed. Includes source creation/removal/retyping races, exact restore sets/batches, competing restores, broken-source rollback and identity/link preservation. |
+| Final shared scale fixture | Passed | Both scale tests rerun after assigning independent baseline artifact UUIDs; no input mutation or export omission. |
+| Combined browser release gate | Passed, no skips | All 66 scenarios across 16 files passed together in 2.9 minutes, including all 21 container cases and the corrected general grouping check. The JSON report records zero skipped, unexpected or flaky cases. Earlier runs encountered server-shutdown hangs and the grouping test assumption; the final runner reused verified validation servers, exited successfully and produced its JSON report. Interrupted runs are not counted as aggregate passes. |
+| Offline HTML/SVG/ADR inspection | Passed | New browser-downloaded container ZIP extracted under `test-results/container-offline-package`, opened through `file://`; local occurrence → ADR → relationship navigation succeeds. SVG browser checks find no clipped text or overlapping cards. Updated HTML/SVG screenshots were visually inspected: both subtype labels, technologies, full Japanese/quoted metadata, external Ledger and HTTPS remain readable. Existing relocation/Markdown/CSS/keyboard package checks also execute. |
+
+Local machine: Windows, Node.js 22.17.1, installed Chrome, Vite development server and one browser
+worker. Unit timings use an in-memory repository; browser envelope requests execute actual Fastify
+routes/services against an in-process memory repository. Database behavior is established by the
+separate actual PostgreSQL suites, not by browser transport timings. JSON reports and screenshots
+remain ignored under `test-results/`; temporary validation runners are removed after use.
+
+Actual PostgreSQL runs retain the existing non-failing concurrent-client deprecation warning.
+Dedicated validation databases created by this work are removed by exact name after validation.
+The configured application database is unchanged. Current Playwright evidence handling and React
+Flow keyboard selection were verified through Context7; the selection behavior matches the
+[official accessibility guidance](https://reactflow.dev/learn/advanced-use/accessibility).
+
+### Scale measurements (single local samples, milliseconds)
+
+| Shared operation | General: 200 elements / 300 relationships | Child: 100 containers / 100 externals / 300 relationships |
+| --- | ---: | ---: |
+| Structural/invariant validation | 3.63 | 8.91 |
+| SVG layout | 5.27 | 32.48 |
+| Mermaid generation | 3.52 | 9.43 |
+| SVG generation | 17.53 | 48.13 |
+| HTML package rendering | 205.55 | 429.33 |
+| Child domain boundary/displacement | — | 12.62 |
+
+Source hydration plus active summaries took 5.50 ms for this fixture: **one parent repository read,
+zero per-source repository lookups, one list snapshot**. HTML browser export makes exactly one
+container-context request for all 100 external sources; general export makes none. In-memory
+matching does not constitute per-source database/network queries. No new limit or lookup mechanism
+was introduced.
+
+| Browser operation | General scale envelope | Container scale envelope |
+| --- | ---: | ---: |
+| Load all cards/edges | 835.00 | 940.30 |
+| Name edit/unsaved feedback | 307.60 | 230.00 |
+| Save/saved feedback | 338.00 | 328.80 |
+| Mermaid download | 79.70 | 121.40 |
+| HTML ZIP download | 218.70 | 515.70 |
+
+The original five-component/five-relationship general baseline recorded 1,202.60 ms for automated
+authoring, 52.30 ms for save feedback and 34.90 ms for Mermaid download using mocked transport.
+Scale save and Mermaid feedback meet the existing three-second checks. Container rendering does
+more metadata/layout work than the general comparison; these single samples describe the local
+harness and are not production latency guarantees, statistical benchmarks or usability rates.
+
+### FR-001–FR-024 evidence reconciliation
+
+All listed suites passed in the current automated validation and clean final browser aggregate.
+Paths are repository-relative.
+
+| Requirement | Current evidence |
+| --- | --- |
+| FR-001 | `e2e/tests/container-diagrams.spec.ts`: grouped-system double-click and repeated entry; `backend/tests/contract/container-diagrams.test.ts`. |
+| FR-002 | Same browser suite: native inspector Create/Open/Restore, external-source entry and complete keyboard journey. |
+| FR-003 | `backend/tests/persistence/container-diagrams.test.ts`: real concurrent/repeated creation, all-status uniqueness, rollback/winner resolution; duplicate-name browser cases. |
+| FR-004 | Entry contracts/UI/browser cases reject Person/group/invalid owner paths; grouped systems remain eligible. |
+| FR-005 | Entry-store/browser Save/Discard/Cancel, persisted-owner prerequisite, availability failure and create-succeeded/load-failed retry without duplicates. |
+| FR-006 | `shared/tests/container-layout.test.ts`, scale tests and browser pointer/keyboard/resize scenarios: empty/fitted boundary, clearance, deterministic displacement and rejected overlap. |
+| FR-007 | Shared schema/compatibility, PostgreSQL migration/editing and frontend/browser authoring: exactly Application/Datastore, required complete text, subtype retention and wrapped labels. |
+| FR-008 | Shared invariants, editing contracts/store and authoring/browser keyboard connection: directed description/protocol, local endpoints, external-to-external/boundary rejection. |
+| FR-009 | Context/editing contracts and browser external picker/source refresh: owner/duplicate/other-parent rejection, read-only projections and independent positions/IDs. |
+| FR-010 | Navigation store/browser cases: level/owner heading, guarded parent/library/source return, dirty diagram plus ADR, canceled/failed/stale operations preserve work. |
+| FR-011 | `frontend/tests/diagram-list.test.ts`, saved-list tests and browser named/duplicate child cases: canonical parent nesting, own-field matches, contextual headings and exact counts. |
+| FR-012 | PostgreSQL editing/recovery/migration and browser reopen/rename/regroup: scope, own name, identities, geometry, subtype, creation times and ADR references preserved. |
+| FR-013 | Container-store/history and browser authoring/geometry: atomic details/subtype/layout undo/redo with stable endpoints and occurrence identities. |
+| FR-014 | Container ADR contracts and browser create/link/supersede/protected removal; child local component/relationship targets and no inherited parent decisions. |
+| FR-015 | `backend/tests/contract/container-dependencies.test.ts`, write guards and actual PostgreSQL recovery races: active/recoverable occurrence/source UUID blockers and unchanged source/occurrence/relationship/ADR data on rejection. Browser actionable active/trash feedback also passes. |
+| FR-016 | Contract/repository/browser exact named parent batch, cancel, active-only cascade, dirty affected child/ADR guard, preserved older independent trash and rollback. |
+| FR-017 | Restore-impact contracts, PostgreSQL provenance/competing restore cases and browser child-initiated root confirmation: inactive direct-child conflict, stale ID set/batch, earlier-child exclusion/separate restore and complete active/trash list reconciliation. |
+| FR-018 | Existing general/container ADR/local relationship blockers plus browser canceled removal and stable artifact/link assertions. |
+| FR-019 | Shared container/scale export, backend export, CLI command and browser offline cases: complete validated labels/subtypes/scope/protocol/anchors; browser captured drafts vs saved CLI; explicit empty Mermaid alternative and unbundled-parent scope. |
+| FR-020 | Actual clean install and populated upgrade; shared/general legacy compatibility, grouping, ADR, CLI and export suites; grouping browser fix repeated three times. No migration/identity rewrite. |
+| FR-021 | Accessibility/contrast contracts, native entry/recovery/list controls, live errors/progress, keyboard-only journey, Escape/focus return and source/type text cues; exported screenshots inspected. Participant recognition remains SC-004's separate gate. |
+| FR-022 | Strict shared schemas/invariants, editing/write-guard contracts and export negatives: invalid subtype/type/text/endpoints/geometry/source/scope rejected before partial persistence/download. |
+| FR-023 | Navigation contracts/store/browser named-child sequence: same child PUT/name/kind/scope after repeated save, Save-before-navigation, refresh/list, rename, duplicate parents and failed/mismatched response retry; unchanged parent and one child summary. |
+| FR-024 | Subtype/store/UI/browser authoring and stale parent form reset: unsupported internal general types fail without artifacts/history; separate parent-source inclusion remains available. |
+
+### SC-001–SC-010 and remaining release gates
+
+| Criterion | Status | Evidence / outstanding observation |
+| --- | --- | --- |
+| SC-001 | Not observed | 0 first-time author participants; no observed times, success rate or errors. Need ≥90% within 30 seconds across the requested entry points. Automated creation is not participant evidence. |
+| SC-002 | Automated pass | Repeated/concurrent/grouped/duplicate-label tests resolve the intended owner with one canonical child; all enumerated cases pass. |
+| SC-003 | Not observed | 0 author participants; no complete prepared three-container/two-internal/one-external modeling time. Need complete modeling under five minutes. |
+| SC-004 | Not observed | 0 reviewer participants; no observed scope/container/technology/external recognition time or rate. Need ≥90% within one minute, without color dependence. Screenshot inspection establishes layout only. |
+| SC-005 | Automated pass | Current save/reopen/rename/geometry/history/migration/trash/restore cases preserve expected identities/scope/content/creation times and local ADR links. |
+| SC-006 | Automated pass | Current negative contracts/store/CLI/browser cases retain work, report actionable failures and produce no partial success/download. |
+| SC-007 | Automated pass | Entire Tab-only selection/create/add/edit/connect/save/return journey passes; Enter/Space/Escape selection and parent heading focus are checked. |
+| SC-008 | Automated pass | Existing general/group/ADR/CLI/export workflows pass, including corrected viewport-aware grouping regression. |
+| SC-009 | Automated pass | Both subtype choices, editing/history/save/reopen, parent-to-child draft reset and rejected unsupported internal commands/writes; external picker types unchanged. |
+| SC-010 | Automated pass | Repeated child save/navigation/list/filter/refresh/duplicate-name/retry and malformed response cases preserve own child ID/name/kind/scope and unchanged parent content. |
+
+The [quickstart observation worksheet](./quickstart.md#participant-observation-protocol-t089)
+records participant counts, entry points/answers, actual seconds, success and errors/assistance.
+No participant observations were conducted or supplied; percentages with zero participants are
+undefined, not 0% or a pass. Offline export inspection is complete as part of T089, but its three
+observed usability checks are not. T090's requirement reconciliation is recorded here provisionally;
+final sign-off depends on T089. Both tasks must stay unchecked until that evidence is recorded and
+assessed. There is no waiver inferred from passing automated tests.

@@ -14,7 +14,7 @@ describe('system group UI accessibility contract', () => {
     expect(canvas).toContain('onSelectionChange={handleSelectionChange}');
     expect(canvas).toContain('onMultiSelectionChange?.(componentIds)');
     expect(canvas).toContain('onMultiSelectionChange?.([])');
-    expect(canvas).toContain('if (event.shiftKey)');
+    expect(canvas).toContain('if (shiftKey)');
     expect(canvas).not.toContain('event.metaKey');
     expect(canvas).not.toContain('event.ctrlKey');
     expect(canvas).toContain("kind: 'group'");

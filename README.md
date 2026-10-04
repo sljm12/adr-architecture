@@ -11,6 +11,8 @@ through the REST API, and validated diagrams can be downloaded as Mermaid files.
 - Add, move, and remove software architecture components with stable UUIDs.
 - Create C4 System Context components as Person or Software System artifacts, while keeping older
   unclassified components readable.
+- Create/reopen one C4 container diagram per Software System and model Application/Datastore
+  containers with source-linked external participants.
 - Connect components with labeled directed or undirected relationships.
 - Group two or more Software Systems inside a labeled, movable boundary without rearranging their
   existing positions.
@@ -38,19 +40,30 @@ npm run dev
 ```
 
 The frontend is available at `http://localhost:5173`; the Fastify API runs at
-`http://localhost:3000`. Set `DATABASE_URL` in `backend/.env` for a PostgreSQL deployment. Apply
-the additive migrations in order with your PostgreSQL migration runner:
+`http://localhost:3000`. Set `DATABASE_URL` in the environment of the API process for a PostgreSQL
+deployment; the current server does not automatically load `backend/.env`. Apply additive migrations
+in order with your PostgreSQL migration runner before deploying the corresponding runtime:
 
 ```text
 psql "$DATABASE_URL" -f backend/drizzle/0001_initial.sql
 psql "$DATABASE_URL" -f backend/drizzle/0002_adrs.sql
 psql "$DATABASE_URL" -f backend/drizzle/0003_system_groups.sql
 psql "$DATABASE_URL" -f backend/drizzle/0004_component_dimensions.sql
+psql "$DATABASE_URL" -f backend/drizzle/0005_c4_container_diagrams.sql
+psql "$DATABASE_URL" -f backend/drizzle/0006_container_component_types.sql
 ```
 
 Migration `0003_system_groups.sql` adds `system_groups` and normalized
 `system_group_members` rows. It does not cascade group deletion into components, relationships, or
 ADR links.
+
+Preserve an already-applied `0005_c4_container_diagrams.sql` and apply only pending migrations.
+Migration 0006 adds `container_type` and backfills **Application only for existing internal
+containers**, including trashed children. General/external elements retain null subtypes and
+original types; UUIDs, creation times, metadata, geometry, relationships and ADR links remain
+unchanged. It never infers Datastore from metadata. Apply 0006 before deploying runtime validation
+that requires subtype; authors can then change existing data stores to Datastore. New internal
+writes missing a subtype fail validation.
 
 ## Tests
 
@@ -61,6 +74,10 @@ npm run test:e2e
 
 `npm test` runs domain, validation, persistence, API contract, adapter, compatibility, and export
 tests. `npm run test:e2e` starts the frontend and API together and runs the browser workflows.
+For release validation, configure a dedicated migrated `DATABASE_URL` and set
+`RUN_POSTGRES_TESTS=1`; skipped database tests do not establish migration, rollback or race safety.
+See the [container quickstart](specs/009-c4-container-diagrams/quickstart.md) and
+[validation evidence](specs/009-c4-container-diagrams/validation.md) for commands and outstanding gates.
 
 ## Mermaid preview
 
@@ -102,6 +119,10 @@ its parent directory must already exist, and an existing file is never replaced.
 Successful commands exit with status `0`. Service, validation, and file errors exit with status `1`;
 invalid command syntax exits with status `2`. Diagnostics are written to standard error.
 
+The list table also identifies diagram level, parent and owning Software System. JSON remains a flat
+array with `kind` and resolved `scope`. Container exports retain the child's own name, canonical scope,
+Application/Datastore subtypes, responsibilities, technologies, protocols and local ADR links.
+
 Component width and height are stored with the diagram and default to 180 by 72 when an older
 document is read. Apply `backend/drizzle/0004_component_dimensions.sql` before running against an
 existing PostgreSQL database so saved resizes are retained.
@@ -127,6 +148,57 @@ relationship, and ADR references.
 
 Documents created before C4 types or groups remain readable: omitted groups load as `groups: []`,
 and a null component type is shown as **Unclassified** until it is classified.
+
+## C4 container diagrams
+
+Save a general diagram containing a Software System, then double-click the system or select/view it
+and activate **Create container diagram**. Both entry points reopen the same canonical child after
+creation, including grouped systems or systems with identical names. A Person, group or internal
+container cannot own a child. An external Software System action resolves its parent source identity.
+Unsaved parent/ADR work uses Save/Discard/Cancel; failed creation/loading leaves current work visible
+and offers retry. A trashed child offers restoration and reserves its identity.
+
+Inside a child, **Add component** and editing offer exactly **Application** and **Datastore**.
+Name, responsibilities and technology are required; interactions are directed and require a
+description, with an optional protocol. Creation forms reset when switching from a parent, so
+Person/Software System drafts cannot become internal containers. **Include external participant**
+is a separate workflow for parent People and other Software Systems. Source details are read-only
+in the child: edit them in the parent, then reopen or use **Refresh source details**. Local occurrence
+positions, relationships and ADR links retain UUIDs independently of parent positions.
+
+The boundary fits internal containers; affected externals move outside with clearance in the same
+undoable edit. Invalid overlap leaves previous geometry intact. Save and Save-before-navigation
+update the existing child's own ID/name/level/scope. Failed or mismatched save responses retain the
+draft for retry. **Return to** uses the persisted parent association and guards diagram/ADR work;
+entering through the library or another source never changes ownership.
+
+The library nests children beneath parent UUIDs and shows their own name, level, owner and parent.
+Name/date filters match each diagram's own fields: contextual parent headings for matching children
+do not inflate counts, and a matching parent does not make unrelated children match. Missing parent
+summaries retain context; duplicate names do not merge parents.
+
+Owner deletion/reclassification and unsupported source reclassification are blocked while active or
+recoverable children depend on them. `DIAGRAM_DEPENDENCY` names each child/status and identifies
+source and occurrence UUIDs. Restore a trashed child if necessary, explicitly resolve its local
+relationship/ADR blockers and remove the occurrence before changing the parent source. Rejected
+writes preserve sources, occurrences, relationships and ADR links. Supported Person/Software System
+changes remain available for sources that do not own a child.
+
+Trash confirmations name the parent and currently active affected children. Restoration previews
+the canonical root and exact trash batch through `GET /diagrams/{id}/restore-impact`. Confirm that
+ID set and batch against the root restore route; changed previews require refresh/reconfirmation.
+When initiated from a child whose parent is trashed, confirmation restores the parent batch first.
+A child independently trashed earlier stays trashed and needs separate confirmation after the
+parent is active. Cancel changes nothing; failures retain work. Successful recovery followed by a
+failed refresh/load offers retry without restoring again. See
+[OpenAPI 1.2.0](specs/009-c4-container-diagrams/contracts/openapi.yaml).
+
+Populated children export scope/boundary, subtypes, metadata, externals and interactions. Browser HTML
+captures the current diagram and ADR draft, then resolves current parent source metadata without
+saving; CLI HTML uses persisted data. Empty children retain their boundary in SVG/HTML; Mermaid
+returns `422 EMPTY_CONTAINER_MERMAID` with those alternatives and produces no file. Unsupported
+content fails explicitly. Parent packages contain one diagram and state that child contents are
+not bundled. Extract the ZIP and open `index.html` offline to follow local ADR links.
 
 ## Project boundaries
 

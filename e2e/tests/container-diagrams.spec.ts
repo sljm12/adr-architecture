@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, test, type Locator, type Page, type Route } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { calculateGroupBounds, diagramDocumentSchema, fitContainerLayout } from '../../shared/src/index';
 import { containerFixtureIds as ids, emptyChildFixture, groupedOwnerParentFixture, populatedChildFixture } from '../../shared/tests/container-fixtures';
@@ -124,6 +124,63 @@ const childIds: Record<string, string> = {
   [ids.sourceSystem]: ids.populatedChild,
   '90000000-0000-4000-8000-000000000099': '99000000-0000-4000-8000-000000000004',
 };
+
+// Reach controls through the real tab order. No pointer, locator.focus(), or synthetic selection.
+async function tabTo(page: Page, target: Locator) {
+  await expect(target).toBeVisible();
+  for (let attempts = 0; attempts < 160; attempts++) {
+    if (await target.evaluate(element => element === document.activeElement)) return;
+    await page.keyboard.press('Tab');
+  }
+  throw new Error(`Control was not reachable in the keyboard tab order: ${await target.getAttribute('aria-label') ?? await target.textContent()}`);
+}
+
+test('completes selection, child creation, editing, interaction, save and parent return using only the keyboard', async ({ page }) => {
+  test.setTimeout(90_000);
+  const mock = await mockContainerApi(page);
+  const parentBefore = structuredClone(mock.parent);
+  const activate = async (target: Locator) => { await tabTo(page, target); await page.keyboard.press('Enter'); };
+  const type = async (target: Locator, value: string) => { await tabTo(page, target); await page.keyboard.press('ControlOrMeta+A'); await page.keyboard.insertText(value); };
+  await page.goto('/');
+  await activate(page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`));
+  await tabTo(page, page.locator(`.react-flow__node[data-id="${ids.owner}"]`));
+  await page.keyboard.press('Enter');
+  const entry = page.getByRole('button', { name: 'Create or open container diagram for Payments', exact: true });
+  await expect(entry).toBeVisible();
+  await page.keyboard.press('Escape'); await expect(entry).toHaveCount(0);
+  await page.keyboard.press('Space'); await expect(entry).toBeVisible();
+  await activate(entry);
+  await expect(page.locator('#container-diagram-heading')).toHaveText('Payments');
+  for (const [name, technology] of [['Keyboard API', 'TypeScript'], ['Keyboard database', 'PostgreSQL']]) {
+    await activate(page.getByRole('button', { name: 'Add component', exact: true }));
+    const inspector = page.getByLabel('Diagram inspector');
+    await expect(inspector.getByRole('radio')).toHaveCount(2);
+    await type(inspector.getByLabel('Component name', { exact: true }), name);
+    await type(inspector.getByLabel('Responsibilities', { exact: true }), `Responsibilities of ${name}`);
+    await type(inspector.getByLabel('Technology', { exact: true }), technology);
+    await activate(inspector.getByRole('button', { name: 'Add component', exact: true }));
+  }
+  const nodes = page.locator('.react-flow__node-component');
+  await tabTo(page, nodes.first()); await page.keyboard.press('Enter');
+  const inspector = page.getByLabel('Diagram inspector');
+  await type(inspector.getByLabel('Component name', { exact: true }), 'Keyboard API edited');
+  await activate(inspector.getByRole('button', { name: 'Save component', exact: true }));
+  await activate(page.getByRole('button', { name: 'Connect', exact: true }));
+  await tabTo(page, inspector.getByLabel('From', { exact: true })); await page.keyboard.press('Home'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Tab');
+  await tabTo(page, inspector.getByLabel('To', { exact: true })); await page.keyboard.press('Home'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Tab');
+  await type(inspector.getByLabel('Interaction description', { exact: true }), 'Persists keyboard records');
+  await type(inspector.getByLabel('Protocol', { exact: true }), 'SQL');
+  await activate(inspector.getByRole('button', { name: 'Connect components', exact: true }));
+  await activate(page.getByRole('button', { name: 'Save', exact: true }));
+  await expect(page.locator('.save-status')).toHaveText('Saved');
+  const saved = mock.children.get(ids.owner);
+  expect(saved.components.map((component: any) => component.name)).toEqual(['Keyboard API edited', 'Keyboard database']);
+  expect(saved.relationships).toHaveLength(1); expect(saved.relationships[0].protocol).toBe('SQL');
+  await activate(page.getByRole('button', { name: 'Return to Payments architecture, owner Payments', exact: true }));
+  await expect(page.getByLabel('Diagram name', { exact: true })).toHaveValue(parentBefore.name);
+  await expect(page.locator('#diagram-heading')).toBeFocused();
+  expect(mock.parent).toEqual(parentBefore); expect(mock.children.size).toBe(1);
+});
 
 test('confirms a child-requested exact parent batch, cancels safely and separately restores earlier trash', async ({ page }) => {
   const repository = new DiagramRepository(); repository.create(makeParent()); repository.create(populatedChildFixture() as any);
