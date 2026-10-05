@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: ADR Diagram API - C4 Container Diagrams
-  version: 1.2.0
+  version: 1.3.0
   description: >-
     Feature additions to the existing REST contract. Paths are backend paths; the Vite
     browser proxy prefixes them with /api. General diagrams remain compatible.
@@ -53,7 +53,7 @@ paths:
         as DELETE. Status and trash metadata cannot be changed through this route.
         An internal component requires containerType application or datastore; in a child,
         Person and Software System are source-derived external participants only. Saving a child updates
-        its own path ID and preserves its own name and canonical parent/owner association;
+        its own path ID and preserves its owner-derived name and canonical parent/owner association;
         it neither creates a top-level parent nor replaces parent content. Responses retain
         that ID/kind/scope. A pre-revision child payload missing subtype fails validation.
         Retyping a parent source outside person/software-system is blocked while active or
@@ -451,7 +451,7 @@ components:
     DiagramSummary:
       type: object
       description: >-
-        A container retains its own name and stable ID; scope.parentDiagramId identifies
+        A container retains its owner-derived name and stable ID; scope.parentDiagramId identifies
         its canonical parent for library grouping regardless of the latest entry point.
       required: [id, name, status, createdAt, updatedAt, kind, scope]
       properties:

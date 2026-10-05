@@ -266,3 +266,19 @@ undefined, not 0% or a pass. Offline export inspection is complete as part of T0
 observed usability checks are not. T090's requirement reconciliation is recorded here provisionally;
 final sign-off depends on T089. Both tasks must stay unchecked until that evidence is recorded and
 assessed. There is no waiver inferred from passing automated tests.
+
+## Owner-name synchronization validation (2026-10-05)
+
+Branch: `fix/container-diagram-name-sync`. Implements FR-025 / SC-011 and supersedes independent child titles. T091–T094 are complete; existing participant-observation/sign-off T089/T090 remain outstanding.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Initial rename regressions | Failed as expected | Draft projection was missing, saved child metadata stayed stale, and legacy backend names remained independent. |
+| `RUN_POSTGRES_TESTS=1; npm.cmd test -- --maxWorkers=4 --reporter=dot` | Passed, no skips | 88 files, 425 tests. Includes actual PostgreSQL legacy-title/read-time timestamp/save normalization and existing migration/concurrency/ADR coverage. |
+| `npm.cmd run build` | Passed | Shared, API, frontend and CLI builds pass. Existing Vite bundle-size advisory remains. |
+| Browser regression suite | Passed | 46 scenarios across container-diagrams, saved-diagrams, diagram-list-management, recovery, create-edit-reopen, html-package-export and adr-component-tagging. Covers immediate owner preview, UUID isolation, undo/redo, save/reload, read-only title and discard. |
+| Export and history | Passed | Browser HTML title/ZIP filename and persisted Mermaid title/filename, subtype/geometry/ADR preservation, context refresh through history, and undo after external removal/save. |
+| Visual inspection | Passed | Inspected `test-results/container-name-sync.png`: sidebar, toolbar, input and boundary show aa; unrelated duplicate owner retains Payments; layout remains usable. |
+| Diff formatting | Passed | `git diff --check`. |
+
+No migration, bulk rewrite, new dependency, identity reassignment or read-time timestamp update. Successful saves reconcile captured metadata while retaining newer drafts; failures preserve saved metadata and retry feedback. Existing custom/legacy titles resolve to the current owner.

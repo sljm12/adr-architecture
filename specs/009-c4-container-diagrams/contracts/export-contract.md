@@ -12,7 +12,7 @@ Every exporter consumes a validated, resolved domain document. Owner and source 
 
 Browser HTML export retains its existing unsaved draft behavior. Capture an immutable local diagram/ADR draft snapshot, fetch container-context for the same child/source scope, overlay current owner/source display metadata, validate IDs and fields, then generate the ZIP. A failed context lookup leaves editor state untouched and produces no successful incomplete package. Local unsaved additions to the child may reference eligible parent sources returned in the context. A source lookup never saves or changes either diagram.
 
-CLI export uses the source-resolved persisted GET document and saved ADRs through its existing client. Shared schemas must retain kind, scope, boundary, roles, containerType, technologies, protocols and source identities, rather than stripping the new fields. Preserve the child's own name and canonical parent/owner IDs in the snapshot; list grouping does not change package scope.
+CLI export uses the source-resolved persisted GET document and saved ADRs through its existing client. Shared schemas must retain kind, scope, boundary, roles, containerType, technologies, protocols and source identities, rather than stripping the new fields. Preserve the child's owner-derived name and canonical parent/owner IDs in the snapshot; list grouping does not change package scope.
 
 ## Required content by format
 
@@ -48,3 +48,7 @@ Parent/general exports remain single-diagram exports. Show a concise scope note 
 - HTML ZIP extracts and browses offline; ADR links resolve to local containers/occurrences/relationships.
 - Parent exports explicitly retain their single-diagram scope.
 - Existing general diagrams, groups, metadata, lifecycle and package paths remain compatible.
+
+## Owner title consistency (2026-10-05)
+
+Resolved titles/headings and filenames use the current owning Software System name. Browser source refresh updates the captured title alongside scope while retaining captured local content, subtype, geometry and unsaved ADR data. ZIP filenames use the refreshed capture.

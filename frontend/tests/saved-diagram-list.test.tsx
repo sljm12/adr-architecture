@@ -39,13 +39,13 @@ describe('saved-document controls', () => {
 
 describe('nested saved container library markup', () => {
   const render = () => renderToStaticMarkup(<SavedDiagramList onSelect={() => {}} onDelete={() => {}} onCreate={() => {}} />);
-  it('renders nested native lists with own name, level, owner, parent and independent open/delete buttons', () => {
+  it('renders nested native lists with the current owner title, level, parent and independent open/delete buttons', () => {
     const parent = generalParentFixture(), child = { ...emptyChildFixture(), name: 'Runtime' };
     useDiagramStore.setState({ savedDocuments: [parent, child] as any, document: child as any, savedDocumentsStatus: 'loaded', savedDocumentsDeleteStatus: 'idle' });
     const html = render();
     expect(html).toMatch(/<ul[^>]*saved-diagrams-list[^>]*>.*<li.*<ul[^>]*saved-diagram-children/s);
-    expect(html).toContain('Runtime, Container diagram, owner Payments, parent Payments architecture');
-    expect(html).toContain('Delete Runtime, Container diagram, owner Payments, parent Payments architecture');
+    expect(html).toContain('Payments, Container diagram, owner Payments, parent Payments architecture');
+    expect(html).toContain('Delete Payments, Container diagram, owner Payments, parent Payments architecture');
     expect(html).toContain('aria-current="true"'); expect(html).toContain('2 saved diagrams.');
   });
   it('retains unavailable parent context instead of showing a child as a top-level diagram', () => {

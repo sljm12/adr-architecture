@@ -1,4 +1,4 @@
-import { assertDiagramInvariants, diagramDocumentSchema, isC4ArtifactType, type ContainerAvailability, type ContainerContext, type DiagramDocument, type DiagramSummary } from '../../../shared/src/index';
+import { assertDiagramInvariants, diagramDocumentSchema, getDiagramName, isC4ArtifactType, type ContainerAvailability, type ContainerContext, type DiagramDocument, type DiagramSummary } from '../../../shared/src/index';
 import type { DiagramRepositoryLike } from '../persistence/diagram-repository';
 import { GraphTransaction } from '../persistence/graph-transaction';
 import { ApiConflictError, ApiValidationError } from '../api/errors';
@@ -117,7 +117,7 @@ export class ContainerContextService {
       }
       return { ...component, name:source.name, description:source.description, type:source.type };
     });
-    const document = diagramDocumentSchema.parse({ ...child, scope:resolved.scope, components }) as DiagramDocument;
+    const document = diagramDocumentSchema.parse({ ...child, name:resolved.owner.name, scope:resolved.scope, components }) as DiagramDocument;
     assertDiagramInvariants(document);
     return document;
   }
@@ -166,7 +166,7 @@ export class ContainerContextService {
   }
 
   private summary(document: DiagramDocument) {
-    return { id:document.id, name:document.name, status:document.status, createdAt:document.createdAt, updatedAt:document.updatedAt, kind:document.kind ?? 'general', scope:document.scope ?? null };
+    return { id:document.id, name:getDiagramName(document), status:document.status, createdAt:document.createdAt, updatedAt:document.updatedAt, kind:document.kind ?? 'general', scope:document.scope ?? null };
   }
 }
 

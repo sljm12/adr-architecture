@@ -12,9 +12,18 @@
 
 **Clarification reconciliation**: Updated against the 2026-10-02 FR-015/FR-017 decisions and OpenAPI 1.2.0. Expand the pending US4 source-protection/recovery tasks, corresponding tests, requirement coverage, and final validation without changing the current T001–T090 IDs or any completion markers. New coverage is required for occurrence-specific blockers across active/recoverable children and confirmed child-initiated parent-batch restoration; the prior implementation evidence does not establish these clarified behaviors.
 
-**Status**: 90 tasks: 88 completed, 2 outstanding. Phases 1–6 (T001–T084) and Phase 7 automated scale/documentation/release tasks T085–T088 are complete. Migration 0005 remains unchanged and subtype work uses forward migration 0006; phase 7 adds no migration or dependency. The build, 418 tests with actual PostgreSQL and no skips, and all 66 browser scenarios pass. Evidence is recorded in [validation.md](./validation.md). T089 observed participant checks and dependent T090 final sign-off remain outstanding; the user requested the observation worksheet and leaving that gate open because participant results are unavailable.
+**Status**: 94 tasks: 92 completed, 2 outstanding. Phases 1–6 (T001–T084) and Phase 7 automated scale/documentation/release tasks T085–T088 are complete. Migration 0005 remains unchanged and subtype work uses forward migration 0006; phase 7 adds no migration or dependency. The build, 418 tests with actual PostgreSQL and no skips, and all 66 browser scenarios pass. Evidence is recorded in [validation.md](./validation.md). T089 observed participant checks and dependent T090 final sign-off remain outstanding; the user requested the observation worksheet and leaving that gate open because participant results are unavailable. T091–T094 owner-name synchronization is complete; see the 2026-10-05 validation record.
 
 ## Format: `[ID] [P?] [Story] Description`
+
+## Rename synchronization fix (2026-10-05)
+
+This follow-up supersedes independent child titles in earlier tasks; T089/T090 remain outside this bug fix.
+
+- [X] T091 Add regressions for owner-derived titles, immediate draft preview/undo/discard, duplicate UUID isolation, save/list races, and legacy title normalization across memory/PostgreSQL and API/export boundaries.
+- [X] T092 Resolve container document/summary names from current owner metadata without read-time writes or migrations; normalize child saves and preserve identity guards.
+- [X] T093 Preview draft owner names before sidebar filtering/sorting, reconcile saved parent metadata, normalize context/history, and make container titles read-only.
+- [X] T094 Replace independent child-title edits in affected tests with content edits; update feature requirements/contracts and run unit, PostgreSQL, build, and browser validation.
 
 - `[P]` means tasks can run concurrently with other marked tasks in the same stated batch, in different files, after their prerequisites are complete. It does not waive phase dependencies.
 - `[US1]` through `[US4]` map to the four stories in `spec.md`.

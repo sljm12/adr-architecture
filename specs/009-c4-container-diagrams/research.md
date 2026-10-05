@@ -187,3 +187,9 @@ The 2026-10-02 revision reviewed `backend/src/services/diagram-service.ts`, both
 - Revision lookup on 2026-10-01: Context7 resolved Drizzle ORM to `/drizzle-team/drizzle-orm-docs` and fetched named CHECK constraints and migration guidance outside the sandbox. PowerShell blocked npx.ps1; npx.cmd succeeded without quota failure. The documentation establishes constraint/migration mechanisms; subtype/backfill choices and save/list rules are project design inferences from the amended requirements and repository review.
 - No unresolved technical or product clarifications remain. Source citations establish the mechanisms; the schema, lock protocol and workflow choices are feature-specific design decisions.
 - Revision on 2026-10-02 is a business-rule and contract update grounded in the accepted clarifications and repository review. No library API/configuration changes are proposed; earlier documentation lookup records remain historical evidence.
+
+## Owner-name decision (2026-10-05)
+
+- Decision: Container titles always follow the current owning Software System, including legacy/custom titles, resolved by stable parent/owner UUIDs. General diagram names remain editable. No schema migration or read-time writes/timestamp changes. Preview renames immediately and make child titles read-only.
+- Rationale: The user selected automatic naming/immediate preview. Resolve by UUID at existing read boundaries and separate draft display from saved state for undo/discard and failed saves.
+- Rejected alternatives: Independent titles, only synchronizing default titles, or only changing sidebar headings. A bulk rewrite is unnecessary because scope already resolves owner metadata.

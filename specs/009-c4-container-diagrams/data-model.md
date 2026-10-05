@@ -26,9 +26,9 @@ The shared domain remains independent of React Flow. Existing diagram, component
 - `softwareSystemId`: owning parent component UUID.
 - `parentDiagramName`, `softwareSystemName`, `softwareSystemDescription`: server-resolved display values, captured for review/export. Description may be null.
 - A general parent and an ordinary element of type software-system are required. External occurrences resolve to that source, never become owners themselves.
-- Parent/system display names follow the source on load/context refresh; child diagram name remains independently editable after its initial default.
+- Parent/system display names and the child title follow the source on load/context refresh; the child title is read-only and equals the current owner name.
 - The owner association is unique across active and trashed children. A child cannot own another child through an internal container.
-- Saving always targets the child's own ID and retains its own name, kind, boundary and parent/owner IDs. Names and later navigation entry points never determine ownership. Source display refresh must not substitute a parent/owner name for the child's name.
+- Saving always targets the child's own ID and retains its owner-derived name, kind, boundary and parent/owner IDs. Names and later navigation entry points never determine ownership. Source display refresh updates the child title from its current owner.
 
 **BoundaryLayout**: position {x, y} and positive finite size {width, height}. It has no separate artifact ID. Its React Flow ID is synthesized from the child diagram UUID, excluded from component collections, and cannot be a relationship or ADR target.
 
@@ -144,7 +144,7 @@ Restore-impact is a transient response containing requestedDiagramId, restoreRoo
 4. Repository transaction: lock source parent first; lock affected children in UUID order; reread; validate previous/incoming diff and ADR blockers; apply ID-preserving changes and return a resolved document. Failed writes roll back all rows.
 5. Database constraints backstop ownership, source existence and duplicate associations.
 
-Before registering a successful frontend save, verify response diagram ID, normalized own name, kind and parent/owner IDs match the captured request. Preserve newer draft edits according to the existing revision guard. Response mismatch or failure must leave the draft, child identity and original scope available for retry without writing parent content or publishing a misleading list entry.
+Before registering a successful frontend save, verify response diagram ID, canonical owner-derived name, kind and parent/owner IDs match the captured request. Preserve newer draft edits according to the existing revision guard. Response mismatch or failure must leave the draft, child identity and original scope available for retry without writing parent content or publishing a misleading list entry.
 
 A full-document PUT cannot bypass DELETE protections. Omitted ADR-linked artifacts or owner/source components return 409 blockers rather than dropping links. Valid new source/owner associations are never checked in a separate transaction from their insertion.
 
@@ -164,3 +164,7 @@ A full-document PUT cannot bypass DELETE protections. Omitted ADR-linked artifac
 - Container/occurrence removal checks local relationships and ADR links. Relationship removal checks ADR links.
 - Confirmation preflight is informational. DELETE compares the confirmed affected-diagram ID set against the current set under lock and returns TRASH_IMPACT_CHANGED if it differs.
 - Restore preflight is informational. Root POST compares the confirmed set and batch identity under lock, requires confirmation for multi-diagram batches, and returns the restored root document. Cancellation does not issue a mutation; failed validation rolls back the whole batch. Clients refresh all affected summaries and separately load the requested child if it was included.
+
+## Owner-derived name contract (2026-10-05)
+
+Container titles always follow the current owning Software System, including legacy/custom titles, resolved by stable parent/owner UUIDs. General diagram names remain editable. No schema migration or read-time writes/timestamp changes. Container name equals scope.softwareSystemName in documents/summaries; stored names are compatibility caches and child saves write the canonical value. Frontend child-save validation compares the name with resolved response scope, allowing a stale request name to normalize.

@@ -38,8 +38,8 @@ Cross-diagram undo is not introduced. Browser refresh does not add a router requ
 
 ## Editing surfaces
 
-- Heading: Container diagram · current Software System name; diagram name remains editable.
-- Show the child's own name separately from the owner name. Loading, ordinary edits and saving never replace it with "Parent Diagram" or a source display name.
+- Heading: Container diagram · current Software System name; diagram name is read-only and follows its owner.
+- Show the current owner name as the child title. Resolve by UUID; never assign a generic "Parent Diagram" title.
 - Parent navigation: native keyboard-accessible link/button named with the parent diagram and owning system.
 - Boundary: a quiet dashed enclosure with a 44-unit header and readable Software System label. It is a visual adapter node only, rendered behind components, without handles, dragging, deletion or ADR targeting.
 - Container form: type (Application or Datastore), name, responsibilities, technology. Store the choice in `containerType`; `role` and the underlying C4 `type` remain container. Validate all fields before one atomic store update. The edit form has the same two choices and retains the selected value after reopening. Show Application or Datastore on the node, wrap metadata, and grow node dimensions when necessary so details are not silently clipped; resulting boundary fitting belongs to the same edit.
@@ -53,13 +53,13 @@ Cross-diagram undo is not introduced. Browser refresh does not add a router requ
 
 ## Save identity and library hierarchy
 
-Save captures the current child document and calls the existing PUT with the child's ID. Preserve its own name, `kind: container`, parent/owner IDs and boundary through store commands, history, adapter conversion, serialization and summary registration. Use persisted scope after a list reopen or refresh; navigation origin and display names cannot reassign ownership. No new save endpoint is required.
+Save captures the current child document and calls the existing PUT with the child's ID. Preserve its owner-derived name, `kind: container`, parent/owner IDs and boundary through store commands, history, adapter conversion, serialization and summary registration. Use persisted scope after a list reopen or refresh; navigation origin and display names cannot reassign ownership. No new save endpoint is required.
 
-Before accepting a save response into the editor or list, verify that its ID, normalized own name, kind and parent/owner IDs match the request. Retain the draft and show an actionable failure on mismatch or save failure; retry uses the same child. Preserve the existing revision guard for edits made during a pending save and block navigation while saving. A successful save updates one child summary and leaves the parent's architecture content intact.
+Before accepting a save response, verify ID, kind and parent/owner IDs match the request. For a child, require response.name equals response.scope.softwareSystemName; general names must match the normalized request. Failures retain draft/history/retry intent. Preserve newer edits while registering captured saves, and block navigation during saving.
 
 Build library groups from the full summary set, keyed by parent UUID. Apply the existing name/date filters to each diagram's own fields, then retain a contextual parent heading for every matching child. A heading for a nonmatching parent does not count as a matching diagram. A matching parent does not cause its nonmatching children to be counted or displayed as matches. Sort groups by the existing comparator using parent summaries, and matching child siblings by that comparator with UUID tie breakers. A missing parent summary uses the child's resolved parent name/ID for the contextual heading and an actionable unavailable-parent state, never promotes the child to a top-level diagram.
 
-Use nested native lists and headings, with each child open/delete action independently keyboard-accessible. Its accessible name identifies its own name, container level, owner and parent. Keep current selection, last-saved feedback, no-results behavior and list counts. Parent navigation goes through the existing guarded load intent using the child's canonical parent ID. Trash entries retain parent identification; a child whose active parent is absent from the trash list still retains that context.
+Use nested native lists and headings, with each child open/delete action independently keyboard-accessible. Its accessible name identifies its owner-derived name, container level, owner and parent. Keep current selection, last-saved feedback, no-results behavior and list counts. Parent navigation goes through the existing guarded load intent using the child's canonical parent ID. Trash entries retain parent identification; a child whose active parent is absent from the trash list still retains that context.
 
 ## Layout, pointer and keyboard behavior
 
@@ -96,3 +96,7 @@ Both entry points, external-source navigation, duplicate attempts, grouped owner
 For SC-009, verify both internal type choices, subtype edit/save/reopen and undo/redo, stale parent form selections, store-level rejection, and separate external inclusion. For SC-010, verify repeated saves, save-before-navigation, refresh/list reopen, child/parent/owner rename, duplicate names across parents, failed-save retry, malformed responses, grouped library results and child-only filter matches. Assert child ID/name/kind/scope retention, a single summary under the correct parent, and unchanged parent content.
 
 For clarified FR-015/FR-017, verify unsupported source type changes with active and recoverable occurrences preserve all saved artifacts and identify occurrence blockers. Verify child-initiated parent restoration, named batch confirmation, cancellation, stale batch retry, earlier-independent-child exclusion and separate restore, dirty-work protection, list refresh and keyboard focus.
+
+## Rename preview (2026-10-05)
+
+Container titles always follow the current owning Software System, including legacy/custom titles, resolved by stable parent/owner UUIDs. General diagram names remain editable. No schema migration or read-time writes/timestamp changes. Make child title read-only with accessible help. Preview parent draft names in a pure sidebar projection before filtering/sorting; undo/redo/discard and failed saves retain the appropriate view without changing saved summaries. Successful saves reconcile active/trash child labels from the captured response and preserve later drafts; older list responses cannot overwrite that reconciliation.

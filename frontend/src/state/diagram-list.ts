@@ -1,4 +1,22 @@
-import type { DiagramSummary } from '../../../shared/src/index';
+import { getDiagramName, type DiagramDocument, type DiagramSummary } from '../../../shared/src/index';
+
+/** Reconcile only children owned by UUIDs in this parent; never change local timestamps. */
+export function reconcileParentDiagramSummaries(diagrams: readonly DiagramSummary[], parent: DiagramDocument): DiagramSummary[] {
+  if (parent.kind === 'container') return [...diagrams];
+  const owners = new Map(parent.components.filter(c => c.type === 'software-system' && (c.role ?? 'element') === 'element').map(c => [c.id, c]));
+  return diagrams.map(diagram => {
+    if (diagram.kind !== 'container' || diagram.scope?.parentDiagramId !== parent.id) return diagram;
+    const owner = owners.get(diagram.scope.softwareSystemId);
+    if (!owner) return diagram;
+    return { ...diagram, name: owner.name, scope: { ...diagram.scope, parentDiagramName: parent.name, softwareSystemName: owner.name, softwareSystemDescription: owner.description } };
+  });
+}
+
+/** Draft names are a view over saved data, so undo/discard and failed saves remain accurate. */
+export function deriveDiagramLibraryDisplay(diagrams: readonly DiagramSummary[], draft: DiagramDocument | null): DiagramSummary[] {
+  const resolved = diagrams.map(diagram => ({ ...diagram, name: getDiagramName(diagram) }));
+  return draft && draft.kind !== 'container' ? reconcileParentDiagramSummaries(resolved, draft) : resolved;
+}
 
 export type DiagramListSortField = 'name' | 'createdAt';
 export type DiagramListSortDirection = 'ascending' | 'descending';

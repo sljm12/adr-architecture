@@ -9,9 +9,10 @@ describe('resolved persisted container export', () => {
     const child = populatedChildFixture(); child.components[0].containerType = 'datastore'; repository.create(child as any);
     const app = buildApp(repository);
     try {
-      const parent = repository.get(ids.parentDiagram)!; parent.components.find(c => c.id === ids.sourceSystem)!.name = 'Current Ledger'; repository.replace(parent);
+      const parent = repository.get(ids.parentDiagram)!; parent.components.find(c => c.id === ids.sourceSystem)!.name = 'Current Ledger'; parent.components.find(c => c.id === ids.owner)!.name = 'Renamed Payments'; repository.replace(parent);
       const output = await app.inject(`/diagrams/${ids.populatedChild}/export/mermaid`);
       expect(output.statusCode).toBe(200); expect(output.body).toContain('Datastore'); expect(output.body).toContain('Current Ledger');
+      expect(output.body).toContain('Renamed Payments'); expect(output.headers['content-disposition']).toContain('Renamed-Payments.mmd');
       repository.trash(ids.parentDiagram);
       expect((await app.inject(`/diagrams/${ids.populatedChild}/export/mermaid`)).json().code).toBe('PARENT_INACTIVE');
     } finally { await app.close(); }

@@ -18,13 +18,13 @@ describe('immutable child export capture', () => {
     const output = await resolveContainerExportInput(input);
     expect(output.draft?.title).toBe('Captured decision'); expect(output.diagram.components[2]).toMatchObject({ id: child.components[2].id, sourceComponentId: ids.person, name: 'Current customer' }); expect(useAdrStore.getState().draft?.title).toBe('Later decision');
   });
-  it('resolves current source metadata while retaining captured draft name, scope, subtype and geometry', async () => {
+  it('resolves the current owner title while retaining captured draft content, subtype and geometry', async () => {
     const child = populatedChildFixture() as unknown as DiagramDocument; child.components[0].containerType = 'datastore'; child.name = 'Draft runtime';
     const input = captureHtmlExportInput(child, null); child.name = 'Later edit';
     const context: ContainerContext = { scope: { ...child.scope!, softwareSystemName: 'Fresh owner' }, sources: [{ id: ids.sourceSystem, name: 'Fresh source', description: 'Current details', type: 'person' }], capturedAt: new Date().toISOString() };
     vi.spyOn(diagramClient, 'containerContext').mockResolvedValue(context);
     const output = await resolveContainerExportInput(input);
-    expect(output.diagram).toMatchObject({ name: 'Draft runtime', scope: context.scope });
+    expect(output.diagram).toMatchObject({ name: 'Fresh owner', scope: context.scope });
     expect(output.diagram.components[0]).toEqual(input.diagram.components[0]); expect(output.diagram.components[1]).toMatchObject({ id: ids.externalOccurrence, name: 'Fresh source', sourceComponentId: ids.sourceSystem, position: input.diagram.components[1].position });
     expect(input.diagram.scope!.softwareSystemName).toBe('Payments');
   });

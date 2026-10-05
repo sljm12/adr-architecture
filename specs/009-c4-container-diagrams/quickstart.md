@@ -96,7 +96,7 @@ Expected: canceled/failed navigation preserves work; saves finish before switchi
 
 ### 5a. Verify child save placement and list filtering
 
-Give the child its own name, edit it and save twice. Confirm each write uses PUT with the same child UUID and retains kind container and the original scope IDs. Compare saved parent content before/after. Return through the guarded parent action; rename the parent and owner, refresh/reopen the child from the library and save again. Repeat with identical owner/child names under two distinct parents. Simulate a failed save then retry, and inject a wrong-ID/name/kind/scope save response in the frontend regression fixture.
+Edit container content and save twice; the child title equals the owner name. Confirm each write uses PUT with the same child UUID and retains kind container and the original scope IDs. Compare saved parent content before/after. Return through the guarded parent action; rename the parent and owner, refresh/reopen the child from the library and save again. Repeat with identical owner/child names under two distinct parents. Simulate a failed save then retry, and inject a wrong-ID/noncanonical-name/kind/scope save response in the frontend regression fixture.
 
 Expected for SC-010: the same named child remains beneath its originating parent, with Container diagram, owner and parent labels; no duplicate/top-level parent entry appears, no automatic "Parent Diagram" name is assigned, and parent architecture content remains unchanged. Wrong responses leave the draft intact and are not registered as a saved summary. Save-before-navigation uses the same child path.
 
@@ -131,7 +131,7 @@ npm.cmd run cli -- diagrams list --format json
 npm.cmd run cli -- diagrams export <saved-child-uuid> --output .\payments-containers.zip
 ```
 
-Choose a nonexistent output file. Expected: the child's own name and canonical scope/boundary, roles, Application/Datastore labels and containerType, metadata, protocols and local ADR links are retained. Browser HTML reflects its captured draft, including a changed subtype; CLI uses saved content. Empty child SVG/HTML retains its boundary; Mermaid reports EMPTY_CONTAINER_MERMAID with alternatives and produces no file. Invalid references/unsupported or missing subtype fail clearly. Parent exports identify single-diagram scope and unbundled children. See [export-contract.md](./contracts/export-contract.md).
+Choose a nonexistent output file. Expected: the child's owner-derived name and canonical scope/boundary, roles, Application/Datastore labels and containerType, metadata, protocols and local ADR links are retained. Browser HTML reflects its captured draft, including a changed subtype; CLI uses saved content. Empty child SVG/HTML retains its boundary; Mermaid reports EMPTY_CONTAINER_MERMAID with alternatives and produces no file. Invalid references/unsupported or missing subtype fail clearly. Parent exports identify single-diagram scope and unbundled children. See [export-contract.md](./contracts/export-contract.md).
 
 ## Usability and compatibility evidence
 
@@ -175,3 +175,7 @@ external occurrence and relationship to its ADR, then return to the same local a
 and populated boundaries, both subtype labels, full Unicode/multiline metadata, SVG bounds and
 the absence of network-dependent links. The automated offline browser scenario supplies artifact
 evidence separately from participant timing/readability.
+
+### Owner rename regression (FR-025 / SC-011)
+
+Create child a, return to its parent and rename the owner aa. Verify immediate sidebar title/owner preview, undo/redo and discard; repeat and save, reload and reopen the child. Verify its read-only title, recovery/export labels and filenames. Repeat with duplicate owners/another parent, failed save/retry, delayed lists and edits during save; only the matching UUID changes. Legacy/custom titles resolve automatically without changes to IDs, creation times, local content or read-time update timestamps.

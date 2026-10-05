@@ -18,6 +18,25 @@ for(const postgres of [false,true]) describe.skipIf(postgres&&!enabled)(`contain
     await repository.create(diagramDocumentSchema.parse(populatedChildFixture()) as DiagramDocument);
   });
   afterAll(async()=>{await pool?.end();if(admin){await admin.query(`DROP SCHEMA ${schemaName} CASCADE`);await admin.end();}});
+  it('resolves legacy names on every read and normalizes stale child saves without read-time timestamp changes', async () => {
+    const service = new DiagramService(repository);
+    const p = (await repository.get(generalParentFixture().id))!;
+    const c = (await repository.get(populatedChildFixture().id))!;
+    await repository.replace({ ...c, name: 'Old custom title' });
+    const before = (await repository.get(c.id))!;
+    await service.save(p.id, { ...p, components: p.components.map(component => component.id === c.scope!.softwareSystemId ? { ...component, name: 'aa' } : component) });
+    for (const loaded of [await repository.get(c.id), await repository.findContainerForOwner(c.scope!.softwareSystemId), (await repository.findChildren(p.id))[0], (await repository.listAll()).find(d => d.id === c.id), await service.load(c.id)]) {
+      expect(loaded).toMatchObject({ id: c.id, name: 'aa', updatedAt: before.updatedAt, scope: { softwareSystemName: 'aa' } });
+    }
+    expect((await service.containerAvailability(p.id, c.scope!.softwareSystemId)).diagram?.name).toBe('aa');
+    expect((await service.createOrOpenContainerDiagram(p.id, c.scope!.softwareSystemId)).document.name).toBe('aa');
+    const saved = await service.save(c.id, { ...c, name: 'Stale title' });
+    expect(saved).toMatchObject({ name: 'aa', scope: { softwareSystemName: 'aa' }, createdAt: c.createdAt });
+    await repository.trash(c.id);
+    expect((await service.listSummaries('trashed'))[0].name).toBe('aa');
+    expect((await repository.restore(c.id))?.name).toBe('aa');
+    await service.save(p.id, p);
+  });
   it('round trips both subtypes with identity, creation time and parent contents intact',async()=>{
     const original=await repository.get(populatedChildFixture().id);const parent=await repository.get(generalParentFixture().id);const service=new DiagramService(repository);
     for(const containerType of ['datastore','application'] as const){const next=structuredClone(original!);next.components[0].containerType=containerType;await service.save(next.id,next);const loaded=await service.load(next.id);expect(loaded.components[0]).toMatchObject({id:original!.components[0].id,createdAt:original!.components[0].createdAt,containerType});expect(loaded.relationships.map(({updatedAt,...r})=>r)).toEqual(original!.relationships.map(({updatedAt,...r})=>r));expect(await repository.get(parent!.id)).toEqual(parent);}
@@ -26,7 +45,7 @@ for(const postgres of [false,true]) describe.skipIf(postgres&&!enabled)(`contain
     const before=(await repository.get(populatedChildFixture().id))!;const parent=await repository.get(generalParentFixture().id);const service=new DiagramService(repository);
     for(const mutate of [(d:any)=>d.components[0].containerType=null,(d:any)=>d.components[0].containerType='queue',(d:any)=>d.components[1].sourceComponentId=d.components[0].id,(d:any)=>d.components[1].position={x:100,y:100},(d:any)=>d.relationships[0].label=' ']){const input=structuredClone(before);mutate(input);await expect(service.save(input.id,input)).rejects.toThrow();expect(await repository.get(input.id)).toEqual(before);expect(await repository.get(parent!.id)).toEqual(parent);}
   });
-  it('batch lists active/trash children with current sources while preserving independent name and local timestamps', async () => {
+  it('batch lists active/trash children with owner-derived names and unchanged local timestamps', async () => {
     const service = new DiagramService(repository);
     const original = (await repository.get(populatedChildFixture().id))!;
     const parent = (await repository.get(generalParentFixture().id))!;
@@ -37,12 +56,12 @@ for(const postgres of [false,true]) describe.skipIf(postgres&&!enabled)(`contain
     const currentParent = (await repository.get(parent.id))!;
     await service.save(parent.id, { ...currentParent, name: 'Current parent', components: currentParent.components.map(c => c.id === sourceId ? { ...c, name: 'Current source', description: null, type: 'person' } : c.id === original.scope!.softwareSystemId ? { ...c, name: 'Current owner' } : c) });
     const loaded = await service.load(original.id);
-    expect(loaded).toMatchObject({ id: original.id, name: 'Independent runtime', updatedAt: childBefore.updatedAt, boundary: childBefore.boundary, scope: { parentDiagramName: 'Current parent', softwareSystemName: 'Current owner' } });
+    expect(loaded).toMatchObject({ id: original.id, name: 'Current owner', updatedAt: childBefore.updatedAt, boundary: childBefore.boundary, scope: { parentDiagramName: 'Current parent', softwareSystemName: 'Current owner' } });
     expect(loaded.components[1]).toMatchObject({ name: 'Current source', description: null, type: 'person', position: original.components[1].position });
     const active = await service.listSummaries();
-    expect(active).toHaveLength(2); expect(active.find(d => d.id === original.id)).toMatchObject({ name: 'Independent runtime', kind: 'container', scope: loaded.scope, createdAt: original.createdAt });
+    expect(active).toHaveLength(2); expect(active.find(d => d.id === original.id)).toMatchObject({ name: 'Current owner', kind: 'container', scope: loaded.scope, createdAt: original.createdAt });
     await repository.trash(original.id);
-    expect(await service.listSummaries('trashed')).toEqual([expect.objectContaining({ id: original.id, name: 'Independent runtime', scope: loaded.scope })]);
+    expect(await service.listSummaries('trashed')).toEqual([expect.objectContaining({ id: original.id, name: 'Current owner', scope: loaded.scope })]);
     await repository.restore(original.id);
   });
 });

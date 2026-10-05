@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useDiagramStore } from '../state/diagram-store';
 import { diagramClient } from '../api/diagram-client';
 import type { DiagramSummary } from '../../../shared/src/index';
-import { defaultDiagramListSort, deriveDiagramGroups, type DiagramListSort, type DiagramListSortDirection, type DiagramListSortField } from '../state/diagram-list';
+import { defaultDiagramListSort, deriveDiagramGroups, deriveDiagramLibraryDisplay, type DiagramListSort, type DiagramListSortDirection, type DiagramListSortField } from '../state/diagram-list';
 import './saved-diagram-list.css';
 
 const formatLastSaved = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
@@ -32,7 +32,7 @@ export function SavedDiagramList({ onSelect, onDelete, onCreate }: SavedDiagramL
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => { setTrash(recoveredTrash); }, [recoveredTrash]);
 
-  const list = useMemo(() => deriveDiagramGroups(documents, { nameQuery, createdFrom, createdTo }, sort), [documents, nameQuery, createdFrom, createdTo, sort]);
+  const list = useMemo(() => deriveDiagramGroups(deriveDiagramLibraryDisplay(documents, currentDocument), { nameQuery, createdFrom, createdTo }, sort), [documents, currentDocument, nameQuery, createdFrom, createdTo, sort]);
   const hasFilters = Boolean(nameQuery.trim() || createdFrom || createdTo);
   const clearFilters = () => { setNameQuery(''); setCreatedFrom(''); setCreatedTo(''); };
   const sortFieldLabel = sort.field === 'name' ? 'name' : 'creation date';

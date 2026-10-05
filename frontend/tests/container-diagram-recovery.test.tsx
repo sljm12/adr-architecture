@@ -55,7 +55,7 @@ describe('confirmed recovery UI and reconciliation', () => {
   });
   it('refreshes every affected list entry without registering an excluded child or replacing current work', async () => {
     const current = child(), parent = generalParentFixture() as unknown as DiagramDocument;
-    useDiagramStore.getState().open(current); useDiagramStore.getState().update(d => ({ ...d, name: 'Unsaved runtime' }));
+    useDiagramStore.getState().open(current); useDiagramStore.getState().renameComponent(ids.container, 'Unsaved runtime');
     const draft = useDiagramStore.getState().document;
     vi.spyOn(diagramClient, 'list').mockResolvedValue([row(parent), row(current)]); vi.spyOn(diagramClient, 'listTrash').mockResolvedValue([{ ...row(current), id: ids.emptyChild, status: 'trashed' }]);
     useDiagramStore.setState({ deletedSavedDocumentIds: [parent.id, current.id, ids.emptyChild] });

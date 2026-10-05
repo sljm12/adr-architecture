@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { assertCanAddGroupMember, calculateGroupBounds, DEFAULT_COMPONENT_SIZE, fitGroupBoundsAfterLayout, getC4ArtifactTypeLabel, isC4ArtifactType, translateGroupWithMembers, type C4ArtifactType, type DiagramDocument, type DiagramSummary, type GroupMemberAddReason, type Position, type Relationship, type RelationshipDirection } from '../../../shared/src/index';
 import { DiagramApiError, diagramClient, formatDiagramApiError } from '../api/diagram-client';
 import { BoundedHistory } from './history';
+import { getDiagramName } from '../../../shared/src/index';
+import { reconcileParentDiagramSummaries } from './diagram-list';
 import { assertDiagramInvariants, containerContextSchema, diagramDocumentSchema, fitContainerLayout, getContainerComponentMinimumSize, isContainerType, validateExternalPlacement, type ContainerContext, type ContainerType, type ComponentSize } from '../../../shared/src/index';
 
 export type ContainerEdit = { name: string; description: string; technology: string; containerType: ContainerType };
@@ -82,9 +84,14 @@ let loadRequest = 0;
 let savedListRequest = 0;
 let recoveryRefreshes = 0;
 let session = 0;
-const copy = (document: DiagramDocument): DiagramDocument => ({ ...structuredClone(document), groups: document.groups ?? [] });
+const copy = (document: DiagramDocument): DiagramDocument => ({ ...structuredClone(document), name: getDiagramName(document), groups: document.groups ?? [] });
 const historyState = () => ({ canUndo: history.canUndo, canRedo: history.canRedo });
 const now = () => new Date().toISOString();
+const contextFromDocument = (document: DiagramDocument): ContainerContext | null => document.kind === 'container' && document.scope ? {
+  scope: document.scope,
+  sources: document.components.filter(c => c.role === 'external').map(c => ({ id: c.sourceComponentId!, name: c.name, description: c.description, type: c.type as C4ArtifactType })),
+  capturedAt: now(),
+} : null;
 const saveErrorMessage = (error: unknown): string => {
   if (error instanceof DiagramApiError) {
     if (Array.isArray(error.details.diagramBlockers) || Array.isArray(error.details.blockers)) return formatDiagramApiError(error);
@@ -96,16 +103,17 @@ const saveErrorMessage = (error: unknown): string => {
   }
   return error instanceof Error ? error.message : 'Save failed';
 };
-const summary = (document: DiagramDocument): DiagramSummary => ({ id: document.id, name: document.name, status: document.status, createdAt: document.createdAt, updatedAt: document.updatedAt, kind: document.kind ?? 'general', scope: document.scope ?? null });
+const summary = (document: DiagramDocument): DiagramSummary => ({ id: document.id, name: getDiagramName(document), status: document.status, createdAt: document.createdAt, updatedAt: document.updatedAt, kind: document.kind ?? 'general', scope: document.scope ?? null });
 const replaceSummary = (items: DiagramSummary[], next: DiagramSummary) => items.some(item => item.id === next.id) ? items.map(item => item.id === next.id ? next : item) : [...items, next];
 const assertSaveIdentity = (request: DiagramDocument, response: DiagramDocument) => {
-  if (response.id !== request.id || response.name?.trim() !== request.name.trim() || (response.kind ?? 'general') !== (request.kind ?? 'general') || response.scope?.parentDiagramId !== request.scope?.parentDiagramId || response.scope?.softwareSystemId !== request.scope?.softwareSystemId) throw new Error('The save response did not match the diagram identity, name or parent/owner association. Your draft was kept. Retry saving this diagram.');
+  const expectedName = request.kind === 'container' ? response.scope?.softwareSystemName : request.name.trim();
+  if (response.id !== request.id || response.name?.trim() !== expectedName || (response.kind ?? 'general') !== (request.kind ?? 'general') || response.scope?.parentDiagramId !== request.scope?.parentDiagramId || response.scope?.softwareSystemId !== request.scope?.softwareSystemId) throw new Error('The save response did not match the diagram identity, name or parent/owner association. Your draft was kept. Retry saving this diagram.');
 };
 const overlayContext = (document: DiagramDocument, context: ContainerContext | null): DiagramDocument => {
   if (!context || document.kind !== 'container') return copy(document);
   if (context.scope.parentDiagramId !== document.scope?.parentDiagramId || context.scope.softwareSystemId !== document.scope.softwareSystemId) throw new Error('Source context did not match this container diagram. Refresh its source details.');
   const sources = new Map(context.sources.map(source => [source.id, source]));
-  return { ...copy(document), scope: { ...context.scope }, components: document.components.map(component => {
+  return { ...copy(document), name: context.scope.softwareSystemName, scope: { ...context.scope }, components: document.components.map(component => {
     if (component.role !== 'external') return structuredClone(component);
     const source = sources.get(component.sourceComponentId!);
     if (!source) throw new Error(`External participant ${component.id} no longer has an eligible parent source. Repair the source before continuing.`);
@@ -190,7 +198,7 @@ export const useDiagramStore = create<State>((set, get) => ({
   open: input => {
     session++; loadRequest++;
     const document = history.reset(copy(input));
-    set({ document, status: 'saved', revision: 0, navigationStatus: 'idle', sourceContext: null, sourceContextStatus: 'idle', sourceContextError: null, error: null, groupError: null, loadError: null, containerOpenStatus: 'idle', containerOpenError: null, containerOpenComponentId: null, ...historyState() });
+    set({ document, status: 'saved', revision: 0, navigationStatus: 'idle', sourceContext: contextFromDocument(document), sourceContextStatus: 'idle', sourceContextError: null, error: null, groupError: null, loadError: null, containerOpenStatus: 'idle', containerOpenError: null, containerOpenComponentId: null, ...historyState() });
   },
   startNew: () => { session++; loadRequest++; set({ document: null, status: 'idle', revision: 0, navigationStatus: 'idle', sourceContext: null, sourceContextStatus: 'idle', sourceContextError: null, error: null, groupError: null, containerOpenStatus: 'idle', containerOpenError: null, containerOpenComponentId: null, canUndo: false, canRedo: false }); },
   create: async name => {
@@ -263,6 +271,7 @@ export const useDiagramStore = create<State>((set, get) => ({
     if(!source||context.scope.parentDiagramId!==document.scope?.parentDiagramId||context.scope.softwareSystemId!==document.scope.softwareSystemId||sourceId===document.scope.softwareSystemId||document.components.some(c=>c.sourceComponentId===sourceId)){set({error:'Choose an eligible parent participant that is not already included.'});return false;}
     const timestamp=now(),boundary=document.boundary!;
     get().update(current=>({...current,components:[...current.components,{diagramId:current.id,...source,id:crypto.randomUUID(),sourceComponentId:sourceId,role:'external',containerType:null,technology:null,position:{x:boundary.position.x+boundary.size.width+24,y:boundary.position.y},size:{width:280,height:Math.max(100,getContainerComponentMinimumSize({...source,technology:null}).height)},createdAt:timestamp,updatedAt:timestamp}]}));
+    if (get().document !== document) get().applyContainerContext(context);
     return get().document!==document;
   },
   applyComponentGeometry: edits => {
@@ -539,11 +548,16 @@ export const useDiagramStore = create<State>((set, get) => ({
       const saved = diagramDocumentSchema.parse(response) as DiagramDocument;
       if (session === saveSession) {
         set(state => {
-          const sourceContext = state.sourceContext && saved.scope ? { ...state.sourceContext, scope: saved.scope, sources: state.sourceContext.sources.map(source => {
-            const occurrence = saved.components.find(component => component.role === 'external' && component.sourceComponentId === source.id);
-            return occurrence ? { id: source.id, name: occurrence.name, description: occurrence.description, type: occurrence.type as C4ArtifactType } : source;
-          }) } : state.sourceContext;
-          return { sourceContext, savedDocuments: replaceSummary(state.savedDocuments, summary(saved)), ...(state.revision === revision ? { document: overlayContext(saved, sourceContext), status: 'saved' as const, error: null } : {}) };
+          const sources = new Map(state.sourceContext?.sources.map(source => [source.id, source]) ?? []);
+          for (const occurrence of saved.components.filter(component => component.role === 'external')) {
+            sources.set(occurrence.sourceComponentId!, { id: occurrence.sourceComponentId!, name: occurrence.name, description: occurrence.description, type: occurrence.type as C4ArtifactType });
+          }
+          const sourceContext = saved.kind === 'container' && saved.scope ? { scope: saved.scope, sources: [...sources.values()], capturedAt: now() } : state.sourceContext;
+          return { sourceContext,
+            savedDocuments: reconcileParentDiagramSummaries(replaceSummary(state.savedDocuments, summary(saved)), saved),
+            trashedDocuments: reconcileParentDiagramSummaries(state.trashedDocuments, saved),
+            ...(state.revision === revision ? { document: overlayContext(saved, sourceContext), status: 'saved' as const, error: null } : { document: state.document ? overlayContext(state.document, sourceContext) : null }),
+          };
         });
       }
     } catch (error) {
@@ -629,7 +643,7 @@ export const useDiagramStore = create<State>((set, get) => ({
       const context = containerContextSchema.parse(input);
       const refreshed = overlayContext(document, context);
       assertDiagramInvariants(refreshed);
-      set(state => ({ document: refreshed, sourceContext: context, sourceContextStatus: 'loaded', sourceContextError: null, savedDocuments: state.savedDocuments.map(item => item.id === document.id ? { ...item, scope: context.scope } : item) }));
+      set(state => ({ document: refreshed, sourceContext: context, sourceContextStatus: 'loaded', sourceContextError: null, savedDocuments: state.savedDocuments.map(item => item.id === document.id ? { ...item, name: context.scope.softwareSystemName, scope: context.scope } : item) }));
       return true;
     } catch (error) { set({ sourceContextStatus: 'failed', sourceContextError: saveErrorMessage(error) }); return false; }
   },

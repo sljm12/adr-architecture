@@ -16,20 +16,20 @@ function setup() {
 }
 
 describe('saved container navigation contract', () => {
-  it('repeatedly PUTs the independently named child, retaining subtype, IDs, dates and parent content', async () => {
+  it('repeatedly PUTs the child, normalizing stale names and retaining subtype, IDs, dates and parent content', async () => {
     const { app, repository, parent, child } = setup();
     const parentBefore = repository.get(parent.id);
     for (const containerType of ['datastore', 'application'] as const) {
       const response = await app.inject({ method: 'PUT', url: `/diagrams/${child.id}`, payload: { ...child, name: '  Payment runtime  ', components: child.components.map(c => c.role === 'container' ? { ...c, containerType } : c) } });
       expect(response.statusCode).toBe(200);
       const saved = response.json();
-      expect(saved).toMatchObject({ id: child.id, name: 'Payment runtime', kind: 'container', createdAt: child.createdAt, scope: child.scope, boundary: child.boundary });
+      expect(saved).toMatchObject({ id: child.id, name: 'Payments', kind: 'container', createdAt: child.createdAt, scope: child.scope, boundary: child.boundary });
       expect(saved.components[0]).toMatchObject({ id: ids.container, containerType, createdAt: child.components[0].createdAt });
       expect((await app.inject(`/diagrams/${child.id}`)).json()).toEqual(saved);
       expect(repository.get(parent.id)).toEqual(parentBefore);
       const rows = (await app.inject('/diagrams')).json();
       expect(rows).toHaveLength(2);
-      expect(rows.find((row: any) => row.id === child.id)).toMatchObject({ name: 'Payment runtime', kind: 'container', scope: child.scope });
+      expect(rows.find((row: any) => row.id === child.id)).toMatchObject({ name: 'Payments', kind: 'container', scope: child.scope });
       expect(rows.every((row: any) => !('components' in row))).toBe(true);
     }
   });
@@ -38,13 +38,13 @@ describe('saved container navigation contract', () => {
     const { app, repository, parent, child } = setup();
     repository.replace({ ...parent, name: 'Current overview', components: parent.components.map(c => c.id === ids.owner ? { ...c, name: 'Current owner' } : c.id === ids.sourceSystem ? { ...c, name: 'Current source', description: null, type: 'person' } : c) });
     const resolved = (await app.inject(`/diagrams/${child.id}`)).json();
-    expect(resolved).toMatchObject({ name: 'Payment runtime', scope: { parentDiagramName: 'Current overview', softwareSystemName: 'Current owner' }, boundary: child.boundary });
+    expect(resolved).toMatchObject({ name: 'Current owner', scope: { parentDiagramName: 'Current overview', softwareSystemName: 'Current owner' }, boundary: child.boundary });
     expect(resolved.components[1]).toMatchObject({ id: ids.externalOccurrence, name: 'Current source', type: 'person', description: null, position: child.components[1].position, createdAt: child.components[1].createdAt });
     expect(resolved.updatedAt).toBe(child.updatedAt);
     for (const path of ['/diagrams', '/diagrams/trash']) {
       if (path.endsWith('trash')) repository.trash(child.id);
       const rows = (await app.inject(path)).json();
-      expect(rows.find((row: any) => row.id === child.id)).toMatchObject({ name: child.name, kind: 'container', createdAt: child.createdAt, scope: { parentDiagramId: parent.id, parentDiagramName: 'Current overview', softwareSystemName: 'Current owner' } });
+      expect(rows.find((row: any) => row.id === child.id)).toMatchObject({ name: 'Current owner', kind: 'container', createdAt: child.createdAt, scope: { parentDiagramId: parent.id, parentDiagramName: 'Current overview', softwareSystemName: 'Current owner' } });
     }
   });
 
@@ -58,7 +58,7 @@ describe('saved container navigation contract', () => {
     const rows = (await app.inject('/diagrams')).json().filter((row: any) => row.kind === 'container');
     expect(rows.map((row: any) => row.scope.parentDiagramId).sort()).toEqual([parent.id, otherParentId].sort());
     expect(new Set(rows.map((row: any) => row.id)).size).toBe(2);
-    expect(rows.map((row: any) => row.name)).toEqual([child.name, child.name]);
+    expect(rows.map((row: any) => row.name)).toEqual(['Payments', 'Payments']);
   });
 
   it.each(['/diagrams', '/diagrams/trash'])('rejects broken ownership in %s rather than publishing a valid-looking summary', async path => {

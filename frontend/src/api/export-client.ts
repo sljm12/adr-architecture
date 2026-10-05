@@ -11,6 +11,7 @@ export async function resolveContainerExportInput(input: HtmlExportInput): Promi
   if (!scope || context.scope.parentDiagramId !== scope.parentDiagramId || context.scope.softwareSystemId !== scope.softwareSystemId) throw new Error('Export source context did not match the captured container scope. Refresh source details and retry.');
   const sources = new Map(context.sources.map(source => [source.id, source]));
   captured.diagram.scope = context.scope;
+  captured.diagram.name = context.scope.softwareSystemName;
   captured.diagram.components = captured.diagram.components.map(component => {
     if (component.role !== 'external') return component;
     const source = sources.get(component.sourceComponentId!);
@@ -63,6 +64,6 @@ export const exportClient = {
       compression: 'DEFLATE',
       compressionOptions: { level: 6 },
     });
-    downloadBlob(blob, safeDiagramFilename(input.diagram.name));
+    downloadBlob(blob, safeDiagramFilename(captured.diagram.name));
   },
 };

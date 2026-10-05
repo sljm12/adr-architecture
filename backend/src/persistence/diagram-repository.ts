@@ -2,7 +2,7 @@ import { asc, eq, inArray } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { z } from 'zod';
 import type { DiagramDocument } from '../../../shared/src/index';
-import { assertDiagramInvariants, diagramDocumentSchema } from '../../../shared/src/index';
+import { assertDiagramInvariants, diagramDocumentSchema, getDiagramName } from '../../../shared/src/index';
 import * as schema from './schema';
 
 export type MaybePromise<T> = T | Promise<T>;
@@ -74,7 +74,7 @@ export class DiagramRepository implements DiagramRepositoryLike {
     if (document.kind === 'container' && this.findContainerForOwner(document.scope!.softwareSystemId)) throw new Error('diagrams_owner_component_unique');
     const normalized = { ...document, groups: normalizedGroups(document) };
     this.documents.set(document.id, clone(normalized));
-    return clone(normalized);
+    return this.resolve(normalized);
   }
   replace(document: DiagramDocument) {
     document = diagramDocumentSchema.parse(document) as DiagramDocument;
@@ -100,7 +100,7 @@ export class DiagramRepository implements DiagramRepositoryLike {
       }),
     };
     this.documents.set(document.id, clone(updated));
-    return clone(updated);
+    return this.resolve(updated);
   }
 
   removeComponent(diagramId: string, componentId: string): RemoveComponentResult | undefined {
@@ -112,7 +112,7 @@ export class DiagramRepository implements DiagramRepositoryLike {
     const now = new Date().toISOString();
     const updated = { ...document, updatedAt: now, components: document.components.filter(c => c.id !== componentId) };
     this.documents.set(diagramId, clone(updated));
-    return { document: clone(updated), relationshipCount: 0 };
+    return { document: this.resolve(updated), relationshipCount: 0 };
   }
 
   removeRelationship(diagramId: string, relationshipId: string): RemoveRelationshipResult | undefined {
@@ -121,7 +121,7 @@ export class DiagramRepository implements DiagramRepositoryLike {
     const now = new Date().toISOString();
     const updated = { ...document, updatedAt: now, relationships: document.relationships.filter(relationship => relationship.id !== relationshipId) };
     this.documents.set(diagramId, clone(updated));
-    return { document: clone(updated) };
+    return { document: this.resolve(updated) };
   }
 
   getTrashProvenance(id: string): TrashProvenance { return { ...(this.provenance.get(id) ?? { trashBatchId: null, trashRootDiagramId: null }) }; }
@@ -132,7 +132,7 @@ export class DiagramRepository implements DiagramRepositoryLike {
     const updated = { ...document, status: 'trashed' as const, trashedAt: now, updatedAt: now };
     this.documents.set(id, clone(updated));
     this.provenance.set(id, { ...provenance });
-    return clone(updated);
+    return this.resolve(updated);
   }
 
   restore(id: string) {
@@ -141,7 +141,7 @@ export class DiagramRepository implements DiagramRepositoryLike {
     const updated = { ...document, status: 'active' as const, trashedAt: null, updatedAt: new Date().toISOString() };
     this.documents.set(id, clone(updated));
     this.provenance.delete(id);
-    return clone(updated);
+    return this.resolve(updated);
   }
 
   private resolve(document: DiagramDocument): DiagramDocument {
@@ -151,6 +151,7 @@ export class DiagramRepository implements DiagramRepositoryLike {
     const owner = parent?.components.find(component => component.id === resolved.scope!.softwareSystemId);
     if (parent && owner) {
       resolved.scope = { ...resolved.scope, parentDiagramName: parent.name, softwareSystemName: owner.name, softwareSystemDescription: owner.description };
+      resolved.name = getDiagramName(resolved);
       resolved.components = resolved.components.map(component => {
         if (component.role !== 'external' || !component.sourceComponentId) return component;
         const source = parent.components.find(candidate => candidate.id === component.sourceComponentId);
@@ -208,7 +209,7 @@ function mapDocument(
   }
   return {
     id: diagram.id,
-    name: diagram.name,
+    name: getDiagramName({ name: diagram.name, kind: diagram.kind as DiagramDocument['kind'], scope }),
     status: diagram.status,
     createdAt: iso(diagram.createdAt),
     updatedAt: iso(diagram.updatedAt),
