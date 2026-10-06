@@ -1,8 +1,13 @@
 import JSZip from 'jszip';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
+import { dirname, join, resolve, sep } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { randomUUID } from 'node:crypto';
+import type { APIRequestContext, BrowserContext, Page } from '@playwright/test';
 import type { ArchitectureDecisionRecord, DiagramDocument } from '../../shared/src/domain/types';
 import { buildHtmlPackage } from '../../shared/src/export/html-package';
+import { architectureDecisionRecordListSchema, containerAvailabilitySchema, diagramDocumentSchema } from '../../shared/src/validation/schemas';
+import { htmlPackageFixture, htmlPackageFixtureExpectations, htmlPackageFixtureIds, type HtmlPackageFixture } from '../../shared/tests/html-export-fixtures';
 
 export const offlineIds = {
   diagram: '00000000-0000-4000-8000-000000000101',
@@ -79,13 +84,144 @@ export async function extractOfflinePackage(directory: string, adrs: Architectur
   const zip = new JSZip();
   for (const [path, content] of Object.entries(files)) zip.file(path, content);
   const archive = await zip.generateAsync({ type: 'nodebuffer' });
-  const extracted = await JSZip.loadAsync(archive);
-
-  for (const [path, entry] of Object.entries(extracted.files)) {
-    if (entry.dir) continue;
-    const target = join(directory, path);
-    await mkdir(dirname(target), { recursive: true });
-    await writeFile(target, await entry.async('nodebuffer'));
-  }
+  await extractHtmlPackageArchive(archive, directory);
   return { files, directory };
+}
+
+/** Seed through real write endpoints; fresh UUIDs isolate concurrent browser runs.
+ * API contexts may point directly at the backend or use apiPrefix='/api' via Vite.
+ * Call before export, never during the read-only/offline journey.
+ */
+export async function preparePersistedHtmlPackageFixture(api: APIRequestContext, apiPrefix = ''): Promise<HtmlPackageFixture> {
+  const template = htmlPackageFixture();
+  const ids = new Map<string, string>(Object.values(htmlPackageFixtureIds).map(id => [id, randomUUID()]));
+  const remap = <T>(input: T): T => JSON.parse(JSON.stringify(input), (_key, value) => typeof value === 'string' ? ids.get(value) ?? value : value);
+  const call = async (method: string, path: string, data?: unknown) => {
+    const response = await api.fetch(`${apiPrefix}${path}`, { method, ...(data === undefined ? {} : { data }) });
+    if (response.status() < 200 || response.status() >= 300) {
+      throw new Error(`HTML fixture ${method} ${path} failed (${response.status()}): ${await response.text()}`);
+    }
+    return response.status() === 204 ? undefined : response.json();
+  };
+  const saveParent = async (original: DiagramDocument) => {
+    const created = diagramDocumentSchema.parse(await call('POST', '/diagrams', { name: original.name }));
+    ids.set(original.id, created.id);
+    return diagramDocumentSchema.parse(await call('PUT', `/diagrams/${created.id}`, remap(original)));
+  };
+  const parent = await saveParent(template.parent);
+  const unrelatedParent = await saveParent(template.unrelatedParent);
+  const saveChild = async (original: DiagramDocument) => {
+    const scope = remap(original.scope!);
+    const created = diagramDocumentSchema.parse(await call('POST', `/diagrams/${scope.parentDiagramId}/components/${scope.softwareSystemId}/container-diagram`));
+    ids.set(original.id, created.id);
+    // Create active first, then use the recovery endpoint for the exclusion fixture.
+    return diagramDocumentSchema.parse(await call('PUT', `/diagrams/${created.id}`, { ...remap(original), status: 'active', trashedAt: null }));
+  };
+  const children: DiagramDocument[] = [];
+  for (const child of template.children) children.push(await saveChild(child));
+  let trashedChild: DiagramDocument = await saveChild(template.trashedChild);
+  const unrelatedChild = await saveChild(template.unrelatedChild);
+
+  for (const original of Object.values(template.adrsByDiagram).flat()) {
+    const adr = remap(original);
+    const { title, context, decision, consequences, alternativesOrConstraints, status, replacementAdrId } = adr;
+    const created = await call('POST', `/diagrams/${adr.diagramId}/adrs`, { title, context, decision, consequences, alternativesOrConstraints, status, replacementAdrId });
+    ids.set(original.id, created.id);
+    await call('PUT', `/adrs/${created.id}/components`, { componentIds: adr.componentIds });
+    await call('PUT', `/adrs/${created.id}/relationships`, { relationshipIds: adr.relationshipIds });
+  }
+  await call('DELETE', `/diagrams/${trashedChild.id}`);
+  const availability = [];
+  for (const owner of parent.components.filter(component => component.type === 'software-system')) {
+    availability.push(containerAvailabilitySchema.parse(await call('GET', `/diagrams/${parent.id}/components/${owner.id}/container-diagram`)));
+  }
+  const trashedSummary = availability.find(item => item.diagram?.id === trashedChild.id)!.diagram!;
+  trashedChild = { ...trashedChild, status: 'trashed', updatedAt: trashedSummary.updatedAt, trashedAt: trashedSummary.updatedAt };
+  const adrsByDiagram: Record<string, ArchitectureDecisionRecord[]> = {};
+  for (const diagram of [parent, ...children]) {
+    adrsByDiagram[diagram.id] = architectureDecisionRecordListSchema.parse(await call('GET', `/diagrams/${diagram.id}/adrs/full`));
+  }
+  const fixture = { parent, children, trashedChild, unrelatedParent, unrelatedChild, availability, adrsByDiagram };
+  return { ...fixture, expected: htmlPackageFixtureExpectations(fixture) };
+}
+
+/** Extract a single archive as UTF-8 files without starting a package HTTP server. */
+export async function extractHtmlPackageArchive(archive: Buffer, directory: string) {
+  const zip = await JSZip.loadAsync(archive);
+  const files: Record<string, string> = {};
+  const root = resolve(directory);
+  // Check original ZIP names too: JSZip normalizes dot segments when loading.
+  for (const [path, entry] of Object.entries(zip.files)) {
+    if (entry.dir) continue;
+    const original = entry.unsafeOriginalName ?? path;
+    const target = resolve(root, path);
+    if (/[\\:]/.test(original) || original.startsWith('/') || original.split('/').some(segment => !segment || segment === '.' || segment === '..') || !target.startsWith(`${root}${sep}`)) {
+      throw new Error(`Unsafe HTML package archive path: ${original}`);
+    }
+    files[path] = await entry.async('string');
+  }
+  for (const [path, content] of Object.entries(files)) {
+    const target = join(root, path);
+    await mkdir(dirname(target), { recursive: true });
+    await writeFile(target, content, 'utf8');
+  }
+  return { files, directory: root };
+}
+
+/** Wait for the app's one ZIP download and extract that archive, not a rebuilt map. */
+export async function downloadAndExtractOfflinePackage(page: Page, directory: string) {
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Export HTML package', exact: true }).click(),
+  ]);
+  const failure = await download.failure();
+  if (failure) throw new Error(`HTML package download failed: ${failure}`);
+  const archivePath = await download.path();
+  if (!archivePath) throw new Error('HTML package download has no local archive.');
+  return { ...await extractHtmlPackageArchive(await readFile(archivePath), directory), filename: download.suggestedFilename() };
+}
+
+export async function enumerateOfflinePackage(directory: string) {
+  const filePaths: string[] = [];
+  const visit = async (relativeDirectory: string) => {
+    for (const entry of await readdir(join(directory, relativeDirectory), { withFileTypes: true })) {
+      const path = relativeDirectory ? `${relativeDirectory}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) await visit(path);
+      else if (entry.isFile()) filePaths.push(path);
+    }
+  };
+  await visit('');
+  filePaths.sort();
+  const anchorsByFile: Record<string, string[]> = {};
+  const linksByFile: Record<string, string[]> = {};
+  for (const path of filePaths.filter(path => /\.(html|svg)$/.test(path))) {
+    const content = await readFile(join(directory, path), 'utf8');
+    anchorsByFile[path] = [...content.matchAll(/\bid=["']([^"']+)["']/g)].map(match => match[1]);
+    linksByFile[path] = [...content.matchAll(/\bhref=["']([^"']+)["']/g)].map(match => match[1]);
+  }
+  return { filePaths, anchorsByFile, linksByFile };
+}
+
+/** Disable network only after the app has produced the ZIP. */
+export async function disableOfflinePackageNetwork(context: BrowserContext) {
+  await context.setOffline(true);
+  await context.route(/^https?:\/\//i, route => route.abort('internetdisconnected'));
+}
+
+export async function openOfflinePackagePage(page: Page, directory: string, childDiagramId?: string, fragment?: string) {
+  if (childDiagramId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(childDiagramId)) {
+    throw new Error('Nested offline page requires a diagram UUID.');
+  }
+  const path = childDiagramId ? join(directory, 'diagrams', childDiagramId, 'index.html') : join(directory, 'index.html');
+  const url = pathToFileURL(resolve(path));
+  if (fragment) url.hash = fragment;
+  await page.goto(url.href);
+}
+
+/** Move the whole extracted directory to a new sibling location, retaining relative links. */
+export async function relocateOfflinePackage(directory: string) {
+  const source = resolve(directory);
+  const destination = `${source}-relocated`;
+  await rename(source, destination);
+  return destination;
 }

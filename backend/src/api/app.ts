@@ -3,6 +3,7 @@ import { DiagramRepository, type DiagramRepositoryLike } from '../persistence/di
 import { AdrRepository, type AdrRepositoryLike } from '../persistence/adr-repository';
 import { registerExportRoutes } from './export-routes';
 import { ExportService } from '../services/export-service';
+import { HtmlExportSourceService } from '../services/html-export-source';
 import { DiagramService } from '../services/diagram-service';
 import { registerRecoveryRoutes } from './recovery-routes';
 import { registerDiagramRoutes } from './diagram-routes';
@@ -20,6 +21,6 @@ export function buildApp(repository: DiagramRepositoryLike = new DiagramReposito
   registerContainerDiagramRoutes(app, repository, service);
   registerAdrRoutes(app, adrService);
   registerRecoveryRoutes(app, repository, service);
-  registerExportRoutes(app, new ExportService(repository));
+  registerExportRoutes(app, new ExportService(repository), new HtmlExportSourceService(repository, adrRepository));
   return app;
 }

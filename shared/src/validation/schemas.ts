@@ -226,6 +226,36 @@ export const architectureDecisionRecordSchema = adrWriteBaseSchema.extend({
 });
 export const architectureDecisionRecordListSchema = z.array(architectureDecisionRecordSchema);
 
+// Keep the source boundary stricter than historical document date parsing without
+// changing persistence or the legacy single-diagram API. Cross-member graph
+// integrity is checked by source gathering and aggregate assembly, not this parser.
+const htmlSourceDiagramSchema = diagramDocumentSchema.superRefine((document, ctx) => {
+  // A failed legacy transform can carry z.NEVER into later refinements.
+  if (!Array.isArray(document.components)) return;
+  const date = z.string().datetime({ offset: true });
+  const check = (value: string, path: (string | number)[]) => {
+    if (!date.safeParse(value).success) ctx.addIssue({ code: 'custom', path, message: 'Must be a valid timestamp' });
+  };
+  check(document.createdAt, ['createdAt']); check(document.updatedAt, ['updatedAt']);
+  if (document.trashedAt !== null) check(document.trashedAt, ['trashedAt']);
+  for (const kind of ['components', 'relationships', 'groups'] as const) document[kind].forEach((artifact, index) => {
+    check(artifact.createdAt, [kind, index, 'createdAt']); check(artifact.updatedAt, [kind, index, 'updatedAt']);
+  });
+});
+const htmlSourceAdrSchema = z.object({
+  id: uuidSchema, diagramId: uuidSchema, title: z.string(), context: z.string(), decision: z.string(), consequences: z.string(),
+  alternativesOrConstraints: z.string().nullable(), status: adrStatusSchema, replacementAdrId: uuidSchema.nullable(),
+  componentIds: z.array(uuidSchema), relationshipIds: z.array(uuidSchema),
+  createdAt: z.string().datetime({ offset: true }), updatedAt: z.string().datetime({ offset: true }),
+}).pipe(architectureDecisionRecordSchema);
+export const htmlExportSourceSchema = z.object({
+  entryDiagramId: uuidSchema,
+  sourceCapturedAt: z.string().datetime({ offset: true }),
+  diagrams: z.array(z.object({ diagram: htmlSourceDiagramSchema, adrs: z.array(htmlSourceAdrSchema) }).strict()).min(1),
+  availability: z.array(containerAvailabilitySchema),
+  containerContext: containerContextSchema.nullable(),
+}).strict();
+
 export const adrSummarySchema = z.object({
   id: uuidSchema,
   title: requiredAdrText('Title'),

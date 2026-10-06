@@ -85,12 +85,18 @@ export class ContainerContextService {
       const child = await diagrams.get(diagramId);
       if (!child || child.status !== 'active') throw new ContainerContextNotFoundError('Diagram not found');
       if (child.kind !== 'container' || !child.scope) throw new ApiValidationError({ diagramId:'Source context is available only for container diagrams.' });
-      const resolved = await this.resolveScope(child, diagrams);
-      const sources = resolved.parent.components
-        .filter(component => component.id !== resolved.owner.id && (component.role ?? 'element') === 'element' && isC4ArtifactType(component.type))
-        .map(component => ({ id:component.id, name:component.name, description:component.description, type:component.type as 'person' | 'software-system' }));
-      return { scope:resolved.scope, sources, capturedAt:new Date().toISOString() };
+      return this.contextFromRepository(child, diagrams);
     });
+  }
+
+  /** Uses the caller's repository scope; never starts another graph transaction. */
+  async contextFromRepository(child: DiagramDocument, repository: DiagramRepositoryLike): Promise<ContainerContext> {
+    if (child.kind !== 'container' || !child.scope) throw new ApiConflictError('The container diagram is missing its owner scope.', 'DIAGRAM_REFERENCE_BROKEN');
+    const resolved = await this.resolveScope(child, repository);
+    const sources = resolved.parent.components
+      .filter(component => component.id !== resolved.owner.id && (component.role ?? 'element') === 'element' && isC4ArtifactType(component.type))
+      .map(component => ({ id: component.id, name: component.name, description: component.description, type: component.type as 'person' | 'software-system' }));
+    return { scope: resolved.scope, sources, capturedAt: new Date().toISOString() };
   }
 
   async resolveDocument(diagramId: string): Promise<DiagramDocument> {
@@ -107,6 +113,15 @@ export class ContainerContextService {
 
   async hydrateAndValidateDocument(child: DiagramDocument, repository: DiagramRepositoryLike): Promise<DiagramDocument> {
     if (child.kind !== 'container') return child;
+    const hydrated = await this.hydrateDocument(child, repository);
+    const document = diagramDocumentSchema.parse(hydrated) as DiagramDocument;
+    assertDiagramInvariants(document);
+    return document;
+  }
+
+  /** Resolves canonical metadata so callers can apply their boundary's validator. */
+  async hydrateDocument(child: DiagramDocument, repository: DiagramRepositoryLike): Promise<DiagramDocument> {
+    if (child.kind !== 'container') return child;
     if (!child.scope) throw new ApiConflictError('The container diagram is missing its owner scope.', 'DIAGRAM_REFERENCE_BROKEN');
     const resolved = await this.resolveScope(child, repository);
     const components = child.components.map(component => {
@@ -117,9 +132,7 @@ export class ContainerContextService {
       }
       return { ...component, name:source.name, description:source.description, type:source.type };
     });
-    const document = diagramDocumentSchema.parse({ ...child, name:resolved.owner.name, scope:resolved.scope, components }) as DiagramDocument;
-    assertDiagramInvariants(document);
-    return document;
+    return { ...child, name:resolved.owner.name, scope:resolved.scope, components };
   }
 
   private async resolveOwner(diagramId: string, componentId: string, repository: DiagramRepositoryLike): Promise<ResolvedOwner> {

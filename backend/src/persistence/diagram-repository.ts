@@ -7,6 +7,7 @@ import * as schema from './schema';
 
 export type MaybePromise<T> = T | Promise<T>;
 export interface TrashProvenance { trashBatchId: string | null; trashRootDiagramId: string | null }
+export interface ChildMembership { id: string; status: 'active' | 'trashed'; parentDiagramId: string | null; ownerComponentId: string | null; createdAt: string; updatedAt: string }
 
 export interface DiagramRepositoryLike {
   listAll(): MaybePromise<DiagramDocument[]>;
@@ -15,6 +16,8 @@ export interface DiagramRepositoryLike {
   get(id: string): MaybePromise<DiagramDocument | undefined>;
   findContainerForOwner(ownerComponentId: string): MaybePromise<DiagramDocument | undefined>;
   findChildren(parentDiagramId: string): MaybePromise<DiagramDocument[]>;
+  /** Raw discovery retains expected IDs even when their document cannot hydrate. */
+  findChildMembership(parentDiagramId: string): MaybePromise<ChildMembership[]>;
   withGraphTransaction<T>(parentDiagramId: string, childDiagramIds: string[], action: (repository: DiagramRepositoryLike, transaction?: unknown) => MaybePromise<T>): Promise<T>;
   findComponent(id: string): MaybePromise<{ id: string; diagramId: string; name: string; description: string | null; type: string | null; role: string; sourceComponentId: string | null } | undefined>;
   findRelationship(id: string): MaybePromise<{ id: string; diagramId: string } | undefined>;
@@ -55,6 +58,11 @@ export class DiagramRepository implements DiagramRepositoryLike {
   get(id: string) { const document = this.documents.get(id); return document && this.resolve(document); }
   findContainerForOwner(ownerComponentId: string) { const child = [...this.documents.values()].find(document => document.kind === 'container' && document.scope?.softwareSystemId === ownerComponentId); return child && this.resolve(child); }
   findChildren(parentDiagramId: string) { return [...this.documents.values()].filter(document => document.kind === 'container' && document.scope?.parentDiagramId === parentDiagramId).map(document => this.resolve(document)); }
+  findChildMembership(parentDiagramId: string): ChildMembership[] {
+    return [...this.documents.values()].filter(document => document.scope?.parentDiagramId === parentDiagramId)
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map(document => ({ id: document.id, status: document.status, parentDiagramId: document.scope!.parentDiagramId, ownerComponentId: document.scope!.softwareSystemId, createdAt: document.createdAt, updatedAt: document.updatedAt }));
+  }
   async withGraphTransaction<T>(_parentDiagramId: string, _childDiagramIds: string[], action: (repository: DiagramRepositoryLike, transaction?: unknown) => MaybePromise<T>): Promise<T> {
     const prior = this.transactionTail;
     let release!: () => void;
@@ -311,6 +319,11 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
     const rows = await this.db.select({ id:schema.diagrams.id }).from(schema.diagrams).where(eq(schema.diagrams.parentDiagramId, parentDiagramId)).orderBy(asc(schema.diagrams.id));
     const documents = await Promise.all(rows.map(row => this.load(row.id)));
     return documents.filter((document): document is DiagramDocument => Boolean(document));
+  }
+  async findChildMembership(parentDiagramId: string): Promise<ChildMembership[]> {
+    const rows = await this.db.select({ id: schema.diagrams.id, status: schema.diagrams.status, parentDiagramId: schema.diagrams.parentDiagramId, ownerComponentId: schema.diagrams.ownerComponentId, createdAt: schema.diagrams.createdAt, updatedAt: schema.diagrams.updatedAt })
+      .from(schema.diagrams).where(eq(schema.diagrams.parentDiagramId, parentDiagramId)).orderBy(asc(schema.diagrams.id));
+    return rows.map(row => ({ ...row, createdAt: iso(row.createdAt), updatedAt: iso(row.updatedAt) }));
   }
 
   async create(document: DiagramDocument): Promise<DiagramDocument> {

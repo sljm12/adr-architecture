@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { buildHtmlPackage } from '../../shared/src/export/html-package';
-import { offlineDiagram, offlineTimestamp, renderScaleOfflinePackage } from './html-package-fixtures';
+import { downloadAndExtractOfflinePackage, offlineDiagram, offlineTimestamp, renderScaleOfflinePackage } from './html-package-fixtures';
 
 const ids = {
   diagram: '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
@@ -49,24 +49,12 @@ test('downloads a package that supports direct component and relationship naviga
   await expect(savedDiagram).toBeVisible();
   await savedDiagram.click();
 
-  const downloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Export HTML package' }).click();
-  await expect(page.locator('#html-export-status')).toHaveText('HTML package downloaded.');
-  const download = await downloadPromise;
-  expect(download.suggestedFilename()).toMatch(/payments.*\.zip$/i);
-
-  const archivePath = await download.path();
-  expect(archivePath).toBeTruthy();
-  const zip = await JSZip.loadAsync(await readFile(archivePath!));
   const directory = await mkdtemp(join(tmpdir(), 'adr-diagram-html-export-'));
   try {
-    expect(Object.values(zip.files).filter(file => !file.dir)).toHaveLength(6);
-    for (const [name, file] of Object.entries(zip.files)) {
-      if (file.dir) continue;
-      const target = join(directory, name);
-      await mkdir(dirname(target), { recursive: true });
-      await writeFile(target, await file.async('nodebuffer'));
-    }
+    const { files, filename } = await downloadAndExtractOfflinePackage(page, directory);
+    await expect(page.locator('#html-export-status')).toHaveText('HTML package downloaded.');
+    expect(filename).toMatch(/payments.*\.zip$/i);
+    expect(Object.keys(files)).toHaveLength(6);
     const index = await readFile(join(directory, 'index.html'), 'utf8');
     expect(index).not.toMatch(/<script\b|(?:src|href)=["']https?:\/\//i);
     expect(index).toContain('class="diagram-component component-type-');

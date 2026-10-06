@@ -20,7 +20,7 @@ npm.cmd run dev
 
 The .cmd suffix avoids PowerShell script execution-policy restrictions. Configure DATABASE_URL before starting the server or database checks; never put production credentials in validation artifacts. Frontend is http://localhost:5173, API http://localhost:3000. Browser tests start both servers through playwright.config.ts and require a reachable migrated database and configured browser. Skipped PostgreSQL cases do not prove race/transaction behavior.
 
-For the clarified browser scope, implementation must add the scoped playwright.offline.config.ts described in the plan. After it exists and its fixtures are implemented, run the offline projects separately from the app suite:
+Phase 7 added the scoped playwright.offline.config.ts and reusable fixtures described in the plan. Run the offline projects separately from the app suite:
 
 ```powershell
 npx.cmd playwright install firefox webkit
@@ -30,7 +30,7 @@ npm.cmd run test:e2e -- --config=playwright.offline.config.ts --project=offline-
 npm.cmd run test:e2e -- --config=playwright.offline.config.ts --project=offline-webkit --workers=1
 ```
 
-These are post-implementation commands, not projects available in the current config. Chrome/Edge projects use existing installed stable chrome/msedge channels; the Firefox/WebKit projects use Playwright's engine builds. Do not apply PLAYWRIGHT_EXECUTABLE_PATH globally to the engine projects. Engine coverage complements the four product-browser rows below. Official [browser configuration](https://playwright.dev/docs/browsers) and [CLI project selection](https://playwright.dev/docs/test-cli) document these options; see research Decision 8 for product-browser limits.
+These projects are available; parent/container journey coverage still requires the subsequent implementation phases. Chrome/Edge projects use existing installed stable chrome/msedge channels; the Firefox/WebKit projects use Playwright's engine builds. The scoped config removes inherited app launch options, including PLAYWRIGHT_EXECUTABLE_PATH. Engine coverage complements the four product-browser rows below. Official [browser configuration](https://playwright.dev/docs/browsers) and [CLI project selection](https://playwright.dev/docs/test-cli) document these options; see research Decision 8 for product-browser limits.
 
 ## Four-browser offline acceptance matrix
 
@@ -86,7 +86,26 @@ Shared tests exercise pure aggregate assembly, source resolution, scoped errors,
 
 ## Completion evidence
 
-Record actual commands/results, skipped gates, all four FR-025/SC-012 browser rows and observed SC-003/SC-007 usability and timing evidence after implementation. No browser acceptance runs, new tests or performance measurements were performed as part of this planning update. Original tasks.md is a historical implementation record; regenerate extension tasks before implementation.
+Record actual commands/results, skipped gates, all four FR-025/SC-012 browser rows and observed SC-003/SC-007 usability and timing evidence as implementation proceeds. T001-T040 remain historical; completed extension phases and their validation are recorded below.
+
+### Phase 7 setup validation (2026-10-06)
+
+- T041-T043 are complete. Shared fixtures reuse Spec 009 documents and expose included/excluded identities, exact local ADR sets, owner returns, sibling actions and expected file paths. Browser fixtures seed matching saved data through existing API endpoints with fresh IDs, capture one real ZIP download, inventory files/anchors, and navigate/relocate extracted directories by file URL with network explicitly disabled. No dependencies, migrations, source endpoint or aggregate renderers were added.
+- `npm.cmd run build` passed; Vite retained its existing non-blocking chunk-size warning. A targeted strict `tsc --noEmit` check covering the fixture modules, offline smoke suite and config passed.
+- The six new Vitest fixture/infrastructure checks passed, including real API requests against isolated in-memory repositories. This is not PostgreSQL persistence or transaction evidence.
+- `npm.cmd test` under concurrent build/browser load reported 14 API-test timeouts. Rerunning `npm.cmd test -- --maxWorkers=2` passed: 403 tests passed, 28 skipped, 86 test files passed and 4 skipped. PostgreSQL checks were not enabled; their gates remain pending.
+- `npx.cmd playwright test --config=playwright.offline.config.ts --project=offline-chrome --project=offline-edge --workers=1` passed all 12 tests on Windows: historical single-diagram suites plus a synthetic root/nested offline helper smoke test in each branded browser. After integrating the real-download helper into the existing export test, the targeted `--grep 'downloads a package'` rerun passed both projects.
+- All four scoped projects are independently selectable; config checks confirm Firefox/WebKit inherit no Chromium executable or launch flags, and the existing app config remains unchanged. Firefox/WebKit engine execution, full parent/container journeys, observed usability and all four product-browser acceptance rows remain pending. Setup results do not complete FR-025/SC-012 acceptance. The next phase is Phase 8 (T044-T052).
+
+### Phase 8 foundation validation (2026-10-06)
+
+- T044-T052 are complete. `GET /diagrams/:diagramId/export/html-source` returns the selected general diagram and its UUID-ordered active direct children with complete local ADR sets, or one directly selected child with canonical scope and all eligible source summaries. Raw parent-scoped membership retains expected child IDs before hydration; no global listing, nested context transaction, per-ADR lookup, save, creation, restore or rendering occurs during gathering. General legacy inputs normalize through the existing domain schema. Shared capture/source/snapshot types remain transient; the existing single-diagram builder and browser export integration are unchanged in this foundation phase.
+- The initial `npm.cmd test -- --maxWorkers=2 shared/tests/html-export-source.test.ts backend/tests/contract/html-export-source.test.ts backend/tests/persistence/html-export-source.test.ts` run confirmed missing schema/endpoint/service behavior before implementation. An additional failing duplicate-child-ID regression confirmed a 500/422 classification gap, which is now fixed by resolving canonical metadata before applying the export validator.
+- `node test-results/spec007-phase8-database-check.cjs` created a dedicated temporary PostgreSQL database, supplied its URL only through the child process environment with `RUN_POSTGRES_TESTS=1`, and executed `npm.cmd test -- --maxWorkers=2 shared/tests/html-export-source.test.ts backend/tests/contract/html-export-source.test.ts backend/tests/contract/openapi.test.ts backend/tests/persistence/html-export-source.test.ts`. The final run passed all 54 checks in four files, including all nine PostgreSQL cases, on Windows with PostgreSQL 17.4. The temporary database `spec007_source_ac55e3fe88ae4752a710493399b21493` was migrated through existing migrations 0001-0006 in a unique test schema and removed after the run. The local wrapper is an ignored validation artifact under `test-results/`.
+- PostgreSQL evidence covers parent-first sorted row locks, expected IDs versus unavailable loads, bounded full-ADR reads (one ADR query per included diagram plus two link queries for each nonempty set), detached responses, and exact equality of rows before/after gathering across diagrams, components, relationships, groups/members, ADRs and both link tables. This equality includes creation/update/trash timestamps and trash provenance. Six gated competing mutations (save, child creation, trash, restore, ADR content and ADR links) return the complete before graph; a coordinated owner/ADR commit before the read lock returns the complete after graph. Invalid required members fail without partial responses.
+- `npm.cmd run build` passed for shared, backend, frontend and CLI, with the existing non-blocking Vite chunk-size warning. A targeted strict `tsc --noEmit` check of all new fixture/schema/contract/persistence test modules and `git diff --check` passed.
+- `npm.cmd test -- --maxWorkers=2` passed: 446 tests passed, 37 skipped; 89 files passed and four skipped. The ordinary run skips the nine new PostgreSQL cases because the opt-in flag is absent; all nine passed separately in the dedicated database run above. Other existing gated checks remain skipped. The PostgreSQL run emitted the existing `pg` concurrent-query deprecation warning; it did not fail any checks.
+- No extension hooks are configured. Phase 9 (T053-T067) is next. Browser aggregate capture/rendering/navigation, engine journeys and the four actual stable-browser release gates remain pending; this source-boundary validation does not establish their acceptance.
 
 ## Historical single-diagram implementation validation
 
