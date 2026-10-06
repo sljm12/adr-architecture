@@ -6,6 +6,8 @@
 
 ## Snapshot boundary
 
+**Browser HTML scope update (2026-10-06)**: Updated [Spec 007](../../007-export-interactive-html/spec.md) and its [package contract](../../007-export-interactive-html/contracts/package-format.md) supersede this document's parent/general single-diagram restriction for the browser HTML ZIP workflow. That workflow now includes active direct owned container diagrams with local navigation and a shared ADR catalog; captured parent drafts determine bundled owner/source display metadata. The single-diagram statements below continue to apply to direct container exports, CLI exports and separate Mermaid/SVG actions. No arbitrary recursive inclusion or new import workflow is introduced.
+
 A container export is a single-diagram snapshot. Preserve the existing package paths and offline relative-link contract. Do not add recursively exported parents/children or links that depend on access to the live application.
 
 Every exporter consumes a validated, resolved domain document. Owner and source participant references must resolve before export; unresolved or unsupported content fails with an artifact ID, field and corrective action. The boundary is scope metadata, not a fabricated component endpoint.

@@ -1,40 +1,94 @@
-# Quickstart Validation: Interactive HTML Package Export
+# Quickstart Validation: Parent and Container HTML Package Export
 
-This guide validates [Spec 007](spec.md) after implementation. Use the API's local in-memory mode for a quick manual run, or configure `DATABASE_URL` and apply migrations through `backend/drizzle/0004_component_dimensions.sql` to verify PostgreSQL persistence. Do not treat this guide as an implementation script.
+**Updated**: 2026-10-06. Run these scenarios after implementing the updated [plan](plan.md). Planning does not establish implementation completion. Contracts: [source](contracts/export-source.md), [OpenAPI](contracts/openapi.yaml), [package](contracts/package-format.md), [UI](contracts/ui-contract.md).
 
 ## Prerequisites and commands
 
-From the repository root, install dependencies if needed, then run the available checks:
+Use installed Node.js/npm and a dedicated PostgreSQL database. The current production dev server requires DATABASE_URL; the in-memory repositories are test doubles, not a selectable dev-server mode. Set DATABASE_URL in the API process environment (backend/.env is not automatically loaded). Apply only pending migrations in order through 0006_container_component_types.sql, as documented in README.md; this export extension adds no migration.
+
+From the repository root in PowerShell:
 
 ```powershell
-npm install
-npm run build
-npm test
-npm run test:e2e
+npm.cmd install
+npm.cmd run build
+npm.cmd test
+$env:RUN_POSTGRES_TESTS = '1'
+npm.cmd test
+npm.cmd run test:e2e -- --workers=1
+npm.cmd run dev
 ```
 
-For manual browser validation, start the app with `npm run dev` and open `http://localhost:5173`. The API runs at `http://localhost:3000`. If using PostgreSQL, set `DATABASE_URL`, apply the existing migrations in order and then `backend/drizzle/0004_component_dimensions.sql` with the project's migration runner, and restart the API. The [API contract](contracts/openapi.yaml) and [component layout change](contracts/component-layout.md) describe the expected read and persistence boundaries.
+The .cmd suffix avoids PowerShell script execution-policy restrictions. Configure DATABASE_URL before starting the server or database checks; never put production credentials in validation artifacts. Frontend is http://localhost:5173, API http://localhost:3000. Browser tests start both servers through playwright.config.ts and require a reachable migrated database and configured browser. Skipped PostgreSQL cases do not prove race/transaction behavior.
+
+For the clarified browser scope, implementation must add the scoped playwright.offline.config.ts described in the plan. After it exists and its fixtures are implemented, run the offline projects separately from the app suite:
+
+```powershell
+npx.cmd playwright install firefox webkit
+npm.cmd run test:e2e -- --config=playwright.offline.config.ts --project=offline-chrome --workers=1
+npm.cmd run test:e2e -- --config=playwright.offline.config.ts --project=offline-edge --workers=1
+npm.cmd run test:e2e -- --config=playwright.offline.config.ts --project=offline-firefox --workers=1
+npm.cmd run test:e2e -- --config=playwright.offline.config.ts --project=offline-webkit --workers=1
+```
+
+These are post-implementation commands, not projects available in the current config. Chrome/Edge projects use existing installed stable chrome/msedge channels; the Firefox/WebKit projects use Playwright's engine builds. Do not apply PLAYWRIGHT_EXECUTABLE_PATH globally to the engine projects. Engine coverage complements the four product-browser rows below. Official [browser configuration](https://playwright.dev/docs/browsers) and [CLI project selection](https://playwright.dev/docs/test-cli) document these options; see research Decision 8 for product-browser limits.
+
+## Four-browser offline acceptance matrix
+
+Run the same extracted representative package in actual current stable Chrome, Edge, Firefox and Safari, using a supported desktop operating system for each. Perform the local package journeys in scenarios 2–6 and the direct-child/no-child/empty-state checks in scenarios 9–10, with normal settings and network disabled. Confirm local file URLs remain in use after navigating and relocating. Application servers may generate the original export, but must not serve the package for these checks.
+
+| Required actual browser | Acceptance route | Version / OS / date | Journey results and evidence | Status |
+| --- | --- | --- | --- | --- |
+| Chrome stable | Installed branded browser; matching offline-channel automation or actual session | Record at validation | Record every required journey and package identity | Pending |
+| Edge stable | Installed branded browser; matching offline-channel automation or actual session | Record at validation | Record every required journey and package identity | Pending |
+| Firefox stable | Actual installed stable Firefox session | Record at validation | Record every required journey and package identity | Pending |
+| Safari stable | Actual Safari session on supported macOS | Record at validation | Record every required journey and package identity | Pending |
+
+Retain engine regression reports separately with exact build and operating system. A Firefox engine or WebKit project is not an actual Firefox/Safari acceptance row. Unavailable browsers remain Pending; do not mark skipped coverage as passed. Release acceptance requires all four product-browser rows to pass. Capture trace/screenshots where available and written per-journey observations for manual sessions; never invent results.
+
+For keyboard journeys, start from normal page focus and use the browser's native keyboard navigation/activation to reach artifact links, child actions, ADR links and parent return. Check visible focus and continuation after page/fragment navigation. Locator.focus() plus Enter alone does not prove reachability. Disable network explicitly before opening extracted file pages in automated runs; disconnect network for manual sessions after obtaining the package. Security-setting changes and file-access launch flags are not acceptable workarounds. If a browser exposes a focus/navigation difference, fix the generated markup or provide the specified keyboard-accessible text route and rerun the same journey.
+
+## Representative fixture
+
+Create a general/System context with two Software Systems sharing a name, a Person, a third system without a child, and an independently trashed child. Group systems where valid. Create two active children: one with Application and Datastore, responsibilities, technologies, directed relationships/protocols and source-linked external participants; another may start with an empty labeled boundary. Include an external Software System occurrence whose source owns the other active child.
+
+Across parent and children, create component-linked, relationship-only and unlinked ADRs in draft/accepted/superseded/rejected states, with valid same-diagram replacement references. Repeat artifact/ADR names across diagrams. Preserve prepared IDs and expected link sets for comparison.
 
 ## End-to-end scenarios
 
-1. Create a diagram with two differently named components, a directed labeled relationship, and a system group. Resize one component, move it, and save. Create one ADR linked only to the component, one linked only to the relationship, and one unlinked ADR. Include draft, accepted, and rejected states. Export the HTML package and verify the download reports success.
-2. Extract the ZIP to a new directory and open `index.html` directly from disk with network access disabled. Verify the group, component sizes and positions, relationship label and arrow, and the link to `adrs.html`. Click a component and the relationship separately. Each detail section must show exactly its direct ADRs, without borrowing the relationship ADR for an endpoint component. Select an unlinked artifact and check its empty state.
-3. Use Tab and Enter to reach the diagram's textual artifact links, an ADR link, the all-ADR page, and a linked artifact back in the diagram. Verify visible focus and meaningful labels. In `adrs.html`, open every ADR, including the unlinked one, and verify status, full decision fields, timestamps, and references.
-4. Open `diagram.svg` in a standard SVG editor and confirm that groups, shapes, labels, and relationship paths remain vector elements. Open every `adrs/<uuid>.md` in a Markdown reader and confirm its content and stable references. Consult the [package contract](contracts/package-format.md) for exact paths and anchors.
-5. Edit `--component-outline` and `--component-fill` at the top of `styles.css`, reload `index.html`, and verify both colors change while selection and ADR links still work. Move the entire extracted directory and reopen the pages to check relative navigation.
-6. Make unsaved diagram changes and edit an existing ADR without saving; export again. The package must reflect the visible edits while the app's save indicators remain unchanged. Start a valid new unsaved ADR and verify it appears once with a package-local UUID. An incomplete new draft must produce a field-specific error and no successful ZIP.
-7. Test duplicate component names, non-Latin characters, punctuation, Markdown characters, and text resembling HTML or script. The text must be readable, links must resolve by UUID, and authored text must never execute. Test a diagram with no ADRs and a valid empty diagram; both must show clear empty states.
-8. Supply or simulate a missing relationship endpoint, broken ADR component or relationship link, missing replacement ADR, invalid component dimensions, and unsupported visual type. Each case must stop before download and identify the artifact and field. Repeat with a resized group member and verify its group boundary still encloses it after save and reopen.
+1. Export the System context. Confirm one ZIP with root entry/SVG, one HTML/SVG pair per active child, one shared stylesheet/catalog and one Markdown per ADR. Trashed/unrelated children are absent. Entry opens the selected context; no creation/restoration/save takes place.
+2. Extract and open index.html from disk with network disabled. Select a system; its exact ADRs remain available. Activate Open container diagram, inspect complete child boundary/subtypes/responsibilities/technology/external details/layout/relationships/protocols, then return to the parent owning-system anchor. Repeat with the duplicate-name owner to prove UUID routing.
+3. Select child containers, external occurrences and relationships. Each shows only directly linked local ADRs, including no-links states. An external Software System opens its source's already bundled child; no parent/source ADR inheritance or extra inclusion occurs. No-child/trashed-child systems explain the absence without broken/create/restore links.
+4. Browse adrs.html. Verify every included ADR once, with scope, status, dates, full fields and replacements. Follow component and relationship references into the exact owning page and artifact. A child with no ADRs has a local empty state; an entirely ADR-free package has a catalog empty state.
+5. Use only Tab/Enter for context artifact selection, child action, child relationship ADR, catalog, ADR backlink and parent return. Verify visible focus/readable labels and scope independent of color. Observe the 2-minute representative reader journeys in SC-003/SC-007, recording actual sample size, time and success rates.
+6. Open every standalone SVG in a standard editor and every ADR Markdown file in a reader. Check complete vector content and diagram-qualified links. Change the two documented stylesheet colors and reload root and child HTML; all update while selection/ADR/parent navigation still work. Move the extracted directory and repeat links. Check every generated href/style reference and fragment against actual files/IDs.
+7. Make an unsaved parent owner rename, source description/type edit and layout change, and edit an ADR; export. Children use the captured owner/source fields while retaining local IDs/layout/ADR links. Pause source retrieval, edit the application again, resume and verify only the captured draft appears. Repeat a valid unsaved new ADR and invalid unfinished draft; invalid content gives field feedback and no ZIP.
+8. For currently retained session state, validate the active draft overlay and saved other diagrams. Current stores have no inactive draft cache. At the aggregate input boundary test multiple provided retained overrides, ignored unrelated/stale overrides, and draft owner/source removal or reclassification that invalidates a required child. Those invalid required references fail without omission or saves. Save-in-progress and duplicate export attempts block clearly.
+9. Export a directly selected populated child and a valid empty child. Each remains a single-diagram root package with complete context, local ADRs and boundary, no parent/sibling navigation. Include an unsaved external occurrence from an eligible saved parent source and verify context resolution.
+10. Validate a no-child System context, legacy/general documents and existing CLI direct parent/child exports. Preserve root filenames, geometry and ADR behavior; CLI remains single-diagram, Mermaid/separate SVG scope remains unchanged.
+11. Simulate a required active child failing to load, mismatched ownership, missing external source, bad endpoint/ADR/replacement link, duplicate UUID/output path, invalid geometry/subtype, unsupported control character, and archive rejection. Every case yields diagram/artifact/field/remedy feedback, no successful partial download, and unchanged editor/database state.
+12. Add an unrelated corrupt diagram and verify a valid selected package still exports. Race source gathering against save/create-child/trash/restore/ADR mutations using the coordinated database test harness. Assert a complete before-or-after saved graph, no mixed membership, no missing active child filtering and no row/timestamp/trash mutation from the export read.
+13. Build the aggregate scale fixture (up to 10 children, totals 100 components, 200 relationships, 100 ADRs). Verify one source request, no per-ADR requests and no omission. Record source time, total export/local-open time, machine/browser and archive size against the 10-second engineering target; do not misreport fixture limits as export caps.
+14. Complete the four-browser matrix above on current stable desktop releases. Repeat diagram rendering, parent/child and external-source actions, exact ADR sets/catalog/backlinks, keyboard journeys, CSS recoloring and relocation in every row. Record actual version/OS/date and proof; single-diagram/no-child/empty-child cases must retain their scope and empty states. Browser-specific failures block that row instead of changing the acceptance conditions.
 
-## Automated proof expected
+## Automated proof and requirement coverage
 
-- Shared tests cover legacy size normalization, changed dimensions through save/reopen, stable IDs, group enclosure, snapshot merge, direct versus endpoint links, replacement references, escaping, deterministic SVG and Markdown output, and atomic validation errors.
-- Backend contract and persistence tests cover `GET /diagrams/{diagramId}/adrs/full`, all ADR states and links, missing or inactive diagram errors, bounded aggregate reads, and the additive component-size migration.
-- Frontend tests cover unsaved and failed-save snapshots, a saving-state block, download feedback, and no save side effects. Playwright covers the extracted package using a local file URL, keyboard navigation, all-ADR browsing, CSS recoloring, and representative SVG content.
+| Requirement / outcome | Required validation |
+| --- | --- |
+| FR-001–FR-003, FR-016; SC-001–SC-002 | Source API completeness, raw active membership, root/child manifests, complete C4 SVG/HTML content, valid empty children. |
+| FR-004–FR-007, FR-019; SC-003 | Exact local ADR sets/all statuses, catalog deduplication and scope, same-diagram replacements and artifact backlinks. |
+| FR-008–FR-011, FR-023; SC-004–SC-005, SC-008 | Per-diagram SVGs/all Markdown, path registry and resolved link targets, duplicate names, owner/source overlays and shared recoloring. |
+| FR-012–FR-014; SC-006, SC-009–SC-010 | Frozen captures, later edits, errors/escaping, retained draft inputs, graph race/zero-write checks and atomic archive failure. |
+| FR-015, FR-017–FR-018, FR-020–FR-021; SC-007 | Pointer/keyboard parent-child-source actions, return anchors, focus/default contrast, no-link exclusions and observed reader journeys. |
+| FR-022, FR-024; SC-011 | Direct-child/no-child/trash/legacy compatibility, unchanged single builder and CLI/Mermaid/separate SVG scope. |
+| FR-025; SC-012 | All four actual stable desktop browser rows pass required offline journeys; exact version/OS/date/evidence recorded; normal settings, disabled network, file URLs and real keyboard reachability. |
 
-The feature is ready for review when these checks pass and the package contents match [package-format.md](contracts/package-format.md) for all representative and failure cases.
+Shared tests exercise pure aggregate assembly, source resolution, scoped errors, path/link registry, catalog, Markdown, complete SVG and no-output-on-failure behavior. Backend contract/persistence tests exercise new source responses and graph coordination with both repository implementations. Frontend tests exercise capture and status/no-side-effect behavior. Extend existing html-package and container suites in e2e/tests for real ZIP extraction, file URLs, relocation, keyboard and styling. Retain existing CLI builder tests.
 
-## Implementation validation record
+## Completion evidence
+
+Record actual commands/results, skipped gates, all four FR-025/SC-012 browser rows and observed SC-003/SC-007 usability and timing evidence after implementation. No browser acceptance runs, new tests or performance measurements were performed as part of this planning update. Original tasks.md is a historical implementation record; regenerate extension tasks before implementation.
+
+## Historical single-diagram implementation validation
 
 Run on 2026-09-24 for Phases 4–6:
 
@@ -42,3 +96,5 @@ Run on 2026-09-24 for Phases 4–6:
 - `npm test` ran 242 tests: 235 passed, 6 skipped, and 1 failed. The remaining failure is the untouched `frontend/tests/save-controls.test.tsx` source-text assertion for `role="status"`; the current component assigns the status role conditionally.
 - `npm run test:e2e -- --workers=1` passed all 43 browser tests, including ZIP download, offline navigation, keyboard focus, CSS recoloring, and the 100/200/100 scale case. The default six-worker run had one transient timeout in the existing performance scenario; that file passed alone and the serial suite passed.
 - PostgreSQL-backed persistence checks were skipped by the test suite, so migration 0004 was not exercised against a live PostgreSQL database in this run.
+
+The record above predates the parent-and-container extension and is not evidence that its source API, navigation or transaction gates pass.

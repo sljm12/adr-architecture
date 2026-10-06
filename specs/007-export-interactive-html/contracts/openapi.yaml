@@ -1,13 +1,54 @@
 openapi: 3.0.3
 info:
   title: ADR Diagram API - HTML Package Export Source
-  version: 1.0.0
+  version: 1.1.0
   description: >-
-    Read-only aggregate for the browser's current-state package export. Existing
-    GET /diagrams/{diagramId}/adrs continues to return summaries. The existing
-    diagram read/write contract also gains component size as described in
-    component-layout.md.
+    Read-only sources for browser HTML ZIP export. Backend paths are prefixed
+    with /api by the browser proxy. The new html-source operation gathers a
+    consistent selected general diagram and active direct children, or one directly
+    selected container. Current editor drafts are overlaid only in the browser.
+    Existing ADR full reads, diagram dimensions and CLI scope remain unchanged.
 paths:
+  /diagrams/{diagramId}/export/html-source:
+    get:
+      summary: Gather the complete saved source for one browser HTML package
+      description: >-
+        Parent-scoped graph read under existing parent-first transaction coordination.
+        No writes or ZIP generation. For general entries, includes every active direct
+        child and complete full ADRs; none/trashed states are deliberate exclusions.
+        A required child failure never returns a partial 200 response. Direct container
+        entries include only that child plus source context, no parent/sibling package.
+      parameters:
+        - name: diagramId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Complete detached saved source; entry first, children ordered by UUID
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HtmlExportSource' }
+        '404':
+          description: Selected diagram not found or inactive
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExportSourceError' }
+        '409':
+          description: Broken graph reference or unavailable required active child
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExportSourceError' }
+        '422':
+          description: Invalid ID or invalid/unsupported saved artifact
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExportSourceError' }
+        '500':
+          description: Unexpected source read failure; no partial source response
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExportSourceError' }
   /diagrams/{diagramId}/adrs/full:
     get:
       summary: Read every full ADR belonging to an active diagram
@@ -40,6 +81,62 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
 components:
   schemas:
+    HtmlExportSource:
+      type: object
+      additionalProperties: false
+      required: [entryDiagramId, sourceCapturedAt, diagrams, availability, containerContext]
+      properties:
+        entryDiagramId: { type: string, format: uuid }
+        sourceCapturedAt: { type: string, format: date-time }
+        diagrams:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/DiagramSource' }
+        availability:
+          type: array
+          description: All saved parent Software Systems; empty for direct child
+          items:
+            $ref: '../../009-c4-container-diagrams/contracts/openapi.yaml#/components/schemas/ContainerAvailability'
+        containerContext:
+          type: object
+          nullable: true
+          description: Null for general entry; consistent eligible context for direct child
+          additionalProperties: false
+          required: [scope, sources, capturedAt]
+          properties:
+            scope:
+              $ref: '../../009-c4-container-diagrams/contracts/openapi.yaml#/components/schemas/ContainerScope'
+            sources:
+              type: array
+              items:
+                $ref: '../../009-c4-container-diagrams/contracts/openapi.yaml#/components/schemas/SourceElement'
+            capturedAt: { type: string, format: date-time }
+    DiagramSource:
+      type: object
+      additionalProperties: false
+      required: [diagram, adrs]
+      properties:
+        diagram:
+          $ref: '../../009-c4-container-diagrams/contracts/openapi.yaml#/components/schemas/DiagramDocument'
+        adrs:
+          type: array
+          items: { $ref: '#/components/schemas/Adr' }
+    ExportSourceError:
+      type: object
+      required: [message, code, diagramId, artifactKind, field, remedy]
+      properties:
+        message: { type: string }
+        code:
+          type: string
+          enum: [HTML_EXPORT_NOT_FOUND, HTML_EXPORT_SOURCE_INCOMPLETE, HTML_EXPORT_VALIDATION_FAILED, HTML_EXPORT_SOURCE_FAILED]
+        diagramId: { type: string, description: 'Requested or affected identity, including invalid request values' }
+        artifactKind: { type: string, enum: [diagram, component, relationship, group, ADR] }
+        artifactId: { type: string, nullable: true }
+        field: { type: string }
+        remedy: { type: string }
+        fields:
+          type: object
+          additionalProperties: { type: string }
     Adr:
       type: object
       required:
