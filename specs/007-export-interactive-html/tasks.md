@@ -12,9 +12,9 @@ description: "Tasks for interactive HTML package export with container diagrams"
 
 **Organization**: Tasks are grouped by user story. `[P]` marks work in distinct files that can proceed concurrently after the stated prerequisites. Paths are relative to the repository root.
 
-**Update (2026-10-06)**: T001-T040 and their checkboxes are preserved as the historical single-diagram implementation record. Their checkpoints describe that baseline, not completion of the updated stories. T041-T089 are the parent-and-container extension generated from the current plan, FR-001-FR-025, and SC-001-SC-012. Phases 7-9 are complete, including dedicated PostgreSQL source/race/zero-write validation; continue implementation at Phase 10. Do not reinstall JSZip, redo component dimensions/full-ADR reads, add a migration, or introduce an inactive draft cache. `.specify/feature.json` already selects this feature.
+**Update (2026-10-06)**: T001-T040 and their checkboxes are preserved as the historical single-diagram implementation record. Their checkpoints describe that baseline, not completion of the updated stories. T041-T089 are the parent-and-container extension generated from the current plan, FR-001-FR-025, and SC-001-SC-012. Phases 7-10 are complete, including dedicated PostgreSQL source/race/zero-write validation; continue implementation at Phase 11. Do not reinstall JSZip, redo component dimensions/full-ADR reads, add a migration, or introduce an inactive draft cache. `.specify/feature.json` already selects this feature.
 
-**Remaining scope**: 22 tasks: Setup 0, Foundation 0, US1 0, US2 5, US3 7, Polish 10. Historical counts: Setup 1, Foundation 10, US1 13, US2 5, US3 7, Polish 4; 89 tasks overall, 67 marked complete (40 historical, 3 extension setup, 9 extension foundation and 15 extension US1). There are 21 extension `[P]` tasks; follow the execution batches below rather than treating all marked tasks as mutually independent.
+**Remaining scope**: 17 tasks: Setup 0, Foundation 0, US1 0, US2 0, US3 7, Polish 10. Historical counts: Setup 1, Foundation 10, US1 13, US2 5, US3 7, Polish 4; 89 tasks overall, 72 marked complete (40 historical, 3 extension setup, 9 extension foundation 15 extension US1 and 5 extension US2). There are 21 extension `[P]` tasks; follow the execution batches below rather than treating all marked tasks as mutually independent.
 
 ## Historical single-diagram baseline (Phases 1-6)
 
@@ -240,14 +240,14 @@ Write T044-T046 first and demonstrate missing extension behavior. T047-T051 impl
 
 ### Tests for User Story 2
 
-- [ ] T068 [P] [US2] Extend `shared/tests/adr-page-export.test.ts` with aggregate catalog cases for each included decision exactly once, duplicate titles across diagrams, diagram name/UUID/level, all fields/statuses/dates, same-diagram replacements, unlinked decisions, zero-local/global ADRs, and exact parent/child component and relationship destinations without inherited links.
-- [ ] T069 [P] [US2] Extend `e2e/tests/html-package-adrs.spec.ts` to open the shared catalog from root and nested children, browse full linked/unlinked decisions and valid replacements, follow backlinks into the exact duplicate-name parent/child artifact, and traverse catalog/decision/backlink text links using native keyboard input with disabled network.
+- [X] T068 [P] [US2] Extend `shared/tests/adr-page-export.test.ts` with aggregate catalog cases for each included decision exactly once, duplicate titles across diagrams, diagram name/UUID/level, all fields/statuses/dates, same-diagram replacements, unlinked decisions, zero-local/global ADRs, and exact parent/child component and relationship destinations without inherited links.
+- [X] T069 [P] [US2] Extend `e2e/tests/html-package-adrs.spec.ts` to open the shared catalog from root and nested children, browse full linked/unlinked decisions and valid replacements, follow backlinks into the exact duplicate-name parent/child artifact, and traverse catalog/decision/backlink text links using native keyboard input with disabled network.
 
 ### Implementation for User Story 2
 
-- [ ] T070 [US2] Complete aggregate catalog rendering in `shared/src/export/adr-page.ts` with deterministic diagram-scoped ordering, one entry/detail per ADR UUID, readable name/ID/level, all lifecycle fields and dates, local replacement references, and explicit unlinked/global empty states using T061 paths and escaping.
-- [ ] T071 [US2] Finish catalog integration in `shared/src/export/diagram-page.ts` and `shared/src/export/html-package.ts`: every included page reaches the single root ADR browser, full decision references resolve to their owning diagram and exact artifact, and diagrams with zero local ADRs keep their local empty state even when other diagrams have decisions.
-- [ ] T072 [US2] Run and make green `shared/tests/adr-page-export.test.ts` and `e2e/tests/html-package-adrs.spec.ts`, validate the US2 independent journey, and rerun US1 navigation/link checks in `shared/tests/html-package-navigation.test.ts` and `shared/tests/package-links.test.ts`; record results in `specs/007-export-interactive-html/quickstart.md`.
+- [X] T070 [US2] Complete aggregate catalog rendering in `shared/src/export/adr-page.ts` with deterministic diagram-scoped ordering, one entry/detail per ADR UUID, readable name/ID/level, all lifecycle fields and dates, local replacement references, and explicit unlinked/global empty states using T061 paths and escaping.
+- [X] T071 [US2] Finish catalog integration in `shared/src/export/diagram-page.ts` and `shared/src/export/html-package.ts`: every included page reaches the single root ADR browser, full decision references resolve to their owning diagram and exact artifact, and diagrams with zero local ADRs keep their local empty state even when other diagrams have decisions.
+- [X] T072 [US2] Run and make green `shared/tests/adr-page-export.test.ts` and `e2e/tests/html-package-adrs.spec.ts`, validate the US2 independent journey, and rerun US1 navigation/link checks in `shared/tests/html-package-navigation.test.ts` and `shared/tests/package-links.test.ts`; record results in `specs/007-export-interactive-html/quickstart.md`.
 
 **Checkpoint**: Every included decision is browseable once with scope, full fields and exact local references, including unlinked decisions and all statuses.
 
