@@ -29,6 +29,8 @@ function artifactLinks(snapshot: HtmlExportSnapshot, adr: ArchitectureDecisionRe
 
 /** Renders one safe Markdown ADR document with stable links to the exported diagram. */
 export function renderAdrMarkdown(snapshot: HtmlExportSnapshot, adr: ArchitectureDecisionRecord, links?: PackageLinkContext): string {
+  const { diagram } = snapshot;
+  const diagramDestination = links ? links.relative(links.markdown(adr.id), links.diagram(diagram.id)) : '../index.html';
   const references = artifactLinks(snapshot, adr, links);
   const replacement = adr.replacementAdrId
     ? `[${adr.replacementAdrId}](${links?.adr(links.markdown(adr.id), adr.replacementAdrId) ?? `../adrs.html#adr-${adr.replacementAdrId}`})`
@@ -37,6 +39,8 @@ export function renderAdrMarkdown(snapshot: HtmlExportSnapshot, adr: Architectur
     `# ${escapeMarkdown(adr.title)}`,
     '',
     `- ADR ID: ${adr.id}`,
+    `- Diagram: [${escapeMarkdown(diagram.name)} (${diagram.id})](${diagramDestination})`,
+    `- Level: ${diagram.kind === 'container' ? 'Container diagram' : 'System context'}`,
     `- Status: ${adr.status}`,
     `- Created: ${escapeMarkdown(adr.createdAt)}`,
     `- Updated: ${escapeMarkdown(adr.updatedAt)}`,

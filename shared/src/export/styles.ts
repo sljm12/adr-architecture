@@ -1,7 +1,12 @@
 export function renderExportStyles(): string {
   const baseStyles = renderExportStylesLegacy();
-  return `/* Component colors: change these values to recolor diagram components. */\n:root{--component-outline:#707780;--component-fill:#ffffff;}\n.export-scope{overflow-wrap:anywhere;margin-bottom:24px}.system-boundary{pointer-events:none}@media print{.artifact-detail{display:block}.diagram-panel{overflow:visible}.diagram-svg{max-height:none}}\n${baseStyles
+  return `/* Component colors for all root and nested HTML diagrams:
+   --component-outline: component border color.
+   --component-fill: component background color; keep text readable against it.
+   Edit the values below, then reload each HTML page. Navigation is unaffected.
+   Standalone SVG files embed their own defaults and can be restyled independently. */\n:root{--component-outline:#707780;--component-fill:#ffffff;}\n.export-scope{overflow-wrap:anywhere;margin-bottom:24px}.system-boundary{pointer-events:none}.artifact-detail:focus-visible,.adr-detail:focus-visible{outline:2px solid #0071e3;outline-offset:3px}@media print{.artifact-detail{display:block}.diagram-panel{overflow:visible}.diagram-svg{max-height:none}}\n${baseStyles
     .replace('.component-shape{fill:#fff;stroke:#707780;', '.component-shape{fill:var(--component-fill);stroke:var(--component-outline);')
+    .replace('.empty-value{color:#7a7a7a;', '.empty-value{color:#5f6368;')
     .replace('.adr-detail{', '.adr-catalog{max-width:960px;padding:18px;margin:0 0 24px;border:1px solid #e0e0e0;background:#fafafc}.adr-catalog h2{margin:0 0 10px;font-size:20px}.adr-catalog ol{display:grid;gap:8px;padding-left:24px;margin:0}.adr-catalog li{padding-left:3px}.adr-catalog .adr-status{margin-left:10px}.adr-references ul{display:grid;gap:6px;padding-left:20px;overflow-wrap:anywhere}.adr-detail{')}`;
 }
 

@@ -87,5 +87,14 @@ export function renderDiagramSvg(diagram: DiagramDocument, options: SvgExportOpt
   </style>` : '';
   const scopeText = diagram.scope ? `Container diagram for ${diagram.scope.softwareSystemName}; parent ${diagram.scope.parentDiagramName}.` : 'Single-diagram snapshot. Child container contents are not bundled.';
   const title = `<title id="architecture-diagram-title">Architecture diagram: ${escapeMarkup(diagram.name)}</title><desc id="architecture-diagram-scope">${escapeMarkup(scopeText)}</desc>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${formatSvgNumber(viewBox.x)} ${formatSvgNumber(viewBox.y)} ${formatSvgNumber(viewBox.width)} ${formatSvgNumber(viewBox.height)}" role="img" aria-labelledby="architecture-diagram-title" aria-describedby="architecture-diagram-scope">${title}${standaloneStyle}<g class="diagram-groups">${boundary}${groups}</g><g class="diagram-relationships">${relationships}</g><g class="diagram-components">${components}</g></svg>`;
+  const width = formatSvgNumber(viewBox.width), height = formatSvgNumber(viewBox.height);
+  const content = `<g class="diagram-groups">${boundary}${groups}</g><g class="diagram-relationships">${relationships}</g><g class="diagram-components">${components}</g>`;
+  // Some vector editors reset the view-box origin on import. Translate one outer
+  // group instead, preserving all editable domain coordinates and relative layout.
+  const viewport = options.standalone
+    ? `<g class="diagram-viewport" transform="translate(${formatSvgNumber(-viewBox.x)} ${formatSvgNumber(-viewBox.y)})">${content}</g>`
+    : content;
+  const origin = options.standalone ? '0 0' : `${formatSvgNumber(viewBox.x)} ${formatSvgNumber(viewBox.y)}`;
+  const dimensions = options.standalone ? ` width="${width}" height="${height}"` : '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${origin} ${width} ${height}"${dimensions} role="img" aria-labelledby="architecture-diagram-title" aria-describedby="architecture-diagram-scope">${title}${standaloneStyle}${viewport}</svg>`;
 }

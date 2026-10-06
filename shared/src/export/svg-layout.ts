@@ -92,6 +92,7 @@ function createRoute(relationship: Relationship, components: Map<string, Compone
 export function layoutDiagramForSvg(diagram: DiagramDocument): DiagramSvgLayout {
   let boundaryRect: ExportRect | undefined;
   if (diagram.kind === 'container') {
+    const labelGap = Math.max(24, ...diagram.relationships.map(relationship => 24 + wrapExportText([relationship.label, relationship.protocol].filter(Boolean).join('\n'), 260).length * 18));
     let grown = diagram.components.map(component => {
       const width = Math.max(component.size.width, 280), height = Math.max(component.size.height, 32 + containerLabelLines(component, width).length * 18);
       return { ...component, size: { width, height } };
@@ -102,7 +103,7 @@ export function layoutDiagramForSvg(diagram: DiagramDocument): DiagramSvgLayout 
       for (;;) {
         const collisions = placed.filter(other => candidate.position.x < other.position.x + other.size.width && candidate.position.x + candidate.size.width > other.position.x && candidate.position.y < other.position.y + other.size.height && candidate.position.y + candidate.size.height > other.position.y);
         if (!collisions.length) break;
-        candidate = { ...candidate, position: { x: candidate.position.x, y: Math.max(...collisions.map(other => other.position.y + other.size.height)) + 24 } };
+        candidate = { ...candidate, position: { x: candidate.position.x, y: Math.max(...collisions.map(other => other.position.y + other.size.height)) + labelGap } };
       }
       placed.push(candidate);
     }
@@ -136,6 +137,26 @@ export function layoutDiagramForSvg(diagram: DiagramDocument): DiagramSvgLayout 
     ordered.forEach((relationship, index) => laneById.set(relationship.id, (index - (ordered.length - 1) / 2) * 34));
   }
   const relationshipRoutes = diagram.relationships.map(relationship => createRoute(relationship, components, laneById.get(relationship.id) ?? 0));
+  // Labels are drawn behind nodes. Keep their full multiline envelope clear of
+  // component bodies, boundary headings and earlier labels so no words are hidden.
+  const labelObstacles: ExportRect[] = [
+    ...componentRects.values(),
+    ...(diagram.groups ?? []).map(group => ({ ...groupRects.get(group.id)!, width: Math.min(group.size.width, 28 + Array.from(group.name).length * 12), height: 44 })),
+    ...(boundaryRect ? [{ ...boundaryRect, width: Math.min(boundaryRect.width, 28 + Math.max(...wrapExportText(diagram.scope?.softwareSystemName ?? '', boundaryRect.width).map(line => Array.from(line).length)) * 12), height: 14 + wrapExportText(diagram.scope?.softwareSystemName ?? '', boundaryRect.width).length * 18 }] : []),
+  ];
+  for (const route of relationshipRoutes) {
+    const text = [route.relationship.label, ...(diagram.kind === 'container' ? [route.relationship.protocol] : [])].filter(Boolean).join('\n');
+    if (!text) continue;
+    const height = wrapExportText(text, 260).length * 18;
+    let labelRect = { x: route.label.x - 130, y: route.label.y - 14, width: 260, height };
+    for (;;) {
+      const collisions = labelObstacles.filter(rect => labelRect.x < rect.x + rect.width && labelRect.x + labelRect.width > rect.x && labelRect.y < rect.y + rect.height && labelRect.y + labelRect.height > rect.y);
+      if (!collisions.length) break;
+      labelRect = { ...labelRect, y: Math.min(...collisions.map(rect => rect.y)) - height - 12 };
+    }
+    route.label = { x: route.label.x, y: labelRect.y + 14 };
+    labelObstacles.push(labelRect);
+  }
   const points: ExportPoint[] = [];
   for (const rect of [...componentRects.values(), ...groupRects.values()]) {
     points.push({ x: rect.x, y: rect.y }, { x: rect.x + rect.width, y: rect.y + rect.height });
