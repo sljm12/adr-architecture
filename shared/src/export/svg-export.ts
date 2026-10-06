@@ -75,8 +75,11 @@ export function renderDiagramSvg(diagram: DiagramDocument, options: SvgExportOpt
       : '';
     const accessibleLabel = `Relationship from ${relationshipName(diagram, relationship.sourceComponentId)} to ${relationshipName(diagram, relationship.targetComponentId)}${relationship.label ? `: ${relationship.label}` : ''}`;
     return `<a href="#relationship-${relationship.id}" class="diagram-relationship-link" tabindex="0" aria-label="${escapeMarkup(accessibleLabel)}"><g id="visual-relationship-${relationship.id}" class="diagram-relationship" data-artifact-id="${relationship.id}"><path class="relationship-path" d="${route.path}"/>${arrow}${label}</g></a>`;
+  }).map((markup, index) => options.standalone ? `<g id="relationship-${layout.relationshipRoutes[index].relationship.id}">${markup}</g>` : markup).join('');
+  const components = diagram.components.map(component => {
+    const markup = componentMarkup(component, layout.componentRects.get(component.id)!, diagram.kind === 'container');
+    return options.standalone ? `<g id="component-${component.id}">${markup}</g>` : markup;
   }).join('');
-  const components = diagram.components.map(component => componentMarkup(component, layout.componentRects.get(component.id)!, diagram.kind === 'container')).join('');
   const rect = layout.boundaryRect;
   const boundary = rect && diagram.scope ? `<g class="system-boundary" role="group" aria-label="${escapeMarkup(`Software System boundary for ${diagram.scope.softwareSystemName}`)}" data-parent-diagram-id="${diagram.scope.parentDiagramId}" data-owner-component-id="${diagram.scope.softwareSystemId}"><rect class="system-group-shape" x="${formatSvgNumber(rect.x)}" y="${formatSvgNumber(rect.y)}" width="${formatSvgNumber(rect.width)}" height="${formatSvgNumber(rect.height)}" rx="8"/><text class="system-group-label" x="${formatSvgNumber(rect.x + 14)}" y="${formatSvgNumber(rect.y + 28)}">${wrapExportText(diagram.scope.softwareSystemName, rect.width).map((line, index) => `<tspan x="${formatSvgNumber(rect.x + 14)}" dy="${index ? 18 : 0}">${escapeMarkup(line)}</tspan>`).join('')}</text></g>` : '';
   const standaloneStyle = options.standalone ? `<style>

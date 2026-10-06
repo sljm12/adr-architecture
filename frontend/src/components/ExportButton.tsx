@@ -1,15 +1,21 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { exportClient } from '../api/export-client';
 import { DiagramApiError } from '../api/diagram-client';
 import { useDiagramStore, type SaveStatus } from '../state/diagram-store';
 import { useAdrStore, type AdrDraft, type AdrSaveStatus } from '../state/adr-store';
-import type { DiagramDocument, HtmlExportInput } from '../../../shared/src/index';
+import type { DiagramDocument, HtmlExportInput, HtmlPackageCapture } from '../../../shared/src/index';
 
 export function captureHtmlExportInput(diagram: DiagramDocument, draft: AdrDraft | null): HtmlExportInput {
   return structuredClone({ diagram, adrs: [], draft });
 }
 
-export function getHtmlExportBlockReason(diagramStatus: SaveStatus, adrStatus: AdrSaveStatus): string | null {
+export function captureHtmlPackage(diagram: DiagramDocument, draft: AdrDraft | null): HtmlPackageCapture {
+  return structuredClone({ entryDiagramId: diagram.id, capturedAt: new Date().toISOString(),
+    overrides: { [diagram.id]: { diagram, draft: draft?.diagramId === diagram.id ? draft : null } } });
+}
+
+export function getHtmlExportBlockReason(diagramStatus: SaveStatus, adrStatus: AdrSaveStatus, exporting = false): string | null {
+  if (exporting) return 'An HTML package export is already in progress.';
   if (diagramStatus === 'saving' || adrStatus === 'saving') return 'Wait for diagram or ADR saving to finish before exporting.';
   return null;
 }
@@ -19,9 +25,9 @@ export function getHtmlExportDraft(adrStatus: AdrSaveStatus, draft: AdrDraft | n
   return draft?.diagramId === diagramId ? draft : null;
 }
 
-export async function runHtmlPackageExport(
-  input: HtmlExportInput,
-  download: (snapshot: HtmlExportInput) => Promise<void> = exportClient.downloadHtmlPackage,
+export async function runHtmlPackageExport<T extends HtmlExportInput | HtmlPackageCapture>(
+  input: T,
+  download: (snapshot: T) => Promise<void> = exportClient.downloadHtmlPackage,
 ): Promise<{ success: boolean; message: string }> {
   try {
     await download(input);
@@ -52,6 +58,8 @@ export function formatExportError(error: unknown): string {
 export function ExportButton() {
   const [message, setMessage] = useState('');
   const [htmlMessage, setHtmlMessage] = useState('');
+  const exporting = useRef(false);
+  const [htmlExporting, setHtmlExporting] = useState(false);
   const document = useDiagramStore(state => state.document);
   const status = useDiagramStore(state => state.status);
 
@@ -78,18 +86,23 @@ export function ExportButton() {
     const currentDiagram = diagramState.document;
     if (!currentDiagram) return;
 
-    const blockReason = getHtmlExportBlockReason(diagramState.status, adrState.status);
+    const blockReason = getHtmlExportBlockReason(diagramState.savePending ? 'saving' : diagramState.status, adrState.savePending ? 'saving' : adrState.status, exporting.current);
     if (blockReason) {
       setHtmlMessage(blockReason);
       return;
     }
 
     const draft = getHtmlExportDraft(adrState.status, adrState.draft, currentDiagram.id);
-    const snapshot = captureHtmlExportInput(currentDiagram, draft);
-    setHtmlMessage('Preparing HTML package…');
-    const result = await runHtmlPackageExport(snapshot);
-    setHtmlMessage(result.message);
+    const snapshot = captureHtmlPackage(currentDiagram, draft);
+    exporting.current = true;
+    setHtmlExporting(true);
+    try {
+      const result = await runHtmlPackageExport(snapshot, captured => exportClient.downloadHtmlPackage(captured, stage => {
+        setHtmlMessage(({ gathering: 'Gathering saved diagrams and ADRs…', validating: 'Validating captured diagrams and ADRs…', rendering: 'Rendering offline package…', archiving: 'Creating ZIP archive…' })[stage]);
+      }));
+      setHtmlMessage(result.message);
+    } finally { exporting.current = false; setHtmlExporting(false); }
   };
 
-  return <div className="export-control"><button className="secondary-action" type="button" onClick={() => void exportHtmlPackage()} disabled={!document} aria-describedby="html-export-description html-export-status">Export HTML package</button><button className="primary-pill" type="button" onClick={() => void exportDiagram()} disabled={!document} aria-describedby="export-description export-status">Export Mermaid</button><p id="html-export-description" className="export-status">Download an offline, interactive diagram with its linked ADRs.</p><p id="export-description" className="export-description">Groups export as labeled Mermaid subgraphs. Exact canvas positions are not exported.</p><p id="html-export-status" className="export-status" role="status" aria-live="polite" aria-atomic="true">{htmlMessage}</p><p id="export-status" className="export-status" role="status" aria-live="polite" aria-atomic="true">{message}</p></div>;
+  return <div className="export-control"><button className="secondary-action" type="button" onClick={() => void exportHtmlPackage()} disabled={!document || htmlExporting} aria-describedby="html-export-description html-export-status">Export HTML package</button><button className="primary-pill" type="button" onClick={() => void exportDiagram()} disabled={!document} aria-describedby="export-description export-status">Export Mermaid</button><p id="html-export-description" className="export-status">{document?.kind === 'container' ? 'Download this container diagram and its ADRs for offline review.' : 'Download this System context, its active container diagrams, and all their ADRs for offline review.'}</p><p id="export-description" className="export-description">Groups export as labeled Mermaid subgraphs. Exact canvas positions are not exported.</p><p id="html-export-status" className="export-status" role="status" aria-live="polite" aria-atomic="true">{htmlMessage}</p><p id="export-status" className="export-status" role="status" aria-live="polite" aria-atomic="true">{message}</p></div>;
 }

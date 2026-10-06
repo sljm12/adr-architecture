@@ -1,9 +1,22 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
-import { captureHtmlExportInput, getHtmlExportBlockReason, getHtmlExportDraft, runHtmlPackageExport } from '../src/components/ExportButton';
+import { captureHtmlExportInput, captureHtmlPackage, getHtmlExportBlockReason, getHtmlExportDraft, runHtmlPackageExport } from '../src/components/ExportButton';
 import { exportAdrFixture, exportDiagramFixture } from '../../shared/tests/html-export-fixtures';
+import { useAdrStore } from '../src/state/adr-store';
+import { adrClient } from '../src/api/adr-client';
 
 describe('interactive HTML package export control', () => {
+  it('captures one timestamp and only the active matching draft; duplicate operations are blocked', () => {
+    const diagram = exportDiagramFixture(), draft = exportAdrFixture();
+    const capture = captureHtmlPackage(diagram, draft);
+    diagram.name = 'Later'; draft.title = 'Later';
+    expect(capture.entryDiagramId).toBe(diagram.id);
+    expect(capture.capturedAt).toMatch(/^\d{4}-/);
+    expect(Object.keys(capture.overrides)).toEqual([diagram.id]);
+    expect(capture.overrides[diagram.id].draft?.title).not.toBe('Later');
+    expect(getHtmlExportBlockReason('saved', 'saved', true)).toMatch(/already|progress/i);
+    expect(captureHtmlPackage(diagram, { ...draft, diagramId: crypto.randomUUID() }).overrides[diagram.id].draft).toBeNull();
+  });
   it('freezes the current diagram and ADR draft before asynchronous export work', () => {
     const diagram = exportDiagramFixture();
     const draft = { ...exportAdrFixture(), title: 'Unsaved title' };
@@ -18,6 +31,20 @@ describe('interactive HTML package export control', () => {
     expect(getHtmlExportBlockReason('saving', 'saved')).toMatch(/saving/i);
     expect(getHtmlExportBlockReason('saved', 'saving')).toMatch(/saving/i);
     expect(getHtmlExportBlockReason('unsaved', 'failed')).toBeNull();
+  });
+  it('retains the in-flight ADR save marker when editing changes its display status', async () => {
+    const record = exportAdrFixture();
+    useAdrStore.getState().open(record);
+    let release!: (value: typeof record) => void;
+    const update = vi.spyOn(adrClient, 'update').mockImplementation(() => new Promise(resolve => { release = resolve; }));
+    const save = useAdrStore.getState().save();
+    useAdrStore.getState().update(d => ({ ...d, title: 'Edited during saving' }));
+    expect(useAdrStore.getState().status).toBe('unsaved');
+    expect(useAdrStore.getState().savePending).toBe(true);
+    release(record); await save;
+    expect(useAdrStore.getState().savePending).toBe(false);
+    expect(useAdrStore.getState().draft?.title).toBe('Edited during saving');
+    update.mockRestore();
   });
 
   it('ignores the untouched blank new-ADR placeholder while retaining edited and saved drafts', () => {

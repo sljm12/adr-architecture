@@ -1,7 +1,9 @@
-import type { HtmlExportInput } from '../../../shared/src/index';
-import { buildHtmlPackage, containerContextSchema, validateExportDiagram } from '../../../shared/src/index';
-import { adrClient } from './adr-client';
+import type { HtmlExportInput, HtmlPackageCapture } from '../../../shared/src/index';
+import { assembleHtmlPackageSnapshot, renderAggregateHtmlPackage, containerContextSchema, validateExportDiagram, assertSafePackagePath } from '../../../shared/src/index';
 import { DiagramApiError, diagramClient } from './diagram-client';
+
+export type HtmlExportStage = 'gathering' | 'validating' | 'rendering' | 'archiving';
+let htmlExportInProgress = false;
 
 export async function resolveContainerExportInput(input: HtmlExportInput): Promise<HtmlExportInput> {
   const captured = structuredClone(input);
@@ -53,17 +55,40 @@ export const exportClient = {
     anchor.click();
     URL.revokeObjectURL(url);
   },
-  async downloadHtmlPackage(input: HtmlExportInput): Promise<void> {
-    const [captured, adrs] = await Promise.all([resolveContainerExportInput(input), adrClient.listFull(input.diagram.id)]);
-    const files = buildHtmlPackage({ ...captured, adrs });
-    const { default: JSZip } = await import('jszip');
-    const zip = new JSZip();
-    for (const [path, contents] of Object.entries(files)) zip.file(path, contents);
-    const blob = await zip.generateAsync({
-      type: 'blob',
-      compression: 'DEFLATE',
-      compressionOptions: { level: 6 },
-    });
-    downloadBlob(blob, safeDiagramFilename(captured.diagram.name));
+  async downloadHtmlPackage(input: HtmlPackageCapture | HtmlExportInput, onStage?: (stage: HtmlExportStage) => void): Promise<void> {
+    if (htmlExportInProgress) throw new Error('An HTML package export is already in progress.');
+    htmlExportInProgress = true;
+    try {
+      const captured: HtmlPackageCapture = structuredClone('entryDiagramId' in input ? input : {
+        entryDiagramId: input.diagram.id, capturedAt: input.capturedAt ?? new Date().toISOString(),
+        overrides: { [input.diagram.id]: { diagram: input.diagram, draft: input.draft } },
+      });
+      onStage?.('gathering');
+      const response = await fetch(`/api/diagrams/${captured.entryDiagramId}/export/html-source`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        const details = [body.diagramId ? `Diagram ${body.diagramId}` : '', body.artifactKind, body.artifactId, body.field ? `field ${body.field}` : '', body.remedy].filter(Boolean).join(' · ');
+        throw new DiagramApiError(`${body.message ?? 'HTML export source failed.'}${details ? ` (${details})` : ''}`, response.status, body);
+      }
+      const source = await response.json();
+      onStage?.('validating');
+      if (onStage) await new Promise(resolve => setTimeout(resolve, 0));
+      const snapshot = assembleHtmlPackageSnapshot(captured, source);
+      onStage?.('rendering');
+      if (onStage) await new Promise(resolve => setTimeout(resolve, 0));
+      const files = renderAggregateHtmlPackage(snapshot);
+      onStage?.('archiving');
+      const { default: JSZip } = await import('jszip');
+      const zip = new JSZip();
+      for (const [path, contents] of Object.entries(files)) {
+        assertSafePackagePath(path);
+        if (zip.file(path)) throw new Error(`Duplicate HTML package path: ${path}`);
+        zip.file(path, contents);
+      }
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } }).catch(error => {
+        throw new Error(`Could not create the ZIP archive: ${error instanceof Error ? error.message : 'archive generation failed'}. Retry the export.`);
+      });
+      downloadBlob(blob, safeDiagramFilename(snapshot.diagrams[0].diagram.name));
+    } finally { htmlExportInProgress = false; }
   },
 };

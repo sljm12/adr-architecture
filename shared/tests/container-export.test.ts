@@ -35,6 +35,7 @@ describe('complete container exports', () => {
   it('declares parent exports to be single-diagram snapshots', () => {
     const parent = generalParentFixture() as unknown as DiagramDocument;
     expect(exportMermaid(parent)).toMatch(/single.diagram/i); expect(buildHtmlPackage({ diagram: parent, adrs: [] })['index.html']).toMatch(/not bundled/i);
+    expect(Object.keys(buildHtmlPackage({ diagram: parent, adrs: [] })).sort()).toEqual(['adrs.html', 'diagram.svg', 'index.html', 'styles.css']);
   });
   it('covers long labels and all boundary/node/relationship extents without editing the domain snapshot', () => {
     const child = populatedChildFixture() as unknown as DiagramDocument;

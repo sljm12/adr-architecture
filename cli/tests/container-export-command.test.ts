@@ -21,6 +21,9 @@ describe('saved container CLI package', () => {
       expect(browserPage).toContain('Datastore'); expect(page).not.toContain('Datastore');
     }
     expect(client.getDiagram).toHaveBeenCalledExactlyOnceWith(diagram.id);
+    expect(client.listFullAdrs).toHaveBeenCalledExactlyOnceWith(diagram.id);
+    expect(Object.keys(zip.files).filter(path => !zip.files[path].dir).sort()).toEqual(['adrs.html', 'diagram.svg', 'index.html', 'styles.css']);
+    expect(page).not.toContain('Return to System context</a>');
   });
   it.each(['subtype', 'endpoint', 'scope'] as const)('does not open an output file for invalid %s', async invalid => {
     const diagram = populatedChildFixture() as unknown as DiagramDocument;

@@ -14,6 +14,7 @@ type State = {
   recordsError: string | null;
   draft: AdrDraft | null;
   status: AdrSaveStatus;
+  savePending: boolean;
   error: string | null;
   fieldErrors: Record<string, string>;
   deleteStatus: AdrDeleteStatus;
@@ -60,6 +61,7 @@ type State = {
 
 const history = new BoundedHistory<AdrDraft>();
 let listRequest = 0;
+let pendingSaves = 0;
 const copy = (draft: AdrDraft) => structuredClone(draft);
 const historyState = () => ({ canUndo: history.canUndo, canRedo: history.canRedo });
 const emptyDraft = (diagramId: string): AdrDraft => ({ diagramId, title: '', context: '', decision: '', consequences: '', alternativesOrConstraints: null, status: 'draft', replacementAdrId: null, componentIds: [], relationshipIds: [] });
@@ -70,6 +72,7 @@ const replaceSummary = (records: AdrSummary[], next: AdrSummary) => records.some
 const sameIds = (left: string[], right: string[]) => left.length === right.length && left.every((id, index) => id === right[index]);
 
 export const useAdrStore = create<State>((set, get) => ({
+  savePending: false,
   diagramId: null, records: [], recordsStatus: 'idle', recordsError: null, draft: null, status: 'idle', error: null, fieldErrors: {}, deleteStatus: 'idle', deleteError: null, deleteBlockers: [], deleteMessage: null, componentSummaries: [], componentSummaryComponentId: null, componentSummaryStatus: 'idle', componentSummaryError: null, relationshipSummaries: [], relationshipSummaryRelationshipId: null, relationshipSummaryStatus: 'idle', relationshipSummaryError: null, componentAdrCounts: {}, componentAdrCountsDiagramId: null, componentAdrCountsStatus: 'idle', componentAdrCountsError: null, componentAdrCountsRequest: 0, canUndo: false, canRedo: false,
   load: async diagramId => {
     const request = ++listRequest;
@@ -100,7 +103,7 @@ export const useAdrStore = create<State>((set, get) => ({
     const draft = get().draft; if (!draft || get().status === 'saving') return false;
     const validation = adrWriteSchema.safeParse(writePayload(draft));
     if (!validation.success) { const fieldErrors = Object.fromEntries(validation.error.issues.map(issue => [issue.path.join('.') || 'form', issue.message])); set({ status: 'failed', error: 'Complete the required ADR fields before saving.', fieldErrors }); return false; }
-    const snapshot = draft; set({ status: 'saving', error: null, fieldErrors: {} });
+    const snapshot = draft; pendingSaves++; set({ status: 'saving', savePending: true, error: null, fieldErrors: {} });
     let saved: ArchitectureDecisionRecord | null = null;
     let writeAttempted = false;
     try {
@@ -119,6 +122,7 @@ export const useAdrStore = create<State>((set, get) => ({
       if (writeAttempted) void get().loadComponentAdrCounts(snapshot.diagramId);
       return false;
     }
+    finally { pendingSaves--; set({ savePending: pendingSaves > 0 }); }
   },
   retry: async () => get().save(),
   remove: async () => {

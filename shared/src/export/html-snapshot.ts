@@ -43,10 +43,11 @@ export class HtmlExportError extends Error {
     readonly artifactKind: 'diagram' | 'component' | 'relationship' | 'group' | 'ADR',
     readonly artifactId: string | undefined,
     readonly field: string,
-    detail: string,
-    remedy = 'Correct this field and try the export again.',
+    readonly detail: string,
+    readonly remedy = 'Correct this field and try the export again.',
+    readonly diagramId?: string,
   ) {
-    super(`${artifactKind}${artifactId ? ` ${artifactId}` : ''} field ${field}: ${detail} ${remedy}`);
+    super(`${diagramId ? `Diagram ${diagramId}: ` : ''}${artifactKind}${artifactId ? ` ${artifactId}` : ''} field ${field}: ${detail} ${remedy}`);
   }
 }
 
@@ -118,7 +119,7 @@ export function validateExportDiagram(input: DiagramDocument): DiagramDocument {
   return structuredClone(diagram);
 }
 
-function validateAdrs(values: unknown, diagram: DiagramDocument): ArchitectureDecisionRecord[] {
+export function validateExportAdrs(values: unknown, diagram: DiagramDocument): ArchitectureDecisionRecord[] {
   let parsed: ArchitectureDecisionRecord[];
   try { parsed = architectureDecisionRecordListSchema.parse(values) as ArchitectureDecisionRecord[]; }
   catch (error) {
@@ -161,15 +162,12 @@ function validateAdrs(values: unknown, diagram: DiagramDocument): ArchitectureDe
   return parsed;
 }
 
-export function validateHtmlExportSnapshot(input: HtmlExportInput): HtmlExportSnapshot {
-  const capturedAt = input.capturedAt ?? new Date().toISOString();
-  if (!Number.isFinite(Date.parse(capturedAt))) throw new HtmlExportError('diagram', input.diagram?.id, 'capturedAt', 'Must be a valid timestamp.');
-  const diagram = validateExportDiagram(input.diagram);
-  const savedAdrs = validateAdrs(input.adrs, diagram);
+/** Saved records must already have been validated against their saved document. */
+export function mergeExportAdrDraft(saved: ArchitectureDecisionRecord[], draft: AdrExportDraft | null | undefined, capturedAt: string): ArchitectureDecisionRecord[] {
+  const savedAdrs = structuredClone(saved);
   const byId = new Map(savedAdrs.map((adr, index) => [adr.id, index]));
 
-  if (input.draft) {
-    const draft = input.draft;
+  if (draft) {
     const existingIndex = draft.id ? byId.get(draft.id) : undefined;
     if (draft.id && existingIndex === undefined) {
       throw new HtmlExportError('ADR', draft.id, 'id', 'The saved ADR is no longer part of this diagram. Reload the diagram and try again.');
@@ -193,6 +191,14 @@ export function validateHtmlExportSnapshot(input: HtmlExportInput): HtmlExportSn
     else savedAdrs[existingIndex] = parsedDraft;
   }
 
-  const adrs = validateAdrs(savedAdrs, diagram);
+  return savedAdrs;
+}
+
+export function validateHtmlExportSnapshot(input: HtmlExportInput): HtmlExportSnapshot {
+  const capturedAt = input.capturedAt ?? new Date().toISOString();
+  if (!Number.isFinite(Date.parse(capturedAt))) throw new HtmlExportError('diagram', input.diagram?.id, 'capturedAt', 'Must be a valid timestamp.');
+  const diagram = validateExportDiagram(input.diagram);
+  const savedAdrs = validateExportAdrs(input.adrs, diagram);
+  const adrs = validateExportAdrs(mergeExportAdrDraft(savedAdrs, input.draft, capturedAt), diagram);
   return { diagram, adrs, capturedAt, hasDraft: input.draft !== null && input.draft !== undefined };
 }

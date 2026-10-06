@@ -1,5 +1,6 @@
 import type { ArchitectureDecisionRecord } from '../domain/types';
 import type { HtmlExportSnapshot } from './html-snapshot';
+import type { PackageLinkContext } from './package-links';
 
 function escapeMarkdown(value: string): string {
   return value
@@ -11,26 +12,26 @@ function escapeMarkdown(value: string): string {
     .replace(/\r\n|\r|\n/g, '  \n');
 }
 
-function artifactLinks(snapshot: HtmlExportSnapshot, adr: ArchitectureDecisionRecord): string[] {
+function artifactLinks(snapshot: HtmlExportSnapshot, adr: ArchitectureDecisionRecord, links?: PackageLinkContext): string[] {
   const components = adr.componentIds.map(id => {
     const component = snapshot.diagram.components.find(item => item.id === id)!;
-    return `- [${escapeMarkdown(component.name)} (${id})](../index.html#component-${id})`;
+    return `- [${escapeMarkdown(component.name)} (${id})](${links?.artifact(links.markdown(adr.id), snapshot.diagram.id, 'component', id) ?? `../index.html#component-${id}`})`;
   });
   const relationships = adr.relationshipIds.map(id => {
     const relationship = snapshot.diagram.relationships.find(item => item.id === id)!;
     const source = snapshot.diagram.components.find(item => item.id === relationship.sourceComponentId)!;
     const target = snapshot.diagram.components.find(item => item.id === relationship.targetComponentId)!;
     const name = relationship.label || `${source.name} to ${target.name}`;
-    return `- [${escapeMarkdown(name)} (${id})](../index.html#relationship-${id})`;
+    return `- [${escapeMarkdown(name)} (${id})](${links?.artifact(links.markdown(adr.id), snapshot.diagram.id, 'relationship', id) ?? `../index.html#relationship-${id}`})`;
   });
   return [...components, ...relationships];
 }
 
 /** Renders one safe Markdown ADR document with stable links to the exported diagram. */
-export function renderAdrMarkdown(snapshot: HtmlExportSnapshot, adr: ArchitectureDecisionRecord): string {
-  const references = artifactLinks(snapshot, adr);
+export function renderAdrMarkdown(snapshot: HtmlExportSnapshot, adr: ArchitectureDecisionRecord, links?: PackageLinkContext): string {
+  const references = artifactLinks(snapshot, adr, links);
   const replacement = adr.replacementAdrId
-    ? `[${adr.replacementAdrId}](../adrs.html#adr-${adr.replacementAdrId})`
+    ? `[${adr.replacementAdrId}](${links?.adr(links.markdown(adr.id), adr.replacementAdrId) ?? `../adrs.html#adr-${adr.replacementAdrId}`})`
     : 'None';
   const fields = [
     `# ${escapeMarkdown(adr.title)}`,

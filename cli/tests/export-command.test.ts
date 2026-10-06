@@ -37,8 +37,8 @@ describe('diagrams export command', () => {
     ].sort());
     expect(await zip.file('adrs.html')!.async('string')).toContain(exportIds.unlinkedAdr);
     expect(await zip.file(`adrs/${exportIds.relationshipAdr}.md`)!.async('string')).toContain(exportIds.relationship);
-    expect(client.getDiagram).toHaveBeenCalledWith(exportIds.diagram);
-    expect(client.listFullAdrs).toHaveBeenCalledWith(exportIds.diagram);
+    expect(client.getDiagram).toHaveBeenCalledExactlyOnceWith(exportIds.diagram);
+    expect(client.listFullAdrs).toHaveBeenCalledExactlyOnceWith(exportIds.diagram);
     expect(output.mock.calls[0][0]).toContain('architecture.zip');
   });
 

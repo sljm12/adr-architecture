@@ -1,4 +1,5 @@
 export * from './domain/types'; export * from './domain/c4'; export * from './domain/group-layout'; export * from './domain/container-layout'; export * from './domain/invariants'; export * from './validation/schemas'; export * from './export/mermaid-export';
 export * from './domain/diagram-name';
 export * from './export/html-package-snapshot';
+export * from './export/package-links';
 export * from './export/escaping'; export * from './export/html-snapshot'; export * from './export/svg-layout'; export * from './export/svg-export'; export * from './export/diagram-page'; export * from './export/adr-page'; export * from './export/adr-markdown'; export * from './export/styles'; export * from './export/html-package';

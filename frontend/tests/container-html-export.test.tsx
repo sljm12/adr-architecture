@@ -1,12 +1,76 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { captureHtmlExportInput, runHtmlPackageExport } from '../src/components/ExportButton';
-import { resolveContainerExportInput } from '../src/api/export-client';
+import { captureHtmlExportInput, captureHtmlPackage, runHtmlPackageExport } from '../src/components/ExportButton';
+import { exportClient, resolveContainerExportInput } from '../src/api/export-client';
 import { diagramClient } from '../src/api/diagram-client';
 import { populatedChildFixture, containerFixtureIds as ids } from '../../shared/tests/container-fixtures';
 import type { DiagramDocument, ContainerContext } from '../../shared/src/index';
 import { useAdrStore } from '../src/state/adr-store';
+import { aggregateInput } from '../../shared/tests/html-package-input';
+import JSZip from 'jszip';
+import { useDiagramStore } from '../src/state/diagram-store';
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+describe('one-source atomic browser archive', () => {
+  it('freezes edits before a delayed read, uses one source request and waits for the archive before downloading', async () => {
+    const { fixture, source } = aggregateInput();
+    const parent = structuredClone(fixture.parent);
+    parent.components[0].name = 'Captured owner';
+    const capture = captureHtmlPackage(parent, null);
+    const click = vi.fn(), revoke = vi.fn();
+    vi.stubGlobal('document', { createElement: () => ({ click }) });
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:package');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(revoke);
+    let resolveSource!: (response: Response) => void;
+    const fetchMock = vi.fn(() => new Promise<Response>(resolve => { resolveSource = resolve; }));
+    vi.stubGlobal('fetch', fetchMock);
+    const archive = vi.spyOn(JSZip.prototype, 'generateAsync').mockImplementation(async function (this: JSZip) {
+      const html = await this.file(`diagrams/${fixture.children.find(d => d.components.length)!.id}/index.html`)!.async('string');
+      expect(html).toContain('Captured owner'); expect(html).not.toContain('Later owner');
+      expect(click).not.toHaveBeenCalled();
+      return new Blob(['archive']);
+    } as never);
+    const stages: string[] = [];
+    const operation = exportClient.downloadHtmlPackage(capture, stage => stages.push(stage));
+    await expect(exportClient.downloadHtmlPackage(capture)).rejects.toThrow(/already in progress/);
+    parent.components[0].name = 'Later owner';
+    resolveSource(new Response(JSON.stringify(source), { status: 200 }));
+    await operation;
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(`/api/diagrams/${parent.id}/export/html-source`);
+    expect(archive).toHaveBeenCalledOnce(); expect(click).toHaveBeenCalledOnce();
+    expect(stages).toEqual(['gathering', 'validating', 'rendering', 'archiving']);
+  });
+  it('does not alter store documents, drafts, undo/redo, navigation, revision or failed-save state', async () => {
+    const { fixture, source } = aggregateInput();
+    useDiagramStore.getState().open(fixture.parent);
+    useDiagramStore.getState().renameComponent(fixture.parent.components[0].id, 'Retained edit');
+    useDiagramStore.setState({ status: 'failed', error: 'Save failed' });
+    useAdrStore.getState().startNew(fixture.parent.id);
+    useAdrStore.getState().update(d => ({ ...d, title: 'Retained ADR', context: 'Reason', decision: 'Choose', consequences: 'Effects' }));
+    useAdrStore.setState({ status: 'failed', error: 'Save failed' });
+    const diagramState = useDiagramStore.getState(), adrState = useAdrStore.getState();
+    const capture = captureHtmlPackage(diagramState.document!, adrState.draft);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(source))));
+    vi.stubGlobal('document', { createElement: () => ({ click: vi.fn() }) });
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:package'); vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    vi.spyOn(JSZip.prototype, 'generateAsync').mockResolvedValue(new Blob(['archive']));
+    await exportClient.downloadHtmlPackage(capture);
+    expect(useDiagramStore.getState()).toBe(diagramState);
+    expect(useAdrStore.getState()).toBe(adrState);
+    useDiagramStore.getState().undo();
+    expect(useDiagramStore.getState().document!.components[0].name).toBe(fixture.parent.components[0].name);
+  });
+  it.each(['source', 'archive'])('fails %s without triggering a download', async failure => {
+    const { source, fixture } = aggregateInput();
+    const click = vi.fn();
+    vi.stubGlobal('document', { createElement: () => ({ click }) });
+    vi.stubGlobal('fetch', vi.fn(async () => failure === 'source'
+      ? new Response(JSON.stringify({ message: 'Missing child', diagramId: fixture.children[0].id, artifactKind: 'diagram', field: 'scope', remedy: 'Repair and retry.' }), { status: 409 })
+      : new Response(JSON.stringify(source))));
+    vi.spyOn(JSZip.prototype, 'generateAsync').mockRejectedValue(new Error('Archive failed'));
+    await expect(exportClient.downloadHtmlPackage(captureHtmlPackage(fixture.parent, null))).rejects.toThrow(failure === 'source' ? /Missing child.*scope.*Repair/ : /Archive failed/);
+    expect(click).not.toHaveBeenCalled();
+  });
+});
 describe('immutable child export capture', () => {
   it('captures an unsaved decision and a new local occurrence before asynchronous source lookup', async () => {
     const child = populatedChildFixture() as unknown as DiagramDocument;
