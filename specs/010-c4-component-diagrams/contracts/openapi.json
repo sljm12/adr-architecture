@@ -1,0 +1,1803 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "C4 Component Diagram REST Extension",
+    "version": "1.0.0",
+    "description": "Planning contract for spec 010. Three new Component entry/context operations and affected existing operations. Existing Container endpoints and ADR endpoints remain; strict shared Zod/domain validation complements schema shape. Existing general/Container definitions are reused by reference. No new auth/collaboration scope."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000"
+    }
+  ],
+  "paths": {
+    "/diagrams/{diagramId}/components/{componentId}/component-diagram": {
+      "parameters": [
+        {
+          "name": "diagramId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        {
+          "name": "componentId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "componentAvailability",
+        "summary": "Resolve canonical Component availability, including supporting container source",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComponentAvailability"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Validation"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createOrOpenComponent",
+        "summary": "Create/open canonical Component child after root-locked eligibility check",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComponentDocument"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "New empty Component document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComponentDocument"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Validation"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          }
+        },
+        "description": "Bodyless idempotent create/open: 201 new, 200 existing. Saved active owner/ancestors required. Trashed owner child yields RESTORE_REQUIRED; never replacement."
+      }
+    },
+    "/diagrams/{diagramId}/component-context": {
+      "parameters": [
+        {
+          "name": "diagramId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "componentContext",
+        "summary": "Resolve owner/ancestors and eligible immediate sources for Component diagram",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComponentContext"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Validation"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      }
+    },
+    "/diagrams": {
+      "get": {
+        "operationId": "listDiagrams",
+        "summary": "Flat saved summary list with kind-specific scope; UI derives hierarchy",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DiagramSummary"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Validation"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      }
+    },
+    "/diagrams/trash": {
+      "get": {
+        "operationId": "listTrashedDiagrams",
+        "summary": "Recoverable summaries preserving owner projections and exact identities",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DiagramSummary"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Validation"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      }
+    },
+    "/diagrams/{diagramId}": {
+      "parameters": [
+        {
+          "name": "diagramId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "loadDiagram",
+        "summary": "Load validated active diagram with resolved source/owner context",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagramDocument"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Validation"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      },
+      "put": {
+        "operationId": "saveDiagram",
+        "summary": "Save same diagram identity and immutable scope using whole-document validation",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagramDocument"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Validation"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiagramDocument"
+              }
+            }
+          }
+        },
+        "description": "Check active ancestors and owner/source/ADR dependencies under root lock. Removal of immediate parent participant used by active or recoverable child returns DIAGRAM_DEPENDENCY; do not flatten or cascade. Rehydrate source details; preserve newer client drafts via client reconciliation."
+      },
+      "delete": {
+        "operationId": "trashDiagram",
+        "summary": "Trash confirmed exact active descendant closure atomically",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrashConfirmation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Confirmed active descendant set trashed with one batch; previous independent trash untouched."
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Validation"
+          }
+        },
+        "description": "UI sends exact confirmed IDs. Preserve legacy body omission for a single affected diagram; multiple affected members require confirmation. Recheck under root lock; earlier independent trash remains unchanged."
+      }
+    },
+    "/diagrams/{diagramId}/components/{componentId}/dependencies": {
+      "parameters": [
+        {
+          "name": "diagramId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        {
+          "name": "componentId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "elementDependencies",
+        "summary": "Preview local links and active/recoverable hierarchy/source blockers",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dependencies"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Validation"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      }
+    },
+    "/diagrams/{diagramId}/components/{componentId}": {
+      "parameters": [
+        {
+          "name": "diagramId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        {
+          "name": "componentId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "delete": {
+        "operationId": "removeElement",
+        "summary": "Remove element only after local/ADR/child/source safeguards",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagramDocument"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Validation"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      }
+    },
+    "/diagrams/{diagramId}/trash-impact": {
+      "parameters": [
+        {
+          "name": "diagramId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "trashImpact",
+        "summary": "Preview exact named active descendant closure",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrashImpact"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Validation"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      }
+    },
+    "/diagrams/{diagramId}/restore-impact": {
+      "parameters": [
+        {
+          "name": "diagramId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "restoreImpact",
+        "summary": "Preview required ancestor batch and requested-child inclusion",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoreImpact"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Validation"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          }
+        },
+        "description": "Walk upward to highest required inactive ancestor. Prior independent batches stay separate; requestedDiagramIncluded=false means restore requested child explicitly after ancestors are active."
+      }
+    },
+    "/diagrams/{diagramId}/restore": {
+      "parameters": [
+        {
+          "name": "diagramId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "restoreDiagram",
+        "summary": "Restore confirmed root batch ancestor-first and atomically",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagramDocument"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Validation"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreConfirmation"
+              }
+            }
+          }
+        },
+        "description": "POST the restoreRootDiagramId returned by impact with exact IDs and batch. Direct child request under inactive ancestors yields PARENT_INACTIVE plus root identity. Recheck under root lock; stale confirmation returns RESTORE_IMPACT_CHANGED with no mutation. Preserve legacy omitted confirmation only when a single diagram can restore without required ancestors; multi-member batches require explicit IDs/batch."
+      }
+    },
+    "/diagrams/{diagramId}/export/html-source": {
+      "parameters": [
+        {
+          "name": "diagramId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "htmlSource",
+        "summary": "Gather consistent saved entry and bounded active descendants for browser packages",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HtmlSource"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Validation"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          }
+        },
+        "description": "Context -> active Containers/Components; Container -> active Components; Component alone. Hydrate omitted ancestors without bundling. Required source load/integrity failure aborts whole source; HTML_EXPORT_INCOMPLETE error carries diagram/artifact/field/remedy. No saves or draft overlays on server."
+      }
+    },
+    "/diagrams/{diagramId}/export/mermaid": {
+      "parameters": [
+        {
+          "name": "diagramId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "mermaid",
+        "summary": "Selected-only semantic Mermaid export for all three diagram kinds",
+        "responses": {
+          "200": {
+            "description": "Validated selected diagram; empty Component gives actionable 422 EMPTY_COMPONENT_MERMAID.",
+            "content": {
+              "text/vnd.mermaid": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Attachment filename follows resolved owner name."
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Validation"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failure"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ComponentScope": {
+        "type": "object",
+        "required": [
+          "parentDiagramId",
+          "containerId",
+          "parentDiagramName",
+          "containerName",
+          "containerDescription",
+          "containerTechnology",
+          "containerType",
+          "systemContextDiagramId",
+          "softwareSystemId",
+          "softwareSystemName"
+        ],
+        "properties": {
+          "parentDiagramId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "containerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parentDiagramName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "containerName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "containerDescription": {
+            "type": "string",
+            "nullable": true
+          },
+          "containerTechnology": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "containerType": {
+            "type": "string",
+            "enum": [
+              "application",
+              "datastore"
+            ]
+          },
+          "systemContextDiagramId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "softwareSystemId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "softwareSystemName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "additionalProperties": false,
+        "description": "Identity fields are immutable. Ancestor and display fields are server-resolved; name follows containerName. Parent must be active Container under validated System Context. Only immediate parent/owner persist."
+      },
+      "InternalComponent": {
+        "type": "object",
+        "required": [
+          "id",
+          "diagramId",
+          "name",
+          "description",
+          "position",
+          "size",
+          "createdAt",
+          "updatedAt",
+          "type",
+          "role",
+          "containerType",
+          "technology",
+          "sourceComponentId"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "diagramId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "position": {
+            "$ref": "../../009-c4-container-diagrams/contracts/openapi.yaml#/components/schemas/Position"
+          },
+          "size": {
+            "$ref": "../../009-c4-container-diagrams/contracts/openapi.yaml#/components/schemas/Size"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "component"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "component"
+            ]
+          },
+          "containerType": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              null
+            ]
+          },
+          "technology": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "sourceComponentId": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              null
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "SupportingContainer": {
+        "type": "object",
+        "required": [
+          "id",
+          "diagramId",
+          "name",
+          "description",
+          "position",
+          "size",
+          "createdAt",
+          "updatedAt",
+          "type",
+          "role",
+          "containerType",
+          "technology",
+          "sourceComponentId"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "diagramId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "position": {
+            "$ref": "../../009-c4-container-diagrams/contracts/openapi.yaml#/components/schemas/Position"
+          },
+          "size": {
+            "$ref": "../../009-c4-container-diagrams/contracts/openapi.yaml#/components/schemas/Size"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "container"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "external"
+            ]
+          },
+          "containerType": {
+            "type": "string",
+            "enum": [
+              "application",
+              "datastore"
+            ]
+          },
+          "technology": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "sourceComponentId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SupportingPersonOrSystem": {
+        "type": "object",
+        "required": [
+          "id",
+          "diagramId",
+          "name",
+          "description",
+          "position",
+          "size",
+          "createdAt",
+          "updatedAt",
+          "type",
+          "role",
+          "containerType",
+          "technology",
+          "sourceComponentId"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "diagramId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "position": {
+            "$ref": "../../009-c4-container-diagrams/contracts/openapi.yaml#/components/schemas/Position"
+          },
+          "size": {
+            "$ref": "../../009-c4-container-diagrams/contracts/openapi.yaml#/components/schemas/Size"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "person",
+              "software-system"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "external"
+            ]
+          },
+          "containerType": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              null
+            ]
+          },
+          "technology": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              null
+            ]
+          },
+          "sourceComponentId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ComponentElement": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/InternalComponent"
+          },
+          {
+            "$ref": "#/components/schemas/SupportingContainer"
+          },
+          {
+            "$ref": "#/components/schemas/SupportingPersonOrSystem"
+          }
+        ],
+        "description": "All endpoints use local UUIDs. Supporting source IDs point to immediate parent elements; resolve bounded canonical chain. Nonblank trimmed metadata, finite geometry and source/type/role rules are enforced by shared/domain validation."
+      },
+      "ComponentRelationship": {
+        "type": "object",
+        "required": [
+          "id",
+          "diagramId",
+          "sourceComponentId",
+          "targetComponentId",
+          "direction",
+          "label",
+          "protocol",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "diagramId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceComponentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "targetComponentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "directed"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "protocol": {
+            "type": "string",
+            "maxLength": 200,
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ComponentDocument": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "status",
+          "createdAt",
+          "updatedAt",
+          "kind",
+          "scope",
+          "trashedAt",
+          "boundary",
+          "components",
+          "relationships",
+          "groups"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "trashed"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "component"
+            ]
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ComponentScope"
+          },
+          "trashedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "boundary": {
+            "$ref": "../../009-c4-container-diagrams/contracts/openapi.yaml#/components/schemas/Boundary"
+          },
+          "components": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComponentElement"
+            }
+          },
+          "relationships": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComponentRelationship"
+            }
+          },
+          "groups": {
+            "type": "array",
+            "maxItems": 0,
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "description": "Server validates containment/source chains, local endpoint ownership/at-least-one-internal and UUID uniqueness. Save cannot reassign kind, owner, parent, source, status or creation identities; source display fields are rehydrated. Groups must be empty."
+      },
+      "ComponentSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "status",
+          "createdAt",
+          "updatedAt",
+          "kind",
+          "scope"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "trashed"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "component"
+            ]
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ComponentScope"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DiagramDocument": {
+        "oneOf": [
+          {
+            "$ref": "../../009-c4-container-diagrams/contracts/openapi.yaml#/components/schemas/DiagramDocument"
+          },
+          {
+            "$ref": "#/components/schemas/ComponentDocument"
+          }
+        ],
+        "description": "Existing general/Container wire shapes retained; Component branch added. Old documents missing kind normalize to general. Cross-row identity and activity require service validation."
+      },
+      "DiagramSummary": {
+        "oneOf": [
+          {
+            "$ref": "../../009-c4-container-diagrams/contracts/openapi.yaml#/components/schemas/DiagramSummary"
+          },
+          {
+            "$ref": "#/components/schemas/ComponentSummary"
+          }
+        ]
+      },
+      "ComponentAvailability": {
+        "type": "object",
+        "required": [
+          "parentDiagramId",
+          "containerId",
+          "availability",
+          "diagram"
+        ],
+        "properties": {
+          "parentDiagramId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "containerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "availability": {
+            "type": "string",
+            "enum": [
+              "none",
+              "active",
+              "trashed"
+            ]
+          },
+          "diagram": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ComponentSummary"
+              },
+              {
+                "type": "object",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              }
+            ],
+            "description": "Null only when no canonical child exists."
+          }
+        },
+        "additionalProperties": false
+      },
+      "ComponentSource": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "type",
+          "containerType",
+          "technology",
+          "canonicalSourceComponentId",
+          "sourceDiagramId"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "container",
+              "person",
+              "software-system"
+            ]
+          },
+          "containerType": {
+            "type": "string",
+            "enum": [
+              "application",
+              "datastore"
+            ],
+            "nullable": true
+          },
+          "technology": {
+            "type": "string",
+            "maxLength": 200,
+            "nullable": true
+          },
+          "canonicalSourceComponentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceDiagramId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ComponentContext": {
+        "type": "object",
+        "required": [
+          "scope",
+          "sources",
+          "capturedAt"
+        ],
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/ComponentScope"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComponentSource"
+            }
+          },
+          "capturedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ContainerContext": {
+        "type": "object",
+        "required": [
+          "scope",
+          "sources",
+          "capturedAt"
+        ],
+        "properties": {
+          "scope": {
+            "$ref": "../../009-c4-container-diagrams/contracts/openapi.yaml#/components/schemas/ContainerScope"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "../../009-c4-container-diagrams/contracts/openapi.yaml#/components/schemas/SourceElement"
+            }
+          },
+          "capturedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DiagramBlocker": {
+        "type": "object",
+        "required": [
+          "diagramId",
+          "name",
+          "status",
+          "reason",
+          "nextAction"
+        ],
+        "properties": {
+          "diagramId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "trashed"
+            ]
+          },
+          "componentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceComponentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "nextAction": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdrBlocker": {
+        "type": "object",
+        "required": [
+          "adrId",
+          "title",
+          "reason"
+        ],
+        "properties": {
+          "adrId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "Dependencies": {
+        "type": "object",
+        "required": [
+          "relationshipCount",
+          "groupIds",
+          "blockers",
+          "diagramBlockers"
+        ],
+        "properties": {
+          "relationshipCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "groupIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "blockers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdrBlocker"
+            }
+          },
+          "diagramBlockers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DiagramBlocker"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "TrashImpact": {
+        "type": "object",
+        "required": [
+          "diagramId",
+          "affectedDiagramIds",
+          "affectedDiagrams"
+        ],
+        "properties": {
+          "diagramId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "affectedDiagramIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "uniqueItems": true
+          },
+          "affectedDiagrams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DiagramSummary"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "RestoreImpact": {
+        "type": "object",
+        "required": [
+          "requestedDiagramId",
+          "restoreRootDiagramId",
+          "trashBatchId",
+          "affectedDiagramIds",
+          "affectedDiagrams",
+          "requestedDiagramIncluded"
+        ],
+        "properties": {
+          "requestedDiagramId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "restoreRootDiagramId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "trashBatchId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "affectedDiagramIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "uniqueItems": true
+          },
+          "affectedDiagrams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DiagramSummary"
+            }
+          },
+          "requestedDiagramIncluded": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TrashConfirmation": {
+        "type": "object",
+        "required": [
+          "confirmedDiagramIds"
+        ],
+        "properties": {
+          "confirmedDiagramIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "uniqueItems": true,
+            "minItems": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "RestoreConfirmation": {
+        "type": "object",
+        "required": [
+          "confirmedDiagramIds",
+          "confirmedTrashBatchId"
+        ],
+        "properties": {
+          "confirmedDiagramIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "uniqueItems": true,
+            "minItems": 1
+          },
+          "confirmedTrashBatchId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Adr": {
+        "type": "object",
+        "required": [
+          "id",
+          "diagramId",
+          "title",
+          "context",
+          "decision",
+          "consequences",
+          "alternativesOrConstraints",
+          "status",
+          "replacementAdrId",
+          "componentIds",
+          "relationshipIds",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "diagramId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "context": {
+            "type": "string",
+            "minLength": 1
+          },
+          "decision": {
+            "type": "string",
+            "minLength": 1
+          },
+          "consequences": {
+            "type": "string",
+            "minLength": 1
+          },
+          "alternativesOrConstraints": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "accepted",
+              "superseded",
+              "rejected"
+            ]
+          },
+          "replacementAdrId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "componentIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "uniqueItems": true
+          },
+          "relationshipIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "uniqueItems": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "HtmlSource": {
+        "type": "object",
+        "required": [
+          "entryDiagramId",
+          "sourceCapturedAt",
+          "diagrams",
+          "availability",
+          "sourceContexts"
+        ],
+        "properties": {
+          "entryDiagramId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceCapturedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "diagrams": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "diagram",
+                "adrs"
+              ],
+              "properties": {
+                "diagram": {
+                  "$ref": "#/components/schemas/DiagramDocument"
+                },
+                "adrs": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Adr"
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            "minItems": 1
+          },
+          "availability": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "../../009-c4-container-diagrams/contracts/openapi.yaml#/components/schemas/ContainerAvailability"
+                },
+                {
+                  "$ref": "#/components/schemas/ComponentAvailability"
+                }
+              ]
+            }
+          },
+          "sourceContexts": {
+            "type": "object",
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ContainerContext"
+                },
+                {
+                  "$ref": "#/components/schemas/ComponentContext"
+                }
+              ]
+            },
+            "description": "Keys are scoped diagram UUIDs; metadata captured consistently, including omitted-ancestor context. Replaces depth-one singleton containerContext in coordinated API/client update."
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApiError": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "diagram": {
+            "$ref": "#/components/schemas/DiagramSummary"
+          },
+          "blockers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdrBlocker"
+            }
+          },
+          "diagramBlockers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DiagramBlocker"
+            }
+          },
+          "restoreRootDiagramId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "componentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "relationshipCount": {
+            "type": "integer"
+          },
+          "groupIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "responses": {
+      "NotFound": {
+        "description": "Missing diagram/artifact: 404.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "409 with deliberate code: RESTORE_REQUIRED, PARENT_INACTIVE, IMMUTABLE_SCOPE, DIAGRAM_DEPENDENCY, DIAGRAM_REFERENCE_BROKEN, TRASH_IMPACT_CHANGED, RESTORE_CONFIRMATION_REQUIRED or RESTORE_IMPACT_CHANGED; identify affected children/occurrences and remedy.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
+      },
+      "Validation": {
+        "description": "422 field validation failure without partial change.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
+      },
+      "Failure": {
+        "description": "Unexpected operation/source failure; no successful partial result.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
+      }
+    }
+  }
+}
