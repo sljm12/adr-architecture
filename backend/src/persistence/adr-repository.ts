@@ -22,8 +22,8 @@ export interface AdrRepositoryLike {
   componentBlockers(componentId: string): MaybePromise<AdrDependencyBlocker[]>;
   relationshipBlockers(relationshipId: string): MaybePromise<AdrDependencyBlocker[]>;
   withTransaction?(transaction: unknown): AdrRepositoryLike;
-  snapshotGraph?(): unknown;
-  restoreGraphSnapshot?(snapshot: unknown): void;
+  snapshotGraph?(diagramIds?: string[]): unknown;
+  restoreGraphSnapshot?(snapshot: unknown, diagramIds?: string[]): void;
 }
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -45,13 +45,17 @@ export class AdrRepository implements AdrRepositoryLike {
   registerRelationship(relationship: { id: string; diagramId: string }): void { this.diagrams.add(relationship.diagramId); this.relationships.set(relationship.id, { id: relationship.id, diagramId: relationship.diagramId }); }
   registerAdr(adr: ArchitectureDecisionRecord): void { assertAdrInvariants(adr); this.records.set(adr.id, clone(adr)); this.diagrams.add(adr.diagramId); }
   withTransaction() { return this; }
-  snapshotGraph() { return { records:new Map([...this.records].map(([id, adr]) => [id, clone(adr)])), diagrams:new Set(this.diagrams), components:new Map(this.components), relationships:new Map(this.relationships) }; }
-  restoreGraphSnapshot(snapshot: unknown) {
-    const state = snapshot as { records:Map<string,ArchitectureDecisionRecord>; diagrams:Set<string>; components:Map<string,{id:string;diagramId:string;name:string}>; relationships:Map<string,{id:string;diagramId:string}> };
-    this.records.clear(); for (const [id, adr] of state.records) this.records.set(id, clone(adr));
-    this.diagrams.clear(); for (const id of state.diagrams) this.diagrams.add(id);
-    this.components.clear(); for (const [id, component] of state.components) this.components.set(id, component);
-    this.relationships.clear(); for (const [id, relationship] of state.relationships) this.relationships.set(id, relationship);
+  snapshotGraph(diagramIds?: string[]) { return { diagramIds, records:new Map([...this.records].map(([id, adr]) => [id, clone(adr)])), diagrams:new Set(this.diagrams), components:new Map(this.components), relationships:new Map(this.relationships) }; }
+  restoreGraphSnapshot(snapshot: unknown, diagramIds?: string[]) {
+    const state = snapshot as { diagramIds?:string[]; records:Map<string,ArchitectureDecisionRecord>; diagrams:Set<string>; components:Map<string,{id:string;diagramId:string;name:string}>; relationships:Map<string,{id:string;diagramId:string}> };
+    const affected = state.diagramIds ? new Set([...state.diagramIds, ...(diagramIds ?? [])]) : undefined;
+    const restore = <T extends { diagramId:string }>(target: Map<string,T>, source: Map<string,T>) => {
+      for (const [id, item] of target) if (!affected || affected.has(item.diagramId)) target.delete(id);
+      for (const [id, item] of source) if (!affected || affected.has(item.diagramId)) target.set(id, clone(item));
+    };
+    restore(this.records, state.records); restore(this.components, state.components); restore(this.relationships, state.relationships);
+    for (const id of this.diagrams) if (!affected || affected.has(id)) this.diagrams.delete(id);
+    for (const id of state.diagrams) if (!affected || affected.has(id)) this.diagrams.add(id);
   }
 
   list(diagramId: string) { return [...this.records.values()].filter(adr => adr.diagramId === diagramId).sort(byUpdatedAtThenId).map(summaryOf); }

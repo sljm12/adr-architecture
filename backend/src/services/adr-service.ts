@@ -20,6 +20,8 @@ import type { AdrRepositoryLike } from '../persistence/adr-repository';
 import { GraphTransaction } from '../persistence/graph-transaction';
 import type { DiagramRepositoryLike } from '../persistence/diagram-repository';
 import { ApiConflictError, ApiValidationError, DependencyConflictError } from '../api/errors';
+import { ContainerContextService } from './container-context';
+import { ComponentContextService } from './component-context';
 
 export class AdrNotFoundError extends Error {}
 export class AdrDiagramNotFoundError extends Error {}
@@ -100,19 +102,13 @@ export class AdrService {
 
   private async graphWrite<T>(diagramId: string, action: (adrs: AdrRepositoryLike, diagrams: DiagramRepositoryLike, diagram: Awaited<ReturnType<DiagramRepositoryLike['get']>> & {}) => Promise<T>): Promise<T> {
     const initial = await this.diagram(diagramId);
-    const isChild = initial.kind === 'container';
-    const parentDiagramId = isChild ? initial.scope?.parentDiagramId : initial.id;
-    if (!parentDiagramId) throw new ApiConflictError('Container diagram has no valid parent reference', 'DIAGRAM_REFERENCE_BROKEN');
-    return this.graph.run(parentDiagramId, isChild ? [initial.id] : [], async context => {
+    return this.graph.run(initial.id, [], async context => {
       const adrs = context.adrs ?? this.adrs;
-      const parent = await context.diagrams.get(parentDiagramId);
-      if (!parent || parent.kind !== 'general') throw new AdrDiagramNotFoundError('Diagram not found');
-      if (parent.status !== 'active') throw new ApiConflictError('The parent diagram is inactive. Restore it before changing decisions.', 'PARENT_INACTIVE');
       const diagram = await context.diagrams.get(diagramId);
       if (!diagram || diagram.status !== 'active') throw new AdrDiagramNotFoundError('Diagram not found');
-      if (isChild && (diagram.kind !== 'container' || diagram.scope?.parentDiagramId !== parent.id)) {
-        throw new ApiConflictError('Container ownership no longer matches its active parent', 'DIAGRAM_REFERENCE_BROKEN');
-      }
+      await this.assertActiveAncestors(diagramId, context.diagrams);
+      if (diagram.kind === 'container') await new ContainerContextService(context.diagrams).hydrateAndValidateDocument(diagram, context.diagrams);
+      if (diagram.kind === 'component') await new ComponentContextService(context.diagrams).hydrateAndValidateDocument(diagram, context.diagrams);
       return action(adrs, context.diagrams, diagram);
     });
   }
@@ -120,12 +116,12 @@ export class AdrService {
   private async diagram(id: string) {
     const diagram = await this.diagrams.get(id);
     if (!diagram || diagram.status !== 'active') throw new AdrDiagramNotFoundError('Diagram not found');
-    if (diagram.kind === 'container') {
-      const parent = diagram.scope?.parentDiagramId ? await this.diagrams.get(diagram.scope.parentDiagramId) : undefined;
-      if (!parent || parent.kind !== 'general') throw new ApiConflictError('Container source graph is broken', 'DIAGRAM_REFERENCE_BROKEN');
-      if (parent.status !== 'active') throw new ApiConflictError('The parent diagram is inactive. Restore it before accessing decisions.', 'PARENT_INACTIVE');
-    }
+    await this.assertActiveAncestors(id, this.diagrams);
     return diagram;
+  }
+
+  private async assertActiveAncestors(id: string, diagrams: DiagramRepositoryLike): Promise<void> {
+    for (const ancestor of await diagrams.findAncestors(id)) if (ancestor.status !== 'active') throw new ApiConflictError('Restore every inactive ancestor before accessing or changing decisions.', 'PARENT_INACTIVE');
   }
 
   private async validateComponentLinks(adr: ArchitectureDecisionRecord, componentIds: string[], components: Component[], diagrams: DiagramRepositoryLike) {

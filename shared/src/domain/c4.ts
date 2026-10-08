@@ -1,9 +1,10 @@
-import type { C4ArtifactType, Component, ComponentRole, ContainerType, DiagramKind } from './types';
+import type { C4ArtifactType, C4ComponentType, Component, ComponentRole, ContainerType, DiagramKind, Diagram, ContainerScope, ComponentScope } from './types';
 
 export const containerTypes = { application: { label: 'Application' }, datastore: { label: 'Datastore' } } as const;
 export function isContainerType(value: unknown): value is ContainerType { return value === 'application' || value === 'datastore'; }
 export function getComponentTypeLabel(component: Pick<Component, 'role' | 'type' | 'containerType'>): string {
-  if (component.role !== 'container') return getC4ArtifactTypeLabel(component.type);
+  if (component.role === 'component') return 'Component';
+  if (component.role !== 'container' && !(component.role === 'external' && component.type === 'container')) return getC4ArtifactTypeLabel(component.type);
   if (!isContainerType(component.containerType)) throw new Error('Choose Application or Datastore for this container.');
   return containerTypes[component.containerType].label;
 }
@@ -32,11 +33,35 @@ export const c4ArtifactMetadata = c4ArtifactTypes;
 export const c4ComponentRoles = {
   element: { label: 'Element', diagramKind: 'general' },
   container: { label: 'Container', diagramKind: 'container' },
+  component: { label: 'Component', diagramKind: 'component' },
   external: { label: 'External participant', diagramKind: 'container' },
 } as const satisfies Record<ComponentRole, { label: string; diagramKind: DiagramKind }>;
 
 export function isContainerDiagram(kind: DiagramKind | null | undefined): kind is 'container' {
   return kind === 'container';
+}
+export function isComponentDiagram(kind: DiagramKind | null | undefined): kind is 'component' { return kind === 'component'; }
+export function isC4ComponentType(value: unknown): value is C4ComponentType { return value === 'component'; }
+export function isContainerDocument<T extends Diagram>(document: T): document is T & { kind: 'container'; scope: ContainerScope } {
+  return document.kind === 'container' && !!document.scope && !('containerId' in document.scope);
+}
+export function isComponentDocument<T extends Diagram>(document: T): document is T & { kind: 'component'; scope: ComponentScope } {
+  return document.kind === 'component' && !!document.scope && 'containerId' in document.scope;
+}
+export function getContainerScope(document: Pick<Diagram, 'kind' | 'scope'>): ContainerScope | null {
+  return document.kind === 'container' && document.scope && !('containerId' in document.scope) ? document.scope : null;
+}
+export function getComponentScope(document: Pick<Diagram, 'kind' | 'scope'>): ComponentScope | null {
+  return document.kind === 'component' && document.scope && 'containerId' in document.scope ? document.scope : null;
+}
+export function getDiagramOwnerId(document: Pick<Diagram, 'kind' | 'scope'>): string | null {
+  if (!document.scope) return null;
+  return document.kind === 'component' && 'containerId' in document.scope ? document.scope.containerId : document.scope.softwareSystemId;
+}
+export function isInternalComponent(component: Pick<Component, 'role' | 'type'>, kind: DiagramKind): boolean {
+  return kind === 'component' ? component.role === 'component' && component.type === 'component'
+    : kind === 'container' ? component.role === 'container' && component.type === 'container'
+      : (component.role ?? 'element') === 'element';
 }
 
 export function getComponentRoleLabel(role: ComponentRole | null | undefined): string {

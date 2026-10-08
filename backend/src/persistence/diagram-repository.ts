@@ -1,13 +1,15 @@
 import { asc, eq, inArray } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { z } from 'zod';
-import type { DiagramDocument } from '../../../shared/src/index';
-import { assertDiagramInvariants, diagramDocumentSchema, getDiagramName } from '../../../shared/src/index';
+import type { DiagramDocument, ComponentScope, DiagramKind } from '../../../shared/src/index';
+import { assertDiagramInvariants, diagramDocumentSchema, getDiagramName, getDiagramOwnerId, getComponentScope } from '../../../shared/src/index';
+import { ApiConflictError } from '../api/errors';
 import * as schema from './schema';
 
 export type MaybePromise<T> = T | Promise<T>;
 export interface TrashProvenance { trashBatchId: string | null; trashRootDiagramId: string | null }
 export interface ChildMembership { id: string; status: 'active' | 'trashed'; parentDiagramId: string | null; ownerComponentId: string | null; createdAt: string; updatedAt: string }
+export interface GraphMembership extends ChildMembership { kind: DiagramKind }
 
 export interface DiagramRepositoryLike {
   listAll(): MaybePromise<DiagramDocument[]>;
@@ -18,6 +20,9 @@ export interface DiagramRepositoryLike {
   findChildren(parentDiagramId: string): MaybePromise<DiagramDocument[]>;
   /** Raw discovery retains expected IDs even when their document cannot hydrate. */
   findChildMembership(parentDiagramId: string): MaybePromise<ChildMembership[]>;
+  getGraphMembership(id: string): MaybePromise<GraphMembership | undefined>;
+  findAncestors(id: string): MaybePromise<GraphMembership[]>;
+  findDescendants(id: string): MaybePromise<GraphMembership[]>;
   withGraphTransaction<T>(parentDiagramId: string, childDiagramIds: string[], action: (repository: DiagramRepositoryLike, transaction?: unknown) => MaybePromise<T>): Promise<T>;
   findComponent(id: string): MaybePromise<{ id: string; diagramId: string; name: string; description: string | null; type: string | null; role: string; sourceComponentId: string | null } | undefined>;
   findRelationship(id: string): MaybePromise<{ id: string; diagramId: string } | undefined>;
@@ -45,41 +50,101 @@ const normalizedGroups = (document: DiagramDocument) => groupsOf(document).map(g
   memberComponentIds: [...group.memberComponentIds],
 }));
 
+const brokenGraph = (message: string): never => { throw new ApiConflictError(`${message} Repair the diagram's parent/owner references.`, 'DIAGRAM_REFERENCE_BROKEN'); };
+/** A C4 hierarchy has exactly three permitted levels; never follows arbitrary chains. */
+export async function graphAncestors(repository: DiagramRepositoryLike, id: string): Promise<GraphMembership[]> {
+  let member = await repository.getGraphMembership(id);
+  if (!member) return brokenGraph('Diagram graph entry is missing.');
+  const ancestors: GraphMembership[] = []; const seen = new Set([id]);
+  for (let depth = 0; member.parentDiagramId; depth++) {
+    if (depth >= 2 || seen.has(member.parentDiagramId)) return brokenGraph('Diagram hierarchy is cyclic or exceeds Component depth.');
+    const parent = await repository.getGraphMembership(member.parentDiagramId);
+    if (!parent || (member.kind === 'component' ? parent.kind !== 'container' : member.kind === 'container' ? parent.kind !== 'general' : true)) return brokenGraph('Diagram ancestry has a missing or wrong-level parent.');
+    seen.add(parent.id); ancestors.push(parent); member = parent;
+  }
+  if (member.kind !== 'general') return brokenGraph('Diagram hierarchy has no System Context root.');
+  return ancestors;
+}
+export async function graphRoot(repository: DiagramRepositoryLike, id: string): Promise<GraphMembership> {
+  const ancestors = await graphAncestors(repository, id);
+  return ancestors.at(-1) ?? (await repository.getGraphMembership(id))!;
+}
+export async function graphDescendants(repository: DiagramRepositoryLike, id: string): Promise<GraphMembership[]> {
+  const root = await repository.getGraphMembership(id);
+  if (!root) return brokenGraph('Diagram graph entry is missing.');
+  const result: GraphMembership[] = []; const seen = new Set([id]); let parents = [root];
+  for (let depth = 0; depth < 3; depth++) {
+    const next: GraphMembership[] = [];
+    for (const parent of parents) for (const child of await repository.findChildMembership(parent.id)) {
+      const member = await repository.getGraphMembership(child.id);
+      if (!member || seen.has(child.id) || (parent.kind === 'general' ? member.kind !== 'container' : parent.kind === 'container' ? member.kind !== 'component' : true)) return brokenGraph('Diagram descendants have a duplicate, cyclic or wrong-level reference.');
+      seen.add(child.id); next.push(member);
+    }
+    next.sort((a, b) => a.id.localeCompare(b.id)); result.push(...next); parents = next;
+    if (!parents.length) break;
+    if (depth === 2) return brokenGraph('Diagram hierarchy exceeds Component depth.');
+  }
+  return result;
+}
+
+function componentScope(parentId: string, owner: Pick<DiagramDocument['components'][number], 'id' | 'name' | 'description' | 'technology'> & { containerType?: string | null }, contextId: string, system: Pick<DiagramDocument['components'][number], 'id' | 'name'>): ComponentScope {
+  return { parentDiagramId: parentId, containerId: owner.id, parentDiagramName: system.name, containerName: owner.name, containerDescription: owner.description, containerTechnology: owner.technology ?? '', containerType: owner.containerType as ComponentScope['containerType'], systemContextDiagramId: contextId, softwareSystemId: system.id, softwareSystemName: system.name };
+}
+
 /** Isolated repository used by tests; production injects PostgresDiagramRepository. */
 export class DiagramRepository implements DiagramRepositoryLike {
   private documents = new Map<string, DiagramDocument>();
   private provenance = new Map<string, TrashProvenance>();
-  private transactionTail: Promise<void> = Promise.resolve();
+  private transactionTails = new Map<string, Promise<void>>();
 
   listAll() { return [...this.documents.values()].map(d => this.resolve(d)); }
 
   list() { return [...this.documents.values()].filter(d => d.status === 'active').map(d => this.resolve(d)); }
   listTrash() { return [...this.documents.values()].filter(d => d.status === 'trashed').map(d => this.resolve(d)); }
   get(id: string) { const document = this.documents.get(id); return document && this.resolve(document); }
-  findContainerForOwner(ownerComponentId: string) { const child = [...this.documents.values()].find(document => document.kind === 'container' && document.scope?.softwareSystemId === ownerComponentId); return child && this.resolve(child); }
-  findChildren(parentDiagramId: string) { return [...this.documents.values()].filter(document => document.kind === 'container' && document.scope?.parentDiagramId === parentDiagramId).map(document => this.resolve(document)); }
+  findContainerForOwner(ownerComponentId: string) { const child = [...this.documents.values()].find(document => getDiagramOwnerId(document) === ownerComponentId); return child && this.resolve(child); }
+  findChildren(parentDiagramId: string) { return [...this.documents.values()].filter(document => document.scope?.parentDiagramId === parentDiagramId).map(document => this.resolve(document)); }
+  getGraphMembership(id: string): GraphMembership | undefined {
+    const document = this.documents.get(id);
+    return document && { id, kind: document.kind ?? 'general', status: document.status, parentDiagramId: document.scope?.parentDiagramId ?? null, ownerComponentId: getDiagramOwnerId(document), createdAt: document.createdAt, updatedAt: document.updatedAt };
+  }
+  findAncestors(id: string) { return graphAncestors(this, id); }
+  findDescendants(id: string) { return graphDescendants(this, id); }
   findChildMembership(parentDiagramId: string): ChildMembership[] {
     return [...this.documents.values()].filter(document => document.scope?.parentDiagramId === parentDiagramId)
       .sort((left, right) => left.id.localeCompare(right.id))
-      .map(document => ({ id: document.id, status: document.status, parentDiagramId: document.scope!.parentDiagramId, ownerComponentId: document.scope!.softwareSystemId, createdAt: document.createdAt, updatedAt: document.updatedAt }));
+      .map(document => this.getGraphMembership(document.id)!);
   }
   async withGraphTransaction<T>(_parentDiagramId: string, _childDiagramIds: string[], action: (repository: DiagramRepositoryLike, transaction?: unknown) => MaybePromise<T>): Promise<T> {
-    const prior = this.transactionTail;
+    const root = await graphRoot(this, _parentDiagramId);
+    const prior = this.transactionTails.get(root.id) ?? Promise.resolve();
     let release!: () => void;
-    this.transactionTail = new Promise<void>(resolve => { release = resolve; });
+    const tail = new Promise<void>(resolve => { release = resolve; });
+    this.transactionTails.set(root.id, tail);
     await prior;
-    const snapshot = new Map([...this.documents].map(([id, document]) => [id, clone(document)]));
-    const provenanceSnapshot = new Map([...this.provenance].map(([id, value]) => [id, { ...value }]));
-    try { return await action(this, this); }
-    catch (error) { this.documents = snapshot; this.provenance = provenanceSnapshot; throw error; }
-    finally { release(); }
+    try {
+      if ((await graphRoot(this, _parentDiagramId)).id !== root.id) return brokenGraph('Diagram ancestry changed during coordination.');
+      const ids = new Set([root.id, ...(await this.findDescendants(root.id)).map(member => member.id)]);
+      for (const id of _childDiagramIds) if (!ids.has(id) && this.documents.has(id)) return brokenGraph('Affected diagram belongs to a different Context root.');
+      const snapshot = new Map([...this.documents].filter(([id]) => ids.has(id)).map(([id, document]) => [id, clone(document)]));
+      const provenanceSnapshot = new Map([...this.provenance].filter(([id]) => ids.has(id)).map(([id, value]) => [id, { ...value }]));
+      try { return await action(this, this); }
+      catch (error) {
+        const currentIds = new Set([root.id, ...(await this.findDescendants(root.id)).map(member => member.id), ...ids]);
+        for (const id of currentIds) { this.documents.delete(id); this.provenance.delete(id); }
+        for (const [id, document] of snapshot) this.documents.set(id, document);
+        for (const [id, value] of provenanceSnapshot) this.provenance.set(id, value);
+        throw error;
+      }
+    }
+    finally { release(); if (this.transactionTails.get(root.id) === tail) this.transactionTails.delete(root.id); }
   }
   findComponent(id: string) { for (const document of this.documents.values()) { const component = document.components.find(item => item.id === id); if (component) return { id: component.id, diagramId: component.diagramId, name: component.name, description:component.description, type:component.type, role:component.role ?? 'element', sourceComponentId:component.sourceComponentId ?? null }; } return undefined; }
   findRelationship(id: string) { for (const document of this.documents.values()) { const relationship = document.relationships.find(item => item.id === id); if (relationship) return { id: relationship.id, diagramId: relationship.diagramId }; } return undefined; }
   create(input: DiagramDocument) {
     const document = diagramDocumentSchema.parse(input) as DiagramDocument;
     assertDiagramInvariants(document);
-    if (document.kind === 'container' && this.findContainerForOwner(document.scope!.softwareSystemId)) throw new Error('diagrams_owner_component_unique');
+    if (document.scope && this.findContainerForOwner(getDiagramOwnerId(document)!)) throw new Error('diagrams_owner_component_unique');
     const normalized = { ...document, groups: normalizedGroups(document) };
     this.documents.set(document.id, clone(normalized));
     return this.resolve(normalized);
@@ -154,7 +219,26 @@ export class DiagramRepository implements DiagramRepositoryLike {
 
   private resolve(document: DiagramDocument): DiagramDocument {
     const resolved = clone(document);
-    if (resolved.kind !== 'container' || !resolved.scope) return resolved;
+    if (!resolved.scope) return resolved;
+    if (resolved.kind === 'component') {
+      const scope = getComponentScope(resolved);
+      const parent = this.documents.get(resolved.scope.parentDiagramId);
+      const context = parent?.scope && this.documents.get(parent.scope.parentDiagramId);
+      const system = context?.components.find(c => c.id === parent?.scope?.softwareSystemId);
+      const owner = parent?.components.find(c => c.id === scope?.containerId);
+      if (scope && parent && owner && context && system) {
+        resolved.scope = componentScope(parent.id, owner, context.id, system);
+        resolved.name = owner.name;
+        resolved.components = resolved.components.map(c => {
+          if (c.role !== 'external') return c;
+          const immediate = parent.components.find(source => source.id === c.sourceComponentId);
+          const source = immediate?.role === 'external' ? context.components.find(source => source.id === immediate.sourceComponentId) : immediate;
+          return source ? { ...c, name: source.name, description: source.description, type: source.type, containerType: source.containerType ?? null, technology: source.technology ?? null } : c;
+        });
+      }
+      return resolved;
+    }
+    if (resolved.kind !== 'container') return resolved;
     const parent = this.documents.get(resolved.scope.parentDiagramId);
     const owner = parent?.components.find(component => component.id === resolved.scope!.softwareSystemId);
     if (parent && owner) {
@@ -224,15 +308,15 @@ function mapDocument(
     trashedAt: diagram.trashedAt ? iso(diagram.trashedAt) : null,
     kind: diagram.kind as NonNullable<DiagramDocument['kind']>,
     scope,
-    boundary: diagram.kind === 'container' ? { position: { x: diagram.scopeX!, y: diagram.scopeY! }, size: { width: diagram.scopeWidth!, height: diagram.scopeHeight! } } : null,
+    boundary: diagram.kind !== 'general' ? { position: { x: diagram.scopeX!, y: diagram.scopeY! }, size: { width: diagram.scopeWidth!, height: diagram.scopeHeight! } } : null,
     components: componentRows.map(component => ({
       id: component.id, diagramId: component.diagramId,
       name: component.role === 'external' && component.sourceComponentId ? sourceComponents.get(component.sourceComponentId)?.name ?? component.name : component.name,
       description: component.role === 'external' && component.sourceComponentId && sourceComponents.has(component.sourceComponentId) ? sourceComponents.get(component.sourceComponentId)!.description : component.description,
       type: component.role === 'external' && component.sourceComponentId ? sourceComponents.get(component.sourceComponentId)?.type ?? component.type : component.type,
       role: component.role as NonNullable<DiagramDocument['components'][number]['role']>,
-      containerType: component.containerType as DiagramDocument['components'][number]['containerType'],
-      technology: component.technology,
+      containerType: (component.role === 'external' && component.sourceComponentId && sourceComponents.has(component.sourceComponentId) ? sourceComponents.get(component.sourceComponentId)!.containerType : component.containerType) as DiagramDocument['components'][number]['containerType'],
+      technology: component.role === 'external' && component.sourceComponentId && sourceComponents.has(component.sourceComponentId) ? sourceComponents.get(component.sourceComponentId)!.technology : component.technology,
       sourceComponentId: component.sourceComponentId,
       position: { x: component.x, y: component.y },
       size: { width: component.width, height: component.height },
@@ -288,9 +372,25 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
     return diagrams.map(diagram => {
       const parent = diagram.parentDiagramId ? diagramsById.get(diagram.parentDiagramId) : undefined;
       const owner = diagram.ownerComponentId ? componentsById.get(diagram.ownerComponentId) : undefined;
-      const scope = diagram.kind === 'container' && parent && owner ? { parentDiagramId: parent.id, softwareSystemId: owner.id, parentDiagramName: parent.name, softwareSystemName: owner.name, softwareSystemDescription: owner.description } : null;
+      const context = parent?.parentDiagramId ? diagramsById.get(parent.parentDiagramId) : undefined;
+      const system = parent?.ownerComponentId ? componentsById.get(parent.ownerComponentId) : undefined;
+      const scope = diagram.kind === 'container' && parent && owner ? { parentDiagramId: parent.id, softwareSystemId: owner.id, parentDiagramName: parent.name, softwareSystemName: owner.name, softwareSystemDescription: owner.description }
+        : diagram.kind === 'component' && parent && owner && context && system ? componentScope(parent.id, owner, context.id, system) : null;
       const localGroups = groupsByDiagram.get(diagram.id) ?? [];
-      return mapDocument(diagram, componentsByDiagram.get(diagram.id) ?? [], relationshipsByDiagram.get(diagram.id) ?? [], localGroups, localGroups.flatMap(group => membersByGroup.get(group.id) ?? []), scope, componentsById);
+      let sources = componentsById;
+      // Copy only this child's projections, rather than every component in the database.
+      if (diagram.kind === 'component') sources = new Map((componentsByDiagram.get(diagram.id) ?? []).flatMap(component => {
+        const source = component.sourceComponentId && componentsById.get(component.sourceComponentId);
+        return source ? [[source.id, source] as const] : [];
+      }));
+      if (diagram.kind === 'component') for (const component of componentsByDiagram.get(diagram.id) ?? []) {
+        const source = component.sourceComponentId && componentsById.get(component.sourceComponentId);
+        if (source && source.role === 'external' && source.sourceComponentId) {
+          const canonical = componentsById.get(source.sourceComponentId);
+          if (canonical) sources.set(source.id, canonical);
+        }
+      }
+      return mapDocument(diagram, componentsByDiagram.get(diagram.id) ?? [], relationshipsByDiagram.get(diagram.id) ?? [], localGroups, localGroups.flatMap(group => membersByGroup.get(group.id) ?? []), scope, sources);
     });
   }
 
@@ -304,14 +404,27 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
   async withGraphTransaction<T>(parentDiagramId: string, childDiagramIds: string[], action: (repository: DiagramRepositoryLike, transaction?: unknown) => MaybePromise<T>): Promise<T> {
     if (this.inTransaction) return await action(this, this.db);
     return this.db.transaction(async (transaction: PostgresTransaction) => {
-      await transaction.select({ id:schema.diagrams.id }).from(schema.diagrams).where(eq(schema.diagrams.id, parentDiagramId)).for('update');
-      const currentChildren = await transaction.select({ id: schema.diagrams.id }).from(schema.diagrams).where(eq(schema.diagrams.parentDiagramId, parentDiagramId));
-      const ordered = [...new Set([...childDiagramIds, ...currentChildren.map(child => child.id)])].filter(id => id !== parentDiagramId).sort();
-      for (const id of ordered) await transaction.select({ id:schema.diagrams.id }).from(schema.diagrams).where(eq(schema.diagrams.id, id)).for('update');
       const scoped = new PostgresDiagramRepository(transaction, true);
+      const root = await graphRoot(scoped, parentDiagramId);
+      await transaction.select({ id:schema.diagrams.id }).from(schema.diagrams).where(eq(schema.diagrams.id, root.id)).for('update');
+      // Rediscover only after the root lock: every compliant writer shares it.
+      if ((await graphRoot(scoped, parentDiagramId)).id !== root.id) return brokenGraph('Diagram ancestry changed during coordination.');
+      const members = await scoped.findDescendants(root.id);
+      const membership = new Set([root.id, ...members.map(member => member.id)]);
+      for (const id of childDiagramIds) if (!membership.has(id)) {
+        // Creation callers may supply the not-yet-created child UUID.
+        if (await scoped.getGraphMembership(id)) return brokenGraph('Affected diagram belongs to a different Context root.');
+      }
+      for (const member of members) await transaction.select({ id:schema.diagrams.id }).from(schema.diagrams).where(eq(schema.diagrams.id, member.id)).for('update');
       return action(scoped, transaction);
     });
   }
+  async getGraphMembership(id: string): Promise<GraphMembership | undefined> {
+    const [row] = await this.db.select({ id: schema.diagrams.id, kind: schema.diagrams.kind, status: schema.diagrams.status, parentDiagramId: schema.diagrams.parentDiagramId, ownerComponentId: schema.diagrams.ownerComponentId, createdAt: schema.diagrams.createdAt, updatedAt: schema.diagrams.updatedAt }).from(schema.diagrams).where(eq(schema.diagrams.id, id)).limit(1);
+    return row && { ...row, kind: row.kind as DiagramKind, createdAt: iso(row.createdAt), updatedAt: iso(row.updatedAt) };
+  }
+  findAncestors(id: string) { return graphAncestors(this, id); }
+  findDescendants(id: string) { return graphDescendants(this, id); }
 
   async findComponent(id: string) { const [component] = await this.db.select({ id: schema.components.id, diagramId: schema.components.diagramId, name: schema.components.name, description:schema.components.description, type:schema.components.type, role:schema.components.role, sourceComponentId:schema.components.sourceComponentId }).from(schema.components).where(eq(schema.components.id, id)).limit(1); return component; }
   async findRelationship(id: string) { const [relationship] = await this.db.select({ id: schema.relationships.id, diagramId: schema.relationships.diagramId }).from(schema.relationships).where(eq(schema.relationships.id, id)).limit(1); return relationship; }
@@ -335,7 +448,7 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
         createdAt: dateValue(document.createdAt, 'createdAt'), updatedAt: now, trashedAt: null,
         kind: document.kind ?? 'general',
         parentDiagramId: document.scope?.parentDiagramId ?? null,
-        ownerComponentId: document.scope?.softwareSystemId ?? null,
+        ownerComponentId: getDiagramOwnerId(document),
         scopeX: document.boundary?.position.x ?? null,
         scopeY: document.boundary?.position.y ?? null,
         scopeWidth: document.boundary?.size.width ?? null,
@@ -358,7 +471,7 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
     const replace = async (tx: any) => {
       await tx.update(schema.diagrams).set({
         name: document.name.trim(), updatedAt: now, kind: document.kind ?? 'general',
-        parentDiagramId: document.scope?.parentDiagramId ?? null, ownerComponentId: document.scope?.softwareSystemId ?? null,
+        parentDiagramId: document.scope?.parentDiagramId ?? null, ownerComponentId: getDiagramOwnerId(document),
         scopeX: document.boundary?.position.x ?? null, scopeY: document.boundary?.position.y ?? null,
         scopeWidth: document.boundary?.size.width ?? null, scopeHeight: document.boundary?.size.height ?? null,
       }).where(eq(schema.diagrams.id, document.id));
@@ -422,16 +535,30 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
     const groupRows = await this.db.select().from(schema.systemGroups).where(eq(schema.systemGroups.diagramId, id)).orderBy(asc(schema.systemGroups.createdAt), asc(schema.systemGroups.id));
     const memberRows = await Promise.all(groupRows.map(group => this.db.select().from(schema.systemGroupMembers).where(eq(schema.systemGroupMembers.groupId, group.id)).orderBy(asc(schema.systemGroupMembers.createdAt), asc(schema.systemGroupMembers.componentId))));
     let scope: DiagramDocument['scope'] = null;
-    if (diagram.kind === 'container' && diagram.parentDiagramId && diagram.ownerComponentId) {
+    if (diagram.kind !== 'general' && diagram.parentDiagramId && diagram.ownerComponentId) {
       const [[parent], [owner]] = await Promise.all([
         this.db.select().from(schema.diagrams).where(eq(schema.diagrams.id, diagram.parentDiagramId)).limit(1),
         this.db.select().from(schema.components).where(eq(schema.components.id, diagram.ownerComponentId)).limit(1),
       ]);
-      if (parent && owner) scope = { parentDiagramId: parent.id, softwareSystemId: owner.id, parentDiagramName: parent.name, softwareSystemName: owner.name, softwareSystemDescription: owner.description };
+      if (diagram.kind === 'container' && parent && owner) scope = { parentDiagramId: parent.id, softwareSystemId: owner.id, parentDiagramName: parent.name, softwareSystemName: owner.name, softwareSystemDescription: owner.description };
+      else if (diagram.kind === 'component' && parent?.parentDiagramId && parent.ownerComponentId && owner) {
+        const [[context], [system]] = await Promise.all([
+          this.db.select().from(schema.diagrams).where(eq(schema.diagrams.id, parent.parentDiagramId)).limit(1),
+          this.db.select().from(schema.components).where(eq(schema.components.id, parent.ownerComponentId)).limit(1),
+        ]);
+        if (context && system) scope = componentScope(parent.id, { ...owner, containerType: owner.containerType as ComponentScope['containerType'] }, context.id, system);
+      }
     }
     const sourceIds = componentRows.flatMap(component => component.sourceComponentId ? [component.sourceComponentId] : []);
     const sourceRows = sourceIds.length ? await this.db.select().from(schema.components).where(inArray(schema.components.id, sourceIds)) : [];
-    return mapDocument(diagram, componentRows, relationshipRows, groupRows, memberRows.flat(), scope, new Map(sourceRows.map(component => [component.id, component])));
+    const sources = new Map(sourceRows.map(component => [component.id, component]));
+    if (diagram.kind === 'component') {
+      const canonicalIds = sourceRows.flatMap(source => source.role === 'external' && source.sourceComponentId ? [source.sourceComponentId] : []);
+      const canonicalRows = canonicalIds.length ? await this.db.select().from(schema.components).where(inArray(schema.components.id, canonicalIds)) : [];
+      const canonicalById = new Map(canonicalRows.map(source => [source.id, source]));
+      for (const source of sourceRows) { const canonical = source.sourceComponentId && canonicalById.get(source.sourceComponentId); if (canonical) sources.set(source.id, canonical); }
+    }
+    return mapDocument(diagram, componentRows, relationshipRows, groupRows, memberRows.flat(), scope, sources);
   }
 
   private async insertChildren(

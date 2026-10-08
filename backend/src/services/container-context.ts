@@ -1,4 +1,4 @@
-import { assertDiagramInvariants, diagramDocumentSchema, getDiagramName, isC4ArtifactType, type ContainerAvailability, type ContainerContext, type DiagramDocument, type DiagramSummary } from '../../../shared/src/index';
+import { assertDiagramInvariants, diagramDocumentSchema, getDiagramName, getContainerScope, isC4ArtifactType, type ContainerAvailability, type ContainerContext, type ContainerScope, type DiagramDocument, type DiagramSummary } from '../../../shared/src/index';
 import type { DiagramRepositoryLike } from '../persistence/diagram-repository';
 import { GraphTransaction } from '../persistence/graph-transaction';
 import { ApiConflictError, ApiValidationError } from '../api/errors';
@@ -8,7 +8,17 @@ export class ContainerContextNotFoundError extends Error {}
 interface ResolvedOwner {
   parent: DiagramDocument;
   owner: DiagramDocument['components'][number];
-  scope: NonNullable<DiagramDocument['scope']>;
+  scope: ContainerScope;
+}
+
+/** Shared bounded ancestor validation; callers may batch-load the parent once. */
+export function resolveContainerScope(child: DiagramDocument, parent: DiagramDocument | undefined): ResolvedOwner {
+  const scope = getContainerScope(child);
+  if (!scope || !parent || parent.id !== scope.parentDiagramId || (parent.kind ?? 'general') !== 'general') throw new ApiConflictError('The Container ancestor has a missing or wrong-level Context reference. Repair its parent association.', 'DIAGRAM_REFERENCE_BROKEN');
+  if (parent.status !== 'active') throw new ApiConflictError('Restore the System Context ancestor before accessing this diagram.', 'PARENT_INACTIVE');
+  const owner = parent.components.find(c => c.id === scope.softwareSystemId);
+  if (!owner || owner.diagramId !== parent.id || owner.type !== 'software-system' || (owner.role ?? 'element') !== 'element') throw new ApiConflictError('The owning Software System reference is broken or ineligible. Repair it in System Context.', 'DIAGRAM_REFERENCE_BROKEN');
+  return { parent, owner, scope: { parentDiagramId: parent.id, softwareSystemId: owner.id, parentDiagramName: parent.name, softwareSystemName: owner.name, softwareSystemDescription: owner.description } };
 }
 
 export class ContainerContextService {
@@ -168,14 +178,7 @@ export class ContainerContextService {
   }
 
   private async resolveScope(child: DiagramDocument, repository: DiagramRepositoryLike): Promise<ResolvedOwner> {
-    const scope = child.scope!;
-    const parent = await repository.get(scope.parentDiagramId);
-    if (!parent) throw new ApiConflictError('The source parent diagram no longer exists.', 'DIAGRAM_REFERENCE_BROKEN');
-    if (parent.status !== 'active') throw new ApiConflictError('The parent diagram must be active before loading this container diagram.', 'PARENT_INACTIVE');
-    if (parent.kind !== 'general') throw new ApiConflictError('The container parent reference no longer points to a general diagram.', 'DIAGRAM_REFERENCE_BROKEN');
-    const owner = parent.components.find(component => component.id === scope.softwareSystemId);
-    if (!owner || owner.type !== 'software-system' || (owner.role ?? 'element') !== 'element') throw new ApiConflictError('The owning Software System reference is broken or no longer eligible.', 'DIAGRAM_REFERENCE_BROKEN');
-    return { parent, owner, scope:{ parentDiagramId:parent.id, softwareSystemId:owner.id, parentDiagramName:parent.name, softwareSystemName:owner.name, softwareSystemDescription:owner.description } };
+    return resolveContainerScope(child, child.scope ? await repository.get(child.scope.parentDiagramId) : undefined);
   }
 
   private summary(document: DiagramDocument) {

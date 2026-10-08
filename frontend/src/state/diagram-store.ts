@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { assertCanAddGroupMember, calculateGroupBounds, DEFAULT_COMPONENT_SIZE, fitGroupBoundsAfterLayout, getC4ArtifactTypeLabel, isC4ArtifactType, translateGroupWithMembers, type C4ArtifactType, type DiagramDocument, type DiagramSummary, type GroupMemberAddReason, type Position, type Relationship, type RelationshipDirection } from '../../../shared/src/index';
 import { DiagramApiError, diagramClient, formatDiagramApiError } from '../api/diagram-client';
 import { BoundedHistory } from './history';
-import { getDiagramName } from '../../../shared/src/index';
+import { getDiagramName, isContainerDocument } from '../../../shared/src/index';
 import { reconcileParentDiagramSummaries } from './diagram-list';
 import { assertDiagramInvariants, containerContextSchema, diagramDocumentSchema, fitContainerLayout, getContainerComponentMinimumSize, isContainerType, validateExternalPlacement, type ContainerContext, type ContainerType, type ComponentSize } from '../../../shared/src/index';
 
@@ -87,7 +87,7 @@ let session = 0;
 const copy = (document: DiagramDocument): DiagramDocument => ({ ...structuredClone(document), name: getDiagramName(document), groups: document.groups ?? [] });
 const historyState = () => ({ canUndo: history.canUndo, canRedo: history.canRedo });
 const now = () => new Date().toISOString();
-const contextFromDocument = (document: DiagramDocument): ContainerContext | null => document.kind === 'container' && document.scope ? {
+const contextFromDocument = (document: DiagramDocument): ContainerContext | null => isContainerDocument(document) ? {
   scope: document.scope,
   sources: document.components.filter(c => c.role === 'external').map(c => ({ id: c.sourceComponentId!, name: c.name, description: c.description, type: c.type as C4ArtifactType })),
   capturedAt: now(),
@@ -552,7 +552,7 @@ export const useDiagramStore = create<State>((set, get) => ({
           for (const occurrence of saved.components.filter(component => component.role === 'external')) {
             sources.set(occurrence.sourceComponentId!, { id: occurrence.sourceComponentId!, name: occurrence.name, description: occurrence.description, type: occurrence.type as C4ArtifactType });
           }
-          const sourceContext = saved.kind === 'container' && saved.scope ? { scope: saved.scope, sources: [...sources.values()], capturedAt: now() } : state.sourceContext;
+          const sourceContext = isContainerDocument(saved) ? { scope: saved.scope, sources: [...sources.values()], capturedAt: now() } : state.sourceContext;
           return { sourceContext,
             savedDocuments: reconcileParentDiagramSummaries(replaceSummary(state.savedDocuments, summary(saved)), saved),
             trashedDocuments: reconcileParentDiagramSummaries(state.trashedDocuments, saved),

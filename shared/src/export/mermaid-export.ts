@@ -37,7 +37,7 @@ export function exportMermaid(document: DiagramDocument): string {
   for (const relationship of document.relationships) if (relationship.label) safeText(relationship.label, 'Relationship', relationship.id);
   for (const relationship of document.relationships) if (relationship.protocol) safeText(relationship.protocol, 'Relationship', relationship.id);
   safeText(document.name, 'Diagram', document.id);
-  if (document.scope) for (const value of [document.scope.parentDiagramName, document.scope.softwareSystemName, document.scope.softwareSystemDescription]) if (value) safeText(value, 'Diagram', document.id);
+  if (document.scope) for (const value of [document.scope.parentDiagramName, document.scope.softwareSystemName, 'softwareSystemDescription' in document.scope ? document.scope.softwareSystemDescription : null]) if (value) safeText(value, 'Diagram', document.id);
   const parsed = diagramDocumentSchema.safeParse(document);
   if (!parsed.success) {
     const issue = parsed.error.issues[0], collection = issue.path[0], index = issue.path[1];

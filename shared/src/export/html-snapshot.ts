@@ -112,7 +112,7 @@ export function validateExportDiagram(input: DiagramDocument): DiagramDocument {
   if (diagram.scope) {
     validateText(diagram.scope.parentDiagramName, 'diagram', diagram.id, 'scope.parentDiagramName');
     validateText(diagram.scope.softwareSystemName, 'diagram', diagram.id, 'scope.softwareSystemName');
-    validateText(diagram.scope.softwareSystemDescription, 'diagram', diagram.id, 'scope.softwareSystemDescription');
+    if ('softwareSystemDescription' in diagram.scope) validateText(diagram.scope.softwareSystemDescription, 'diagram', diagram.id, 'scope.softwareSystemDescription');
   }
   for (const relationship of diagram.relationships) { validateText(relationship.label, 'relationship', relationship.id, 'label'); validateText(relationship.protocol ?? null, 'relationship', relationship.id, 'protocol'); }
   for (const group of diagram.groups ?? []) validateText(group.name, 'group', group.id, 'name');

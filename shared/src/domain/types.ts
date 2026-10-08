@@ -2,8 +2,9 @@ export type UUID = string;
 export type DiagramStatus = 'active' | 'trashed';
 export type RelationshipDirection = 'directed' | 'undirected';
 export type C4ArtifactType = 'person' | 'software-system';
-export type DiagramKind = 'general' | 'container';
-export type ComponentRole = 'element' | 'container' | 'external';
+export type C4ComponentType = 'component';
+export type DiagramKind = 'general' | 'container' | 'component';
+export type ComponentRole = 'element' | 'container' | 'component' | 'external';
 export type ContainerType = 'application' | 'datastore';
 export interface Position { x: number; y: number }
 export interface ComponentSize { width: number; height: number }
@@ -15,13 +16,26 @@ export interface ContainerScope {
   softwareSystemName: string;
   softwareSystemDescription: string | null;
 }
+export interface ComponentScope {
+  parentDiagramId: UUID;
+  containerId: UUID;
+  parentDiagramName: string;
+  containerName: string;
+  containerDescription: string | null;
+  containerTechnology: string;
+  containerType: ContainerType;
+  systemContextDiagramId: UUID;
+  softwareSystemId: UUID;
+  softwareSystemName: string;
+}
 export interface Component { id: UUID; diagramId: UUID; name: string; description: string | null; type: C4ArtifactType | string | null; role?: ComponentRole; containerType?: ContainerType | null; technology?: string | null; sourceComponentId?: UUID | null; position: Position; size: ComponentSize; createdAt: string; updatedAt: string }
+export interface InternalC4Component extends Component { role: 'component'; type: C4ComponentType; description: string; containerType: null; technology: string; sourceComponentId: null }
 export interface Relationship { id: UUID; diagramId: UUID; sourceComponentId: UUID; targetComponentId: UUID; direction: RelationshipDirection; label: string | null; protocol?: string | null; createdAt: string; updatedAt: string }
-export interface Diagram { id: UUID; name: string; status: DiagramStatus; createdAt: string; updatedAt: string; trashedAt: string | null; kind?: DiagramKind; scope?: ContainerScope | null; boundary?: GroupBoundaryLayout | null }
+export interface Diagram { id: UUID; name: string; status: DiagramStatus; createdAt: string; updatedAt: string; trashedAt: string | null; kind?: DiagramKind; scope?: ContainerScope | ComponentScope | null; boundary?: GroupBoundaryLayout | null }
 export interface GroupBoundaryLayout { position: Position; size: { width: number; height: number } }
 export interface SystemGroup extends GroupBoundaryLayout { id: UUID; diagramId: UUID; name: string; memberComponentIds: UUID[]; createdAt: string; updatedAt: string }
 export interface DiagramDocument extends Diagram { components: Component[]; relationships: Relationship[]; groups: SystemGroup[] }
-export interface DiagramSummary extends Pick<Diagram, 'id' | 'name' | 'status' | 'createdAt' | 'updatedAt'> { kind?: DiagramKind; scope?: ContainerScope | null }
+export interface DiagramSummary extends Pick<Diagram, 'id' | 'name' | 'status' | 'createdAt' | 'updatedAt'> { kind?: DiagramKind; scope?: ContainerScope | ComponentScope | null }
 export interface ContainerSourceSummary { id: UUID; name: string; description: string | null; type: C4ArtifactType }
 export type ContainerAvailabilityState = 'none' | 'active' | 'trashed';
 export interface ContainerAvailability {
@@ -33,6 +47,27 @@ export interface ContainerAvailability {
 export interface ContainerContext {
   scope: ContainerScope;
   sources: ContainerSourceSummary[];
+  capturedAt: string;
+}
+export interface ComponentSourceSummary {
+  id: UUID;
+  name: string;
+  description: string | null;
+  type: C4ArtifactType | 'container';
+  containerType: ContainerType | null;
+  technology: string | null;
+  canonicalSourceComponentId: UUID;
+  sourceDiagramId: UUID;
+}
+export interface ComponentAvailability {
+  parentDiagramId: UUID;
+  containerId: UUID;
+  availability: ContainerAvailabilityState;
+  diagram: DiagramSummary | null;
+}
+export interface ComponentContext {
+  scope: ComponentScope;
+  sources: ComponentSourceSummary[];
   capturedAt: string;
 }
 export interface DiagramDependencyBlocker {

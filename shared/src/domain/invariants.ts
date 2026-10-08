@@ -2,7 +2,7 @@ import type { DiagramDocument } from './types';
 import type { ArchitectureDecisionRecord, Component, Relationship } from './types';
 import { fitGroupBoundsAfterLayout, isLessThanOrApproximatelyEqual, isMemberWithinGroup } from './group-layout';
 import { isExternalOutsideBoundary } from './container-layout';
-import { isContainerType } from './c4';
+import { getDiagramOwnerId, isContainerType, isComponentDocument, isContainerDocument } from './c4';
 
 export type GroupMemberAddReasonCode =
   | 'missing-group'
@@ -44,14 +44,21 @@ export function assertDiagramInvariants(document: DiagramDocument): void {
   assertUuid(document.id, 'Diagram ID');
   if (!document.name.trim() || document.name.trim().length > 200) throw new Error('Diagram name must contain 1 to 200 characters');
   const kind = document.kind ?? 'general';
-  if (kind !== 'general' && kind !== 'container') throw new Error(`Unsupported diagram kind: ${kind}`);
+  if (kind !== 'general' && kind !== 'container' && kind !== 'component') throw new Error(`Unsupported diagram kind: ${kind}`);
   if (kind === 'general' && (document.scope != null || document.boundary != null)) throw new Error('General diagrams cannot have container scope or boundary data');
-  if (kind === 'container') {
+  if (kind !== 'general') {
     const scope = document.scope;
     const boundary = document.boundary;
     if (!scope || !boundary) throw new Error('Container diagrams require an owning Software System and a boundary');
     assertUuid(scope.parentDiagramId, 'Parent diagram ID');
-    assertUuid(scope.softwareSystemId, 'Owning Software System ID');
+    assertUuid(getDiagramOwnerId(document)!, 'Owning element ID');
+    if (kind === 'component') {
+      if (!isComponentDocument(document)) throw new Error('Component diagrams require ComponentScope');
+      assertUuid(document.scope.systemContextDiagramId, 'System Context diagram ID');
+      assertUuid(document.scope.softwareSystemId, 'Software System ID');
+      if (document.scope.systemContextDiagramId === document.id || document.scope.systemContextDiagramId === document.scope.parentDiagramId) throw new Error('Component ancestors must be distinct diagrams');
+      if (!document.scope.containerName.trim() || document.scope.containerName.trim().length > 200 || !document.scope.containerTechnology.trim() || document.scope.containerTechnology.trim().length > 200 || !isContainerType(document.scope.containerType)) throw new Error('Component scope requires current owner name, technology and Application/Datastore subtype');
+    } else if (!isContainerDocument(document)) throw new Error('Container diagrams require ContainerScope');
     if (scope.parentDiagramId === document.id) throw new Error('A container diagram must reference a separate parent diagram');
     if (!scope.parentDiagramName.trim() || !scope.softwareSystemName.trim()) throw new Error('Resolved container scope names must not be blank');
     if (![boundary.position.x, boundary.position.y, boundary.size.width, boundary.size.height].every(Number.isFinite) || boundary.size.width <= 0 || boundary.size.height <= 0) throw new Error('Container boundary must have finite coordinates and positive finite dimensions');
@@ -67,13 +74,15 @@ export function assertDiagramInvariants(document: DiagramDocument): void {
     if (!component.name.trim() || component.name.trim().length > 200 || !Number.isFinite(component.position.x) || !Number.isFinite(component.position.y) || !Number.isFinite(component.size.width) || !Number.isFinite(component.size.height) || component.size.width <= 0 || component.size.height <= 0) throw new Error(`Invalid component layout: ${component.id}`);
     assertComponentName(component.name);
     const role = component.role ?? 'element';
-    if (role === 'container' ? !isContainerType(component.containerType) : component.containerType != null) throw new Error(`Component ${component.id} requires ${role === 'container' ? 'Application or Datastore' : 'null containerType'}`);
+    const hasContainerSubtype = role === 'container' || (kind === 'component' && role === 'external' && component.type === 'container');
+    if (hasContainerSubtype ? !isContainerType(component.containerType) : component.containerType != null) throw new Error(`Component ${component.id} requires ${hasContainerSubtype ? 'Application or Datastore' : 'null containerType'}`);
     if (kind === 'general') {
       if (role !== 'element' || (component.technology ?? null) !== null || (component.sourceComponentId ?? null) !== null) throw new Error(`General component ${component.id} must remain an ordinary element without source metadata`);
       continue;
     }
-    if (role === 'container') {
-      if (component.type !== 'container' || !component.description?.trim() || !component.technology?.trim() || component.technology.trim().length > 200 || component.sourceComponentId) throw new Error(`Container ${component.id} needs a name, responsibility, technology, and no source reference`);
+    const internalRole = kind === 'component' ? 'component' : 'container';
+    if (role === internalRole) {
+      if (component.type !== internalRole || !component.description?.trim() || !component.technology?.trim() || component.technology.trim().length > 200 || component.sourceComponentId) throw new Error(`Internal ${internalRole} ${component.id} needs a name, responsibility, technology, and no source reference`);
       const boundary = document.boundary!;
       const minX = boundary.position.x + 24;
       const minY = boundary.position.y + 68;
@@ -81,7 +90,8 @@ export function assertDiagramInvariants(document: DiagramDocument): void {
       const maxY = boundary.position.y + boundary.size.height - 24 - component.size.height;
       if (!isLessThanOrApproximatelyEqual(minX, component.position.x) || !isLessThanOrApproximatelyEqual(minY, component.position.y) || !isLessThanOrApproximatelyEqual(component.position.x, maxX) || !isLessThanOrApproximatelyEqual(component.position.y, maxY)) throw new Error(`Container ${component.id} must fit inside the Software System boundary`);
     } else if (role === 'external') {
-      if ((component.type !== 'person' && component.type !== 'software-system') || !component.sourceComponentId || component.sourceComponentId === document.scope!.softwareSystemId || (component.technology ?? null) !== null) throw new Error(`External participant ${component.id} must reference a different Person or Software System source`);
+      const supportingContainer = kind === 'component' && component.type === 'container';
+      if ((!supportingContainer && component.type !== 'person' && component.type !== 'software-system') || !component.sourceComponentId || component.sourceComponentId === getDiagramOwnerId(document) || (supportingContainer ? !component.description?.trim() || !component.technology?.trim() || component.technology.trim().length > 200 : (component.technology ?? null) !== null)) throw new Error(`External participant ${component.id} must reference an eligible different parent source with valid metadata`);
       assertUuid(component.sourceComponentId, 'External source component ID');
       if (externalSources.has(component.sourceComponentId)) throw new Error(`External source ${component.sourceComponentId} is included more than once`);
       externalSources.add(component.sourceComponentId);
@@ -103,11 +113,13 @@ export function assertDiagramInvariants(document: DiagramDocument): void {
     if (!componentIds.has(relationship.sourceComponentId) || !componentIds.has(relationship.targetComponentId)) throw new Error(`Relationship ${relationship.id} references a missing component`);
     if (relationship.sourceComponentId === relationship.targetComponentId) throw new Error(`Relationship ${relationship.id} cannot connect a component to itself`);
     assertRelationshipDirection(relationship.direction);
-    if (kind === 'container') {
+    if (kind !== 'general') {
       const source = document.components.find(component => component.id === relationship.sourceComponentId)!;
       const target = document.components.find(component => component.id === relationship.targetComponentId)!;
       if (relationship.direction !== 'directed' || !relationship.label?.trim()) throw new Error(`Container interaction ${relationship.id} needs a direction and nonblank description`);
-      if (source.role !== 'container' && target.role !== 'container') throw new Error(`Container interaction ${relationship.id} must connect to an internal container`);
+      const internalRole = kind === 'component' ? 'component' : 'container';
+      if (source.role !== internalRole && target.role !== internalRole) throw new Error(`Interaction ${relationship.id} must connect to an internal ${internalRole}`);
+      if (relationship.protocol != null && relationship.protocol.trim().length > 200) throw new Error(`Interaction ${relationship.id} protocol must contain at most 200 characters`);
     }
   }
 

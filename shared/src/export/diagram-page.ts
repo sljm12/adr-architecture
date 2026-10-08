@@ -41,7 +41,7 @@ export function renderDiagramPage(snapshot: HtmlExportSnapshot, context?: Diagra
   }).join('');
   const scope = diagram.scope;
   const parentReturn = context?.links.ownerReturn(diagram.id);
-  const scopeDetails = scope ? `<section class="export-scope"><h2>Container diagram · ${escapeMarkup(scope.softwareSystemName)}</h2><p>${parentReturn ? 'Included container snapshot.' : 'Single-diagram snapshot.'} Parent: ${escapeMarkup(scope.parentDiagramName)} (${scope.parentDiagramId}); owner: ${scope.softwareSystemId}.</p>${scope.softwareSystemDescription ? `<p>${renderPlainText(scope.softwareSystemDescription)}</p>` : ''}</section>`
+  const scopeDetails = scope ? `<section class="export-scope"><h2>Container diagram · ${escapeMarkup(scope.softwareSystemName)}</h2><p>${parentReturn ? 'Included container snapshot.' : 'Single-diagram snapshot.'} Parent: ${escapeMarkup(scope.parentDiagramName)} (${scope.parentDiagramId}); owner: ${scope.softwareSystemId}.</p>${'softwareSystemDescription' in scope && scope.softwareSystemDescription ? `<p>${renderPlainText(scope.softwareSystemDescription)}</p>` : ''}</section>`
     : `<p class="export-scope">${context ? 'System context snapshot with all active owned container diagrams.' : 'Single-diagram snapshot. Child container contents are not bundled.'}</p>`;
   const noArtifacts = !diagram.components.length && !diagram.relationships.length;
   const catalogCount = context ? context.snapshot.diagrams.reduce((total, member) => total + member.adrs.length, 0) : snapshot.adrs.length;

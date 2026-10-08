@@ -10,7 +10,7 @@ export const componentTypeSchema = c4ArtifactTypeSchema.nullable();
 /** Complete documents also accept older free-form classifications for compatibility. */
 export const componentSizeSchema = z.object({ width: z.number().finite().positive(), height: z.number().finite().positive() }).default(DEFAULT_COMPONENT_SIZE);
 const componentBaseShape = { id:uuidSchema, diagramId:uuidSchema, name:componentNameSchema, description:z.string().nullable(), type:z.string().nullable(), position:positionSchema, size:componentSizeSchema, createdAt:z.string(), updatedAt:z.string() };
-export const componentRoleSchema = z.enum(['element', 'container', 'external']);
+export const componentRoleSchema = z.enum(['element', 'container', 'component', 'external']);
 export const containerTypeSchema = z.enum(['application', 'datastore']);
 const componentFeatureShape = { role:componentRoleSchema.default('element'), containerType:containerTypeSchema.nullable().default(null), technology:z.string().trim().max(200).nullable().default(null), sourceComponentId:uuidSchema.nullable().default(null) };
 export const componentSchema = z.object({ ...componentBaseShape, ...componentFeatureShape });
@@ -23,6 +23,15 @@ export const containerScopeSchema = z.object({
   parentDiagramName:z.string().trim().min(1).max(200),
   softwareSystemName:z.string().trim().min(1).max(200),
   softwareSystemDescription:z.string().nullable(),
+}).strict();
+export const componentScopeSchema = z.object({
+  parentDiagramId: uuidSchema, containerId: uuidSchema,
+  parentDiagramName: z.string().trim().min(1).max(200),
+  containerName: z.string().trim().min(1).max(200),
+  containerDescription: z.string().nullable(),
+  containerTechnology: z.string().trim().min(1).max(200), containerType: containerTypeSchema,
+  systemContextDiagramId: uuidSchema, softwareSystemId: uuidSchema,
+  softwareSystemName: z.string().trim().min(1).max(200),
 }).strict();
 export const groupSizeSchema = z.object({ width: z.number().finite().positive(), height: z.number().finite().positive() });
 export const groupNameSchema = z.string().trim().min(1, 'Group name is required');
@@ -139,6 +148,53 @@ const containerDiagramDocumentSchema = z.object({
   });
 });
 
+const componentDiagramDocumentSchema = z.object({
+  id: uuidSchema, name: z.string().trim().min(1).max(200), status: z.enum(['active', 'trashed']),
+  createdAt: z.string(), updatedAt: z.string(), trashedAt: z.string().nullable(),
+  kind: z.literal('component'), scope: componentScopeSchema, boundary: boundaryLayoutSchema,
+  components: z.array(containerComponentSchema), relationships: z.array(containerRelationshipSchema), groups: z.array(systemGroupSchema).max(0),
+}).strict().superRefine((document, ctx) => {
+  const issue = (path: (string | number)[], message: string) => ctx.addIssue({ code: 'custom', path, message });
+  if (document.scope.parentDiagramId === document.id || document.scope.systemContextDiagramId === document.id || document.scope.systemContextDiagramId === document.scope.parentDiagramId) issue(['scope', 'parentDiagramId'], 'Component scope requires distinct Component, Container and Context diagrams');
+  const byId = new Map(document.components.map(c => [c.id, c]));
+  const sources = new Set<string>(); const ids = new Set<string>();
+  document.components.forEach((component, index) => {
+    const path = ['components', index];
+    if (ids.has(component.id)) issue([...path, 'id'], 'Component IDs must be unique'); ids.add(component.id);
+    if (component.diagramId !== document.id) issue([...path, 'diagramId'], 'Component must belong to this diagram');
+    if (component.role === 'component') {
+      if (component.type !== 'component') issue([...path, 'type'], 'Internal C4 Components require type component');
+      if (component.containerType !== null) issue([...path, 'containerType'], 'Internal C4 Components require null containerType');
+      if (!component.description?.trim()) issue([...path, 'description'], 'Component responsibilities are required');
+      if (!component.technology?.trim()) issue([...path, 'technology'], 'Component technology is required');
+      if (component.sourceComponentId !== null) issue([...path, 'sourceComponentId'], 'Internal Components cannot reference a source');
+      if (!isWithinBoundary(document.boundary, component.position, component.size)) issue([...path, 'position'], 'Component must remain inside the fitted container boundary');
+    } else if (component.role === 'external') {
+      if (component.type === 'container') {
+        if (!component.containerType) issue([...path, 'containerType'], 'Supporting containers require their source Application/Datastore subtype');
+        if (!component.technology?.trim()) issue([...path, 'technology'], 'Supporting containers require source technology');
+        if (!component.description?.trim()) issue([...path, 'description'], 'Supporting containers require source responsibilities');
+      } else {
+        if (component.type !== 'person' && component.type !== 'software-system') issue([...path, 'type'], 'Supporting participants must be a sibling container, Person or Software System');
+        if (component.containerType !== null || component.technology !== null) issue(path, 'Person/System participants require null subtype and technology');
+      }
+      if (!component.sourceComponentId || component.sourceComponentId === document.scope.containerId) issue([...path, 'sourceComponentId'], 'Supporting participants require an immediate parent source other than the owner');
+      if (component.sourceComponentId && sources.has(component.sourceComponentId)) issue([...path, 'sourceComponentId'], 'A source can appear only once in a Component diagram');
+      if (component.sourceComponentId) sources.add(component.sourceComponentId);
+      if (!outsideBoundaryWithClearance(document.boundary, component.position, component.size)) issue([...path, 'position'], 'Supporting participants need 24 units of clearance outside the container boundary');
+    } else issue([...path, 'role'], 'Component diagrams allow internal Components and supporting participants');
+  });
+  const relationshipIds = new Set<string>();
+  document.relationships.forEach((relationship, index) => {
+    const path = ['relationships', index]; const source = byId.get(relationship.sourceComponentId); const target = byId.get(relationship.targetComponentId);
+    if (relationshipIds.has(relationship.id)) issue([...path, 'id'], 'Relationship IDs must be unique'); relationshipIds.add(relationship.id);
+    if (relationship.diagramId !== document.id || !source || !target) issue(path, 'Interaction endpoints must reference local elements; boundaries cannot be endpoints');
+    if (relationship.sourceComponentId === relationship.targetComponentId) issue(path, 'Self-referential interactions are not supported');
+    if (relationship.direction !== 'directed') issue([...path, 'direction'], 'Component interactions must be directed');
+    if (source?.role !== 'component' && target?.role !== 'component') issue(path, 'At least one endpoint must be an internal Component');
+  });
+});
+
 function isWithinBoundary(boundary: z.infer<typeof boundaryLayoutSchema>, position: { x:number; y:number }, size: { width:number; height:number }): boolean {
   return position.x >= boundary.position.x + 24
     && position.y >= boundary.position.y + 68
@@ -162,6 +218,7 @@ export const diagramDocumentSchema = z.any().transform((value, ctx) => {
     : value;
   const schema = typeof input === 'object' && input !== null && 'kind' in input && input.kind === 'container'
     ? containerDiagramDocumentSchema
+    : typeof input === 'object' && input !== null && 'kind' in input && input.kind === 'component' ? componentDiagramDocumentSchema
     : generalDiagramDocumentSchema;
   const result = schema.safeParse(input);
   if (result.success) return result.data;
@@ -169,7 +226,10 @@ export const diagramDocumentSchema = z.any().transform((value, ctx) => {
   return z.NEVER;
 });
 export const diagramCreateSchema = z.object({name:z.string().trim().min(1)});
-export const diagramSummarySchema = z.object({id:uuidSchema, name:z.string().trim().min(1), status:z.enum(['active','trashed']), createdAt:z.string().datetime({ offset: true }), updatedAt:z.string(), kind:z.enum(['general','container']).default('general'), scope:containerScopeSchema.nullable().default(null)});
+export const diagramSummarySchema = z.object({id:uuidSchema, name:z.string().trim().min(1), status:z.enum(['active','trashed']), createdAt:z.string().datetime({ offset: true }), updatedAt:z.string(), kind:z.enum(['general','container','component']).default('general'), scope:z.union([containerScopeSchema, componentScopeSchema]).nullable().default(null)}).superRefine((value, ctx) => {
+  // Legacy Container summaries may omit their scope; Component scope must never be stripped.
+  if (value.kind === 'component' ? !value.scope || !('containerId' in value.scope) : value.scope !== null && 'containerId' in value.scope) ctx.addIssue({ code: 'custom', path: ['scope'], message: 'Summary scope must match its diagram level' });
+});
 export const diagramSummaryListSchema = z.array(diagramSummarySchema);
 export const containerAvailabilitySchema = z.object({ parentDiagramId:uuidSchema, softwareSystemId:uuidSchema, availability:z.enum(['none','active','trashed']), diagram:diagramSummarySchema.nullable() }).strict();
 const uniqueDiagramIds = z.array(uuidSchema).min(1).refine(ids => new Set(ids).size === ids.length, 'Diagram IDs must be unique');
@@ -178,6 +238,11 @@ export const restoreConfirmationSchema = z.object({ confirmedDiagramIds: uniqueD
 export const trashImpactSchema = z.object({ diagramId: uuidSchema, affectedDiagramIds: uniqueDiagramIds, affectedDiagrams: z.array(diagramSummarySchema).min(1) }).strict().refine(value => value.affectedDiagramIds.includes(value.diagramId) && value.affectedDiagrams.length === value.affectedDiagramIds.length && new Set(value.affectedDiagrams.map(d => d.id)).size === value.affectedDiagramIds.length && value.affectedDiagrams.every(d => value.affectedDiagramIds.includes(d.id)), 'Impact summaries must match the affected IDs and include the root');
 export const restoreImpactSchema = z.object({ requestedDiagramId: uuidSchema, restoreRootDiagramId: uuidSchema, trashBatchId: uuidSchema.nullable(), affectedDiagramIds: uniqueDiagramIds, affectedDiagrams: z.array(diagramSummarySchema).min(1), requestedDiagramIncluded: z.boolean() }).strict().refine(value => value.affectedDiagramIds.includes(value.restoreRootDiagramId) && value.requestedDiagramIncluded === value.affectedDiagramIds.includes(value.requestedDiagramId) && value.affectedDiagrams.length === value.affectedDiagramIds.length && new Set(value.affectedDiagrams.map(d => d.id)).size === value.affectedDiagramIds.length && value.affectedDiagrams.every(d => value.affectedDiagramIds.includes(d.id)), 'Impact summaries and requested inclusion must match the affected IDs');
 export const containerContextSchema = z.object({ scope:containerScopeSchema, sources:z.array(z.object({ id:uuidSchema, name:componentNameSchema.max(200), description:z.string().nullable(), type:c4ArtifactTypeSchema }).strict()), capturedAt:z.string().datetime({offset:true}) }).strict();
+export const componentAvailabilitySchema = z.object({ parentDiagramId: uuidSchema, containerId: uuidSchema, availability: z.enum(['none', 'active', 'trashed']), diagram: diagramSummarySchema.nullable() }).strict();
+export const componentContextSchema = z.object({ scope: componentScopeSchema, sources: z.array(z.object({
+  id: uuidSchema, name: componentNameSchema.max(200), description: z.string().nullable(), type: z.enum(['container', 'person', 'software-system']),
+  containerType: containerTypeSchema.nullable(), technology: z.string().trim().max(200).nullable(), canonicalSourceComponentId: uuidSchema, sourceDiagramId: uuidSchema,
+}).strict()), capturedAt: z.string().datetime({ offset: true }) }).strict();
 export function validationFields(error: z.ZodError) {
   const path = (parts: (string | number)[]) => parts.reduce((value, part) => typeof part === 'number' ? `${value}[${part}]` : value ? `${value}.${part}` : part, '');
   return Object.fromEntries(error.issues.map(i => [path(i.path) || 'document', i.message]));
