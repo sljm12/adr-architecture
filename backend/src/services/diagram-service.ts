@@ -394,10 +394,11 @@ export class DiagramService {
       for (const affectedId of ordered) {
         const document = (await repository.get(affectedId))!;
         if (document.kind === 'container') await this.containerContext.hydrateAndValidateDocument(document, repository);
+        else if (document.kind === 'component') await this.componentContext.hydrateAndValidateDocument(document, repository);
         else assertApiInvariants(document);
       }
       const restored = (await repository.get(id))!;
-      return restored.kind === 'container' ? this.containerContext.hydrateAndValidateDocument(restored, repository) : restored;
+      return restored.kind === 'container' ? this.containerContext.hydrateAndValidateDocument(restored, repository) : restored.kind === 'component' ? this.componentContext.hydrateAndValidateDocument(restored, repository) : restored;
     });
   }
 }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useDiagramStore } from '../state/diagram-store';
 import { diagramClient } from '../api/diagram-client';
-import type { DiagramSummary } from '../../../shared/src/index';
+import { getComponentScope, type DiagramSummary } from '../../../shared/src/index';
 import { defaultDiagramListSort, deriveDiagramGroups, deriveDiagramLibraryDisplay, type DiagramListSort, type DiagramListSortDirection, type DiagramListSortField } from '../state/diagram-list';
 import './saved-diagram-list.css';
 
@@ -40,12 +40,17 @@ export function SavedDiagramList({ onSelect, onDelete, onCreate }: SavedDiagramL
     ? sort.direction === 'ascending' ? 'oldest first' : 'newest first'
     : sort.direction === 'ascending' ? 'A to Z' : 'Z to A';
 
-  const scopeLabel = (document: DiagramSummary) => document.kind === 'container' ? `${document.name}, Container diagram, owner ${document.scope?.softwareSystemName ?? 'unavailable'}, parent ${document.scope?.parentDiagramName ?? 'unavailable'}; parent ${document.scope?.parentDiagramId ?? 'unavailable'}; owner ${document.scope?.softwareSystemId ?? 'unavailable'}` : document.name;
+  const scopeLabel = (document: DiagramSummary) => {
+    const scope = getComponentScope(document);
+    if (scope) return `${document.name}, Component diagram, owner ${scope.containerName}, parent Container ${scope.parentDiagramName}, Software System ${scope.softwareSystemName}; parent ${scope.parentDiagramId}; owner ${scope.containerId}`;
+    return document.kind === 'container' ? `${document.name}, Container diagram, owner ${document.scope?.softwareSystemName ?? 'unavailable'}, parent ${document.scope?.parentDiagramName ?? 'unavailable'}; parent ${document.scope?.parentDiagramId ?? 'unavailable'}; owner ${document.scope?.softwareSystemId ?? 'unavailable'}` : document.name;
+  };
   const renderRow = (document: DiagramSummary) => {
     const lastSaved = formatLastSaved(document.updatedAt), created = formatCreatedDate(document.createdAt);
     return <li className={`saved-diagram-row${currentDocument?.id === document.id ? ' is-current' : ''}`} key={document.id}>
       <button className="saved-diagram-button" data-diagram-id={document.id} type="button" onClick={() => onSelect(document.id)} aria-current={currentDocument?.id === document.id ? 'true' : undefined} aria-label={`${scopeLabel(document)}, last saved ${lastSaved}; created ${created}; diagram ${document.id}`}>
         <strong>{document.name}</strong>
+        {getComponentScope(document) && <span className="saved-diagram-scope">Component diagram · {getComponentScope(document)!.containerName}<br />Parent Container: {getComponentScope(document)!.parentDiagramName}<br />Software System: {getComponentScope(document)!.softwareSystemName}</span>}
         {document.kind === 'container' && <span className="saved-diagram-scope">Container diagram · {document.scope?.softwareSystemName}<br />Parent: {document.scope?.parentDiagramName}</span>}
         {currentDocument?.id === document.id && <small className="saved-diagram-current">Current diagram</small>}
         <span>Created {created} - Last saved {lastSaved}</span><i aria-hidden="true">&gt;</i>
@@ -85,9 +90,12 @@ export function SavedDiagramList({ onSelect, onDelete, onCreate }: SavedDiagramL
       {!list.rangeError && <p className="saved-diagrams-feedback" id="saved-diagrams-filter-status" role="status" aria-live="polite">{hasFilters ? `${list.items.length} of ${documents.length} diagrams match the filters.` : `${documents.length} saved diagrams.`}</p>}
       {list.rangeError ? null : list.items.length === 0 ? <div className="saved-diagrams-empty saved-diagrams-no-match"><p>No diagrams match these filters.</p><button className="secondary-action" type="button" onClick={clearFilters}>Clear filters</button></div> : <ul className="saved-diagrams-list">{list.groups.map(group => <li className="saved-diagram-group" data-parent-diagram-id={group.parentId} key={group.parentId}>
         {group.parentMatches && group.parent ? <ul className="saved-diagram-parent-row">{renderRow(group.parent)}</ul> : <div className="saved-diagram-parent-context"><h3>{group.parentName}</h3><p>{group.parent ? 'Parent context' : 'Parent unavailable. Refresh the library to check availability.'}</p><small>Parent: {group.parentId}</small>{!group.parent && <button type="button" className="text-action" onClick={() => void refresh()}>Refresh library</button>}</div>}
-        {group.children.length > 0 && <ul className="saved-diagram-children" aria-label={`Container diagrams under ${group.parentName}, parent ${group.parentId}`}>{group.children.map(renderRow)}</ul>}
+        {group.branches.length > 0 && <ul className="saved-diagram-children" aria-label={`Container diagrams under ${group.parentName}, parent ${group.parentId}`}>{group.branches.map(branch => <li key={branch.parentId} data-container-diagram-id={branch.parentId}>
+          {branch.parentMatches && branch.parent ? <ul className="saved-diagram-container-row">{renderRow(branch.parent)}</ul> : <div className="saved-diagram-parent-context"><h4>{branch.parentName}</h4><p>{branch.parent ? 'Parent Container context' : 'Parent Container unavailable. Refresh the library to check availability.'}</p><small>Parent: {branch.parentId}</small></div>}
+          {branch.children.length > 0 && <ul className="saved-diagram-children saved-diagram-components" aria-label={`Component diagrams under ${branch.parentName}, parent ${branch.parentId}`}>{branch.children.map(renderRow)}</ul>}
+        </li>)}</ul>}
       </li>)}</ul>}
     </>}
-    <footer className="saved-diagrams-recovery"><button className="text-action" type="button" onClick={() => { setRecoveryOpen(value => !value); if (!recoveryOpen) void diagramClient.listTrash().then(setTrash).catch(error => setRecoveryMessage(error instanceof Error ? error.message : 'Could not load trash.')); }} aria-expanded={recoveryOpen}> {recoveryOpen ? 'Hide recovery' : 'Open recovery'} </button>{recoveryOpen && <div className="saved-diagrams-trash" aria-label="Recoverable diagrams">{recoveryMessage && <p className="saved-diagrams-feedback saved-diagrams-error" role="alert">{recoveryMessage}</p>}{trash.length === 0 && !recoveryMessage && <p className="saved-diagrams-feedback">No diagrams in trash.</p>}{trash.map(item => <div className="saved-diagram-trash-row" data-diagram-id={item.id} key={item.id}><span><strong>{item.name}</strong><small>{item.kind === 'container' ? `Container diagram · ${item.scope?.softwareSystemName}; parent ${item.scope?.parentDiagramName}; ${item.id}` : 'General diagram'} · Created {formatCreatedDate(item.createdAt)}</small></span><button className="text-action" type="button" onClick={() => window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind: 'restore', id: item.id } }))}>Restore</button></div>)}</div>}</footer>
+    <footer className="saved-diagrams-recovery"><button className="text-action" type="button" onClick={() => { setRecoveryOpen(value => !value); if (!recoveryOpen) void diagramClient.listTrash().then(setTrash).catch(error => setRecoveryMessage(error instanceof Error ? error.message : 'Could not load trash.')); }} aria-expanded={recoveryOpen}> {recoveryOpen ? 'Hide recovery' : 'Open recovery'} </button>{recoveryOpen && <div className="saved-diagrams-trash" aria-label="Recoverable diagrams">{recoveryMessage && <p className="saved-diagrams-feedback saved-diagrams-error" role="alert">{recoveryMessage}</p>}{trash.length === 0 && !recoveryMessage && <p className="saved-diagrams-feedback">No diagrams in trash.</p>}{trash.map(item => <div className="saved-diagram-trash-row" data-diagram-id={item.id} key={item.id}><span><strong>{item.name}</strong><small>{item.kind === 'component' ? scopeLabel(item) : item.kind === 'container' ? `Container diagram · ${item.scope?.softwareSystemName}; parent ${item.scope?.parentDiagramName}; ${item.id}` : 'General diagram'} · Created {formatCreatedDate(item.createdAt)}</small></span><button className="text-action" type="button" onClick={() => window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind: 'restore', id: item.id } }))}>Restore</button></div>)}</div>}</footer>
   </section>;
 }

@@ -1,21 +1,34 @@
-import { getDiagramName, type DiagramDocument, type DiagramSummary } from '../../../shared/src/index';
+import { getDiagramName, getComponentScope, getContainerScope, type DiagramDocument, type DiagramSummary } from '../../../shared/src/index';
 
 /** Reconcile only children owned by UUIDs in this parent; never change local timestamps. */
 export function reconcileParentDiagramSummaries(diagrams: readonly DiagramSummary[], parent: DiagramDocument): DiagramSummary[] {
-  if (parent.kind === 'container') return [...diagrams];
-  const owners = new Map(parent.components.filter(c => c.type === 'software-system' && (c.role ?? 'element') === 'element').map(c => [c.id, c]));
+  if (parent.kind === 'component') return [...diagrams];
+  const owners = new Map(parent.components.map(c => [c.id, c]));
   return diagrams.map(diagram => {
-    if (diagram.kind !== 'container' || diagram.scope?.parentDiagramId !== parent.id) return diagram;
-    const owner = owners.get(diagram.scope.softwareSystemId);
-    if (!owner) return diagram;
-    return { ...diagram, name: owner.name, scope: { ...diagram.scope, parentDiagramName: parent.name, softwareSystemName: owner.name, softwareSystemDescription: owner.description } };
+    const componentScope = getComponentScope(diagram);
+    if (componentScope && parent.kind === 'container' && componentScope.parentDiagramId === parent.id) {
+      const owner = owners.get(componentScope.containerId);
+      if (owner?.role !== 'container' || owner.type !== 'container' || !owner.containerType || !owner.technology) return diagram;
+      return { ...diagram, name: owner.name, scope: { ...componentScope, parentDiagramName: getDiagramName(parent), softwareSystemName: parent.scope!.softwareSystemName, containerName: owner.name, containerDescription: owner.description, containerTechnology: owner.technology, containerType: owner.containerType } };
+    }
+    const scope = getContainerScope(diagram);
+    if (scope && scope.parentDiagramId === parent.id && parent.kind !== 'container') {
+      const owner = owners.get(scope.softwareSystemId);
+      if (owner?.type !== 'software-system' || (owner.role ?? 'element') !== 'element') return diagram;
+      return { ...diagram, name: owner.name, scope: { ...scope, parentDiagramName: parent.name, softwareSystemName: owner.name, softwareSystemDescription: owner.description } };
+    }
+    if (componentScope && componentScope.systemContextDiagramId === parent.id && parent.kind !== 'container') {
+      const owner = owners.get(componentScope.softwareSystemId);
+      if (owner?.type === 'software-system' && (owner.role ?? 'element') === 'element') return { ...diagram, scope: { ...componentScope, softwareSystemName: owner.name, parentDiagramName: owner.name } };
+    }
+    return diagram;
   });
 }
 
 /** Draft names are a view over saved data, so undo/discard and failed saves remain accurate. */
 export function deriveDiagramLibraryDisplay(diagrams: readonly DiagramSummary[], draft: DiagramDocument | null): DiagramSummary[] {
   const resolved = diagrams.map(diagram => ({ ...diagram, name: getDiagramName(diagram) }));
-  return draft && draft.kind !== 'container' ? reconcileParentDiagramSummaries(resolved, draft) : resolved;
+  return draft ? reconcileParentDiagramSummaries(resolved, draft) : resolved;
 }
 
 export type DiagramListSortField = 'name' | 'createdAt';
@@ -105,26 +118,50 @@ export interface DiagramLibraryGroup {
   parent: DiagramSummary | null;
   parentMatches: boolean;
   children: DiagramSummary[];
+  branches: DiagramLibraryBranch[];
+}
+
+export interface DiagramLibraryBranch {
+  parentId: string;
+  parentName: string;
+  parent: DiagramSummary | null;
+  parentMatches: boolean;
+  children: DiagramSummary[];
 }
 
 /** Filtering applies to each own artifact; parent headings provide context only. */
 export function deriveDiagramGroups(diagrams: readonly DiagramSummary[], filters: DiagramListFilters = {}, sort: DiagramListSort = defaultDiagramListSort): DiagramListView & { groups: DiagramLibraryGroup[] } {
   const view = deriveDiagramList(diagrams, filters, sort);
   if (view.rangeError) return { ...view, groups: [] };
-  const parents = new Map(diagrams.filter(d => d.kind !== 'container').map(d => [d.id, d]));
+  const byId = new Map(diagrams.map(d => [d.id, d]));
   const matches = new Set(view.items.map(d => d.id));
   const groups = new Map<string, DiagramLibraryGroup>();
-  // Pick scope fallback from the full set, independent of filtering/input order.
-  for (const child of diagrams.filter(d => d.kind === 'container').slice().sort((a, b) => compareText(a.id, b.id))) {
-    const parentId = child.scope?.parentDiagramId ?? child.id;
-    if (groups.has(parentId)) continue;
-    const parent = parents.get(parentId) ?? null;
-    groups.set(parentId, { parentId, parentName: parent?.name ?? child.scope?.parentDiagramName ?? 'Unknown parent', parent, parentMatches: Boolean(parent && matches.has(parent.id)), children: [] });
+  const rootGroup = (id: string, fallback: string) => {
+    if (!groups.has(id)) { const parent = byId.get(id); const context = parent && parent.kind !== 'container' && parent.kind !== 'component' ? parent : null;
+      groups.set(id, { parentId: id, parentName: context?.name ?? fallback, parent: context, parentMatches: Boolean(context && matches.has(id)), children: [], branches: [] }); }
+    return groups.get(id)!;
+  };
+  for (const diagram of diagrams.slice().sort((a, b) => compareText(a.id, b.id))) {
+    const scope = getComponentScope(diagram);
+    if (scope) {
+      const parentScope = getContainerScope(byId.get(scope.parentDiagramId) ?? { kind: 'general', scope: null });
+      const group = rootGroup(scope.systemContextDiagramId, parentScope?.parentDiagramName ?? 'System Context unavailable');
+      let branch = group.branches.find(b => b.parentId === scope.parentDiagramId);
+      if (!branch) { const parent = byId.get(scope.parentDiagramId) ?? null; branch = { parentId: scope.parentDiagramId, parentName: parent?.name ?? scope.parentDiagramName, parent, parentMatches: Boolean(parent && matches.has(parent.id)), children: [] }; group.branches.push(branch); }
+      if (matches.has(diagram.id)) branch.children.push(diagram);
+    } else if (diagram.kind === 'container') {
+      const group = rootGroup(diagram.scope?.parentDiagramId ?? diagram.id, diagram.scope?.parentDiagramName ?? 'Unknown parent');
+      const existing = group.branches.find(b => b.parentId === diagram.id);
+      if (existing) Object.assign(existing, { parent: diagram, parentName: diagram.name, parentMatches: matches.has(diagram.id) });
+      else group.branches.push({ parentId: diagram.id, parentName: diagram.name, parent: diagram, parentMatches: matches.has(diagram.id), children: [] });
+      if (matches.has(diagram.id)) group.children.push(diagram);
+    } else rootGroup(diagram.id, diagram.name);
   }
-  for (const diagram of view.items) {
-    if (diagram.kind === 'container') groups.get(diagram.scope?.parentDiagramId ?? diagram.id)!.children.push(diagram);
-    else if (!groups.has(diagram.id)) groups.set(diagram.id, { parentId: diagram.id, parentName: diagram.name, parent: diagram, parentMatches: true, children: [] });
+  for (const group of groups.values()) {
+    group.children.sort((a, b) => compareSummaries(a, b, sort));
+    group.branches = group.branches.filter(b => b.parentMatches || b.children.length).sort((a, b) => compareSummaries(a.parent ?? { id: a.parentId, name: a.parentName, status: 'active', createdAt: '', updatedAt: '' }, b.parent ?? { id: b.parentId, name: b.parentName, status: 'active', createdAt: '', updatedAt: '' }, sort));
+    for (const branch of group.branches) branch.children.sort((a, b) => compareSummaries(a, b, sort));
   }
   const fallbackSummary = (group: DiagramLibraryGroup): DiagramSummary => group.parent ?? { id: group.parentId, name: group.parentName, status: 'active', createdAt: '', updatedAt: '' };
-  return { ...view, groups: [...groups.values()].filter(g => g.parentMatches || g.children.length > 0).sort((a, b) => compareSummaries(fallbackSummary(a), fallbackSummary(b), sort)) };
+  return { ...view, groups: [...groups.values()].filter(g => g.parentMatches || g.branches.length > 0).sort((a, b) => compareSummaries(fallbackSummary(a), fallbackSummary(b), sort)) };
 }

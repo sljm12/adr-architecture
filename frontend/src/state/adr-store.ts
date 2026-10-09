@@ -39,6 +39,8 @@ type State = {
   load: (diagramId: string) => Promise<void>;
   select: (id: string) => Promise<void>;
   startNew: (diagramId?: string) => void;
+  switchDiagram: (diagramId: string) => void;
+  retainCurrent: () => void;
   clear: () => void;
   open: (record: ArchitectureDecisionRecord) => void;
   update: (fn: (draft: AdrDraft) => AdrDraft) => void;
@@ -60,6 +62,7 @@ type State = {
 };
 
 const history = new BoundedHistory<AdrDraft>();
+const retainedAdrs = new Map<string, { draft: AdrDraft; records: AdrSummary[]; history: ReturnType<typeof history.snapshot> }>();
 let listRequest = 0;
 let pendingSaves = 0;
 const copy = (draft: AdrDraft) => structuredClone(draft);
@@ -88,7 +91,18 @@ export const useAdrStore = create<State>((set, get) => ({
   },
   select: async id => { set({ status: 'loading', error: null, deleteStatus: 'idle', deleteError: null, deleteBlockers: [], deleteMessage: null }); try { const record = normalizeRecord(await adrClient.get(id)); const draft = history.reset({ ...record }); set({ draft, diagramId: record.diagramId, status: 'saved', error: null, fieldErrors: {}, ...historyState() }); } catch (error) { set({ status: 'failed', error: error instanceof Error ? error.message : 'Could not load ADR.' }); } },
   startNew: diagramId => { const id = diagramId ?? get().diagramId; if (!id) return; listRequest++; const switching = get().diagramId !== id; const draft = history.reset(emptyDraft(id)); get().invalidateComponentAdrCounts(id); set({ ...(switching ? { records: [], componentSummaries: [], componentSummaryComponentId: null, componentSummaryStatus: 'idle' as const, relationshipSummaries: [], relationshipSummaryRelationshipId: null, relationshipSummaryStatus: 'idle' as const } : {}), diagramId: id, draft, status: 'idle', error: null, fieldErrors: {}, deleteStatus: 'idle', deleteError: null, deleteBlockers: [], deleteMessage: null, ...historyState() }); },
-  clear: () => { listRequest++; set({ diagramId: null, draft: null, records: [], status: 'idle', error: null, fieldErrors: {}, canUndo: false, canRedo: false, componentSummaries: [], componentSummaryComponentId: null, componentSummaryStatus: 'idle', relationshipSummaries: [], relationshipSummaryRelationshipId: null, relationshipSummaryStatus: 'idle', componentAdrCounts: {}, componentAdrCountsDiagramId: null, componentAdrCountsStatus: 'idle', componentAdrCountsRequest: get().componentAdrCountsRequest + 1 }); },
+  retainCurrent: () => { const current = get(); if (current.diagramId && current.status === 'saved' && current.draft) retainedAdrs.set(current.diagramId, { draft: copy(current.draft), records: structuredClone(current.records), history: history.snapshot() }); },
+  switchDiagram: diagramId => {
+    const current = get();
+    if (current.diagramId && current.diagramId !== diagramId) {
+      if (current.status === 'saved' && current.draft) retainedAdrs.set(current.diagramId, { draft: copy(current.draft), records: structuredClone(current.records), history: history.snapshot() });
+      else retainedAdrs.delete(current.diagramId);
+    }
+    const retained = retainedAdrs.get(diagramId);
+    get().startNew(diagramId);
+    if (retained) { history.restore(retained.history); set({ draft: copy(retained.draft), records: structuredClone(retained.records), status: 'saved', ...historyState() }); }
+  },
+  clear: () => { retainedAdrs.clear(); listRequest++; set({ diagramId: null, draft: null, records: [], status: 'idle', error: null, fieldErrors: {}, canUndo: false, canRedo: false, componentSummaries: [], componentSummaryComponentId: null, componentSummaryStatus: 'idle', relationshipSummaries: [], relationshipSummaryRelationshipId: null, relationshipSummaryStatus: 'idle', componentAdrCounts: {}, componentAdrCountsDiagramId: null, componentAdrCountsStatus: 'idle', componentAdrCountsRequest: get().componentAdrCountsRequest + 1 }); },
   open: record => { const normalized = normalizeRecord(record); const draft = history.reset({ ...normalized }); set({ diagramId: normalized.diagramId, draft, status: 'saved', error: null, fieldErrors: {}, deleteStatus: 'idle', deleteError: null, deleteBlockers: [], deleteMessage: null, ...historyState() }); },
   update: fn => { const current = get().draft; if (!current) return; const draft = history.push(copy(fn(copy(current)))); set({ draft, status: 'unsaved', error: null, fieldErrors: {}, ...historyState() }); },
   setComponentIds: componentIds => { const unique = [...new Set(componentIds)]; get().update(current => ({ ...current, componentIds: unique })); },

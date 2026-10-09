@@ -49,7 +49,7 @@ type State = {
   componentAvailability: ComponentAvailability | null;
   canUndo: boolean;
   canRedo: boolean;
-  open: (document: DiagramDocument) => void;
+  open: (document: DiagramDocument, retainHistory?: boolean) => void;
   startNew: () => void;
   create: (name: string) => Promise<void>;
   update: (fn: (document: DiagramDocument) => DiagramDocument) => void;
@@ -92,6 +92,13 @@ type State = {
 };
 
 const history = new BoundedHistory<DiagramDocument>();
+let savedMetadata: DiagramDocument | null = null;
+const retained = new Map<string, { document: DiagramDocument; history: ReturnType<typeof history.snapshot>; context: SourceContext | null }>();
+const authoredContent = (document: DiagramDocument) => JSON.stringify({
+  name: isScoped(document) ? undefined : document.name, boundary: document.boundary, groups: document.groups,
+  components: document.components.map(({ createdAt, updatedAt, ...component }) => component.role === 'external' ? { ...component, name: undefined, description: undefined, type: undefined, technology: undefined, containerType: undefined } : component),
+  relationships: document.relationships.map(({ createdAt, updatedAt, ...relationship }) => relationship),
+});
 let loadRequest = 0;
 let savedListRequest = 0;
 let recoveryRefreshes = 0;
@@ -99,7 +106,7 @@ let session = 0;
 const copy = (document: DiagramDocument): DiagramDocument => ({ ...structuredClone(document), name: getDiagramName(document), groups: document.groups ?? [] });
 const historyState = () => ({ canUndo: history.canUndo, canRedo: history.canRedo });
 const now = () => new Date().toISOString();
-const contextFromDocument = (document: DiagramDocument): ContainerContext | null => isContainerDocument(document) ? {
+const contextFromDocument = (document: DiagramDocument): SourceContext | null => isContainerDocument(document) ? {
   scope: document.scope,
   sources: document.components.filter(c => c.role === 'external').map(c => ({ id: c.sourceComponentId!, name: c.name, description: c.description, type: c.type as C4ArtifactType })),
   capturedAt: now(),
@@ -122,7 +129,17 @@ const assertSaveIdentity = (request: DiagramDocument, response: DiagramDocument)
   if (response.id !== request.id || response.name?.trim() !== expectedName || (response.kind ?? 'general') !== (request.kind ?? 'general') || response.scope?.parentDiagramId !== request.scope?.parentDiagramId || getDiagramOwnerId(response) !== getDiagramOwnerId(request)) throw new Error('The save response did not match the diagram identity, name or parent/owner association. Your draft was kept. Retry saving this diagram.');
 };
 const overlayContext = (document: DiagramDocument, context: SourceContext | null): DiagramDocument => {
-  if (!context || !isScoped(document)) return copy(document);
+  if (!isScoped(document)) return copy(document);
+  if (!context) {
+    if (!savedMetadata || savedMetadata.id !== document.id) return copy(document);
+    // A loaded document supplies display metadata, but cannot identify canonical source hops.
+    // Keep those identities absent until the actual source-context response arrives.
+    const sources = new Map(savedMetadata.components.filter(c => c.role === 'external').map(c => [c.sourceComponentId, c]));
+    return { ...copy(document), name: getDiagramName(savedMetadata), scope: structuredClone(savedMetadata.scope), components: document.components.map(component => {
+      const source = component.role === 'external' ? sources.get(component.sourceComponentId) : undefined;
+      return source ? { ...structuredClone(component), name: source.name, description: source.description, type: source.type, containerType: source.containerType, technology: source.technology } : structuredClone(component);
+    }) };
+  }
   if (context.scope.parentDiagramId !== document.scope?.parentDiagramId || (document.kind === 'component' ? !isComponentSourceContext(context) || context.scope.containerId !== getComponentScope(document)?.containerId : isComponentSourceContext(context) || context.scope.softwareSystemId !== document.scope?.softwareSystemId)) throw new Error('Source context did not match this scoped diagram. Refresh its source details.');
   const sources = new Map(context.sources.map(source => [source.id, source]));
   const canonicalIds = new Set<string>();
@@ -209,13 +226,32 @@ export const useDiagramStore = create<State>((set, get) => ({
   componentOpenStatus: 'idle', componentOpenError: null, componentOpenComponentId: null, componentAvailability: null,
   canUndo: false,
   canRedo: false,
-  open: input => {
+  open: (input, retainHistory = false) => {
+    const current = get().document;
+    if (retainHistory && current && current.id !== input.id) {
+      if (get().status === 'saved') retained.set(current.id, { document: copy(current), history: history.snapshot(), context: get().sourceContext });
+      else retained.delete(current.id);
+    }
     session++; loadRequest++;
     set({ componentOpenStatus: 'idle', componentOpenError: null, componentOpenComponentId: null, componentAvailability: null });
-    const document = history.reset(copy(input));
-    set({ document, status: 'saved', revision: 0, navigationStatus: 'idle', sourceContext: contextFromDocument(document), sourceContextStatus: 'idle', sourceContextError: null, error: null, groupError: null, loadError: null, containerOpenStatus: 'idle', containerOpenError: null, containerOpenComponentId: null, ...historyState() });
+    const document = copy(input);
+    savedMetadata = copy(document);
+    let sourceContext = contextFromDocument(document);
+    const previous = retainHistory ? retained.get(input.id) : undefined;
+    if (previous && authoredContent(previous.document) === authoredContent(document)) {
+      if (sourceContext && previous.context) sourceContext = { ...sourceContext, sources: [...new Map([...previous.context.sources, ...sourceContext.sources].map(source => [source.id, source])).values()] } as SourceContext;
+      else if (document.kind === 'component' && previous.context && isComponentSourceContext(previous.context)) {
+        sourceContext = { ...previous.context, scope: getComponentScope(document)!, sources: previous.context.sources.map(source => {
+          const occurrence = document.components.find(c => c.role === 'external' && c.sourceComponentId === source.id);
+          return occurrence ? { ...source, name: occurrence.name, description: occurrence.description, type: occurrence.type as ComponentContext['sources'][number]['type'], technology: occurrence.technology ?? null, containerType: occurrence.containerType ?? null } : source;
+        }) };
+      }
+      history.restore(previous.history);
+      try { history.map(entry => overlayContext(entry, sourceContext)); } catch { history.reset(document); }
+    } else history.reset(document);
+    set({ document, status: 'saved', revision: 0, navigationStatus: 'idle', sourceContext, sourceContextStatus: 'idle', sourceContextError: null, error: null, groupError: null, loadError: null, containerOpenStatus: 'idle', containerOpenError: null, containerOpenComponentId: null, ...historyState() });
   },
-  startNew: () => { session++; loadRequest++; set({ document: null, status: 'idle', revision: 0, navigationStatus: 'idle', sourceContext: null, sourceContextStatus: 'idle', sourceContextError: null, error: null, groupError: null, containerOpenStatus: 'idle', containerOpenError: null, containerOpenComponentId: null, componentOpenStatus: 'idle', componentOpenError: null, componentOpenComponentId: null, componentAvailability: null, canUndo: false, canRedo: false }); },
+  startNew: () => { retained.clear(); session++; loadRequest++; set({ document: null, status: 'idle', revision: 0, navigationStatus: 'idle', sourceContext: null, sourceContextStatus: 'idle', sourceContextError: null, error: null, groupError: null, containerOpenStatus: 'idle', containerOpenError: null, containerOpenComponentId: null, componentOpenStatus: 'idle', componentOpenError: null, componentOpenComponentId: null, componentAvailability: null, canUndo: false, canRedo: false }); },
   create: async name => {
     const created = await diagramClient.create(name);
     get().open(created);
@@ -590,6 +626,7 @@ export const useDiagramStore = create<State>((set, get) => ({
       if (session === saveSession) {
         set(state => {
           let sourceContext: SourceContext | null = state.sourceContext;
+          savedMetadata = copy(saved);
           if (isContainerDocument(saved)) {
             const sources = new Map<string, ContainerContext['sources'][number]>(sourceContext && !isComponentSourceContext(sourceContext) ? sourceContext.sources.map(source => [source.id, source]) : []);
             for (const occurrence of saved.components.filter(c => c.role === 'external')) sources.set(occurrence.sourceComponentId!, { id: occurrence.sourceComponentId!, name: occurrence.name, description: occurrence.description, type: occurrence.type as C4ArtifactType });
@@ -600,6 +637,7 @@ export const useDiagramStore = create<State>((set, get) => ({
               return occurrence ? { ...source, name: occurrence.name, description: occurrence.description, type: occurrence.type as ComponentContext['sources'][number]['type'], containerType: occurrence.containerType ?? null, technology: occurrence.technology ?? null } : source;
             }) };
           }
+          history.map(entry => overlayContext(entry, sourceContext));
           return { sourceContext,
             savedDocuments: reconcileParentDiagramSummaries(replaceSummary(state.savedDocuments, summary(saved)), saved),
             trashedDocuments: reconcileParentDiagramSummaries(state.trashedDocuments, saved),
@@ -676,7 +714,9 @@ export const useDiagramStore = create<State>((set, get) => ({
       if (document.id !== id) throw new Error('The selected diagram identity did not match the requested diagram.');
       if (request !== loadRequest) return false;
       if (session !== loadSession || get().document?.id !== source?.id || get().revision !== revision || options.canCommit?.() === false) throw new Error('Your diagram or decision changed while loading. Your work was kept; review Save, Discard or Cancel before continuing.');
-      get().open(document);
+      const known = get().savedDocuments.find(item => item.id === id);
+      if (known && ((known.kind ?? 'general') !== (document.kind ?? 'general') || known.scope && (known.scope.parentDiagramId !== document.scope?.parentDiagramId || getDiagramOwnerId(known) !== getDiagramOwnerId(document)))) throw new Error('The loaded diagram did not match its saved level or original parent/owner association. Refresh the library and retry.');
+      get().open(document, true);
       set(state => ({ savedDocuments: replaceSummary(state.savedDocuments, summary(document)) }));
       return true;
     }
@@ -690,6 +730,8 @@ export const useDiagramStore = create<State>((set, get) => ({
       const context = document.kind === 'component' ? componentContextSchema.parse(input) : containerContextSchema.parse(input);
       const refreshed = overlayContext(document, context);
       assertDiagramInvariants(refreshed);
+      // Validate all retained snapshots before changing either history or current state.
+      history.map(entry => overlayContext(entry, context));
       set(state => ({ document: refreshed, sourceContext: context, sourceContextStatus: 'loaded', sourceContextError: null, savedDocuments: state.savedDocuments.map(item => item.id === document.id ? { ...item, name: getDiagramName(refreshed), scope: context.scope } : item) }));
       return true;
     } catch (error) { set({ sourceContextStatus: 'failed', sourceContextError: saveErrorMessage(error) }); return false; }
@@ -737,7 +779,7 @@ export const useDiagramStore = create<State>((set, get) => ({
         throw new Error('The loaded container diagram did not match the selected Software System. Try again.');
       }
       const opened = copy(loaded);
-      get().open(opened);
+      get().open(opened, true);
       set(state => ({ savedDocuments: replaceSummary(state.savedDocuments, summary(opened)) }));
       void get().refreshSavedDocuments();
       return true;
@@ -776,7 +818,7 @@ export const useDiagramStore = create<State>((set, get) => ({
       if (!unchanged()) throw new Error('Your diagram or decision changed while loading. Your work was kept; retry opening.');
       const scope = getComponentScope(loaded);
       if (!scope || loaded.id !== target.id || scope.parentDiagramId !== availability.parentDiagramId || scope.containerId !== availability.containerId) throw new Error('The loaded Component diagram did not match the selected container. Retry opening its canonical child.');
-      get().open(loaded);
+      get().open(loaded, true);
       set(state => ({ savedDocuments: replaceSummary(state.savedDocuments, summary(loaded)) }));
       void get().refreshSavedDocuments();
       return true;

@@ -60,12 +60,13 @@ export function DiagramWorkspace() {
     clearCanvasSelection(); setInteractionDraft(null); setClosedInspectorMode(null); setInspectorMode(null); setInspectorOpen(Boolean(highlightId));
     if (highlightId && useDiagramStore.getState().document?.components.some(component => component.id === highlightId)) setSelection({ kind: 'component', id: highlightId });
     const next = useDiagramStore.getState().document!;
-    useAdrStore.getState().startNew(next.id); void useAdrStore.getState().loadComponentAdrCounts(next.id);
+    useAdrStore.getState().switchDiagram(next.id); void useAdrStore.getState().loadComponentAdrCounts(next.id);
     setCanvasEpoch(value => value + 1);
     window.requestAnimationFrame(() => globalThis.document.getElementById(next.kind === 'component' ? 'component-diagram-heading' : next.kind === 'container' ? 'container-diagram-heading' : 'diagram-heading')?.focus());
   };
   const load = async (id: string, highlightId?: string) => {
     const adr = useAdrStore.getState(), draft = adr.draft, adrRevision = adr.status;
+    adr.retainCurrent();
     if (await loadSavedDocument(id, { canCommit: () => useAdrStore.getState().draft === draft && useAdrStore.getState().status === adrRevision })) {
       setPendingDiagramId(null); setPendingHighlightId(undefined); setFailedLoad(null); resetNavigationFocus(highlightId);
     } else {
@@ -80,6 +81,7 @@ export function DiagramWorkspace() {
   };
   const finishContainerOpen = async (componentId: string, kind: 'container' | 'component' = 'container') => {
     const adr = useAdrStore.getState(), draft = adr.draft, adrRevision = adr.status;
+    adr.retainCurrent();
     const options = { canCommit: () => useAdrStore.getState().draft === draft && useAdrStore.getState().status === adrRevision };
     const opened = await (kind === 'component' ? useDiagramStore.getState().createOrOpenComponentDiagram(componentId, options) : useDiagramStore.getState().createOrOpenContainerDiagram(componentId, options));
     if (!opened) return;

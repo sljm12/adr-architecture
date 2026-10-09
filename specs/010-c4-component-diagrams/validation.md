@@ -142,3 +142,49 @@ git diff --check
 - Setup ignore patterns were verified; packages remain private. Active feature remains Spec 010. Requirements checklist markers were not changed. `.specify/extensions.yml` is absent; pre/post hooks skipped according to the implementation skill.
 
 US2 is independently demonstrable: a populated Component child can be edited, saved and reopened without changing ancestor content or source identity. T040 onward, real-runtime modeling/recovery, offline export/browser/Safari acceptance, scale and observed usability gates remain pending for their later phases.
+
+## Phase 5 — US3 hierarchy navigation and naming (2026-10-10)
+
+T040–T051: PASS. Component children remain beneath their original Container and System Context UUIDs across owner entry, library entry, repeated saves, refresh and immediate-parent return. The saved library renders all three levels, previews Container owner drafts before filtering/sorting, retains nonmatching ancestors as context, and counts only matching artifacts. Same-name owners remain separate. Scope labels identify Component level, container, parent Container and Software System; Component titles remain read-only.
+
+Successful navigation retains saved per-diagram documents/history and the selected saved ADR session. Save/Discard/Cancel protects authored diagram and ADR work at each level; cancellation, failed saves and failed/stale loads preserve the current work. Explicit successful Discard ends the departed unsaved session. Saved ADR capture occurs before the destination renders so its list effects cannot erase the departing decision. New-session actions clear retained sessions. Loaded authoritative content takes precedence over cached history when content has changed.
+
+Owner/source metadata reconciles through current documents and bounded history without adding a user edit, changing local positions/sizes/endpoints or replacing newer authored changes. Save responses require the captured UUID/kind/parent/owner and an internally consistent owner-derived name; mismatches retain the draft for retry. Delayed list responses preserve summaries changed by a newer save. Canonical source identities come from actual source-context responses; ordinary loaded documents provide display metadata without inventing source hops.
+
+Existing shared Component title helpers, typed serializers, load/save hydration, parent-return controls, focus transfer and guarded dialogs were already in place. This phase reuses them and adds Component list ancestor validation, complete local restore hydration, owner-draft summary reconciliation, three-level library rendering, retained navigation sessions and inspector scope context. Child names supplied independently are normalized to the authoritative owner name, preserving the existing Container save semantics. UUID reassignment is rejected. No dependency versions, migrations or artifact schemas changed.
+
+### Requirement evidence
+
+| Requirements | Evidence | Result |
+| --- | --- | --- |
+| FR-011–015; SC-004 | `backend/tests/contract/component-navigation.test.ts`: 2 cases verify exact load/list/availability/open/save/trash/restore scope, duplicate owner isolation, subtype switches, read-time timestamps, repeated saves and unchanged ancestor/local content | PASS |
+| FR-013–015; SC-004 | `backend/tests/persistence/component-editing.test.ts`: real PostgreSQL fixture verifies raw stored name/timestamps are unchanged by reads, owner rename/movement/resize/subtype switch, repeated child saves, stable component/relationship IDs, local geometry and exact linked ADR content | PASS, no skips |
+| FR-012–016; SC-004 | `frontend/tests/component-name-sync.test.ts`: 8 cases cover UUID-based owner previews, undo/redo/discard, delayed save/list responses, five invalid save-identity variants with retry, authoritative metadata and preservation of newer edits/history | PASS |
+| FR-012/014 | `frontend/tests/component-diagram-list.test.ts`: 3 cases verify two contextual ancestors, own-name match counts, owner/ancestor draft previews, duplicate owner IDs and unavailable ancestors without child promotion | PASS |
+| FR-011/013/016/025 | `frontend/tests/component-diagram-navigation.test.tsx`: 4 cases verify read-only scope/return controls, failed/stale load preservation, saved history round trips, saved ADR retention/discard and rejection of changed library ownership | PASS |
+| FR-011–015/025; SC-004 | `e2e/tests/component-diagram-navigation.spec.ts`: 4 Chrome journeys verify repeated saves, nested filtered placement, immediate-owner selection, heading focus, refresh/list entry, diagram Cancel/failed Save/Discard, and ADR Cancel/failed Save/Save/Discard at all three levels | PASS |
+| FR-008–011/024/025 | Existing 6 Component entry and 3 modeling journeys retain canonical source navigation, dirty-work guards, focus, keyboard entry and source refresh | PASS |
+| FR-012–016/024 | Existing 6 Container browser journeys verify owner preview/undo/redo/discard, repeated save/refresh/retry, duplicate-parent grouping/filter counts, source refresh/ADR guard, save-both/discard-both and delayed-load re-guarding | PASS |
+
+### Commands and final results
+
+```powershell
+$env:RUN_POSTGRES_TESTS = '1'
+npm.cmd test -- --maxWorkers=2
+npm.cmd run build
+npx.cmd tsc -b frontend
+npx.cmd playwright test component-diagram-navigation.spec.ts component-diagram-entry.spec.ts component-diagram-editing.spec.ts container-diagrams.spec.ts --config playwright.phase5.config.ts --grep "guards Component ADR|guards Container ADR|guards Context ADR|saves twice|selects, enters, returns|retains parent drafts|offers named recovery|opens a supporting container canonical|suppresses modified|guards and preserves an unsaved ADR|models three Components|retains invalid fields|retains invalid interactions|synchronizes the sidebar|keeps a child under its parent|groups identically|refreshes source names independently|saves both child and decision|re-guards a decision"
+npm.cmd test -- backend/tests/contract/component-navigation.test.ts --maxWorkers=2
+git diff --check
+```
+
+- Full Vitest: **114 files, 631 tests passed, zero failures/skips** (53.54 s). All final production changes are covered by this run. The subsequent focused REST run passed **2/2** after adding explicit trash/restore response assertions to the existing cases.
+- Browser: **19/19 passed** (1.3 min): 4 new navigation, 6 entry, 3 modeling and 6 existing Container regressions. Browser journeys route requests into the actual Fastify app with memory repositories; PostgreSQL persistence evidence is separate. T068 remains the real HTTP/PostgreSQL browser gate.
+- Runtime: Google Chrome **154.0.8037.99**, headless at `C:/Program Files/Google/Chrome/Application/chrome.exe`; Node.js **v22.17.1**, Playwright **1.62.1**, Windows 11. Existing lockfile retained. Temporary `playwright.phase5.config.ts` inherited the normal config and only set one worker/headless mode; removed after validation.
+- All-package build, explicit frontend TypeScript and whitespace checks: PASS. Existing Vite chunk-size and pg transaction-query diagnostics remain non-failing.
+- Test-first evidence: the initial batch failed for missing Component owner previews, ancestor propagation, nested placement and authoritative save metadata. The navigation test then demonstrated history loss across a round trip. Tests were corrected to distinguish read-time projections from raw persisted metadata and permit normal save timestamp updates. Browser checks exposed the saved-ADR capture timing issue; final journeys verify the correction. The old broad entry-action selector was narrowed because Component library buttons now carry correct scope labels.
+- Visual QA: inspected `test-results/component-navigation.png` at 1280×720; nested library rows, scope labels, read-only title, parent return, current-row emphasis and canvas are readable using the existing workspace design. The screenshot is an ignored test artifact.
+- PostgreSQL work used UUID-named isolated test schemas and cleaned them up. No deployment migration was applied. Ignore patterns/private-package setup remain valid; requirements checklist markers are unchanged and `.specify/feature.json` still points to Spec 010.
+- Post-implementation hooks: `.specify/extensions.yml` is absent; pre/post hooks skipped under the implementation skill.
+
+US3 is independently demonstrable. Phase 6/7 work, the real-runtime recovery journey, export/browser/Safari acceptance, scale observations and first-time-author usability gates remain pending for their assigned phases.

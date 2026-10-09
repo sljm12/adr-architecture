@@ -69,7 +69,7 @@ test('opens a supporting container canonical child and gives internal Components
   try {
     repository.create(populatedComponentFixture() as DiagramDocument);
     await node(page, ids.application).dblclick(); await expect(page.locator('#component-diagram-heading')).toBeVisible();
-    await node(page, ids.internal).click(); await expect(page.getByRole('button', { name: /component diagram/i })).toHaveCount(0);
+    await node(page, ids.internal).click(); await expect(page.getByRole('button', { name: /^(Create|Open|Restore) component diagram$/i })).toHaveCount(0);
     await node(page, ids.internal).dblclick(); expect(repository.findChildren(ids.parent)).toHaveLength(1);
     await node(page, ids.siblingOccurrence).dblclick();
     await expect.poll(() => repository.findContainerForOwner(ids.datastore)?.id).toBeTruthy();

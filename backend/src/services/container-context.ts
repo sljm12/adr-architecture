@@ -30,6 +30,17 @@ export class ContainerContextService {
     const documents = await this.repository.listAll();
     const byId = new Map(documents.map(document => [document.id, document]));
     return documents.filter(document => document.status === status).map(document => {
+      const componentScope = getComponentScope(document);
+      if (document.kind === 'component') {
+        const parent = componentScope && byId.get(componentScope.parentDiagramId);
+        const parentScope = parent && getContainerScope(parent);
+        const context = parentScope && byId.get(parentScope.parentDiagramId);
+        const owner = parent?.components.find(c => c.id === componentScope?.containerId);
+        const system = context?.components.find(c => c.id === parentScope?.softwareSystemId);
+        if (!componentScope || !parentScope || !parent || !context || (context.kind ?? 'general') !== 'general' || !owner || owner.role !== 'container' || owner.type !== 'container' || !owner.containerType || !owner.technology || !system || system.type !== 'software-system' || (system.role ?? 'element') !== 'element' || componentScope.systemContextDiagramId !== context.id || componentScope.softwareSystemId !== system.id) throw new ApiConflictError(`Component diagram ${document.id} has a broken parent, owner or ancestor reference. Repair its original hierarchy.`, 'DIAGRAM_REFERENCE_BROKEN');
+        if (status === 'active' && (parent.status !== 'active' || context.status !== 'active')) throw new ApiConflictError('Restore the ancestors before opening their Component diagrams.', 'PARENT_INACTIVE');
+        return this.summary({ ...document, name: owner.name, scope: { ...componentScope, parentDiagramName: system.name, softwareSystemName: system.name, containerName: owner.name, containerDescription: owner.description, containerTechnology: owner.technology, containerType: owner.containerType } });
+      }
       if (document.kind !== 'container') return this.summary(document);
       const parent = document.scope ? byId.get(document.scope.parentDiagramId) : undefined;
       const owner = parent?.components.find(component => component.id === document.scope?.softwareSystemId);
