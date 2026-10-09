@@ -139,10 +139,16 @@ html,body,#root{overflow:hidden}
 .container-entry-panel .primary-pill{justify-self:start}
 .command-bar .container-navigation-feedback{flex:1 0 100%;margin:0;padding:7px 12px;border:1px solid #d9a5a5;border-radius:8px;background:#fff1f1;color:#7d1c1c;font-size:13px;line-height:1.35}
 /* Complete container metadata uses domain dimensions and wraps without truncation. */
-.component-node-container { justify-content: flex-start; gap: 6px; }
+.component-node-container, .component-node-component { justify-content: flex-start; gap: 6px; }
 .component-node-container .component-label,
 .component-responsibility, .component-technology { white-space: pre-wrap; overflow-wrap: anywhere; text-overflow: clip; overflow: visible; line-height: 1.47; }
 .component-responsibility, .component-technology { font-size: 17px; font-weight: 400; }
+.component-detail-field { display: grid; gap: 9px; }
+.component-detail-field textarea { width: 100%; min-height: 88px; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 11px; background: #fff; color: #1d1d1f; font: inherit; resize: vertical; }
+.component-detail-field [aria-invalid="true"] { border-color: #1d1d1f; }
+.component-geometry-form { margin: 20px 0; padding-top: 12px; border-top: 1px solid #e0e0e0; }
+.component-node-component .component-label { white-space: pre-wrap; overflow-wrap: anywhere; }
+.command-bar-actions { flex-wrap: wrap; max-width: 100%; min-width: 0; }
 .canvas-edit-feedback { position: absolute; bottom: 16px; left: 64px; right: 16px; background: var(--canvas, #fff); padding: 12px 20px; border: 1px solid var(--hairline, rgba(0,0,0,.08)); border-radius: 8px; z-index: 10; }
 .diagram-context-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; width: 100%; }
 .diagram-context-controls label { font-size: 14px; font-weight: 600; }

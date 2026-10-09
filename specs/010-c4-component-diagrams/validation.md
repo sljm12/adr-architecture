@@ -1,6 +1,6 @@
 # Implementation validation: C4 Component diagrams
 
-Scope: phases 1–3 (T001–T024). Component entry MVP is implemented; modeling, full hierarchy/list behavior, recovery and exports remain later-phase work.
+Scope: phases 1–4 (T001–T039). Component entry and modeling are implemented; full hierarchy/list behavior, recovery and exports remain later-phase work.
 
 ## Environment and baseline (2026-10-09)
 
@@ -98,3 +98,47 @@ git diff --check
 - Post-implementation hooks: `.specify/extensions.yml` is absent; hooks skipped under the implementation skill. Requirements checklist is unchanged; active feature still points to Spec 010.
 
 US1 is independently demonstrable. Full three-level confirmed recovery (US4), Component authoring (US2), list/name synchronization (US3), exports (US5), actual Safari and observed usability acceptance remain pending and are not claimed by this milestone.
+
+## Phase 4 — US2 Component modeling (2026-10-09)
+
+T025–T039: PASS. Authors can create and edit Component-only internals with required name, responsibilities and technology, include sibling Application/Datastore and immediate Container Person/System sources, and author directed local interactions with a required description and optional protocol. Invalid fields retain input and expose accessible corrective feedback. Container forms keep their Application/Datastore policy after level changes; existing workspace navigation already resets keyed forms and interaction drafts.
+
+The shared scoped-layout helper fits either child level with 24-unit side/bottom padding, a 68-unit top inset and 24-unit supporting clearance. Internal movement, resizing and metadata-driven expansion fit the boundary and deterministically displace overlapping supporting occurrences as one bounded history edit. Geometry overflow, invalid direct supporting placement and unsupported/missing/self/boundary/supporting-only endpoints fail before recording an edit. IDs, immediate source references and local endpoints remain stable. New Components have room between their initial positions for interaction labels.
+
+Supporting inclusion validates the complete context before recording an edit, avoiding a partial addition when another source is broken. Explicit refresh batches both immediate and canonical source metadata, retains local geometry/interactions and overlays current details during undo/redo. Saved source projections reconcile into the current context. Source lookup and navigation identify the authoritative Container or System Context diagram, use the existing dirty-work guard, and preserve the document on failed or stale refreshes. Read-only supporting details include type/subtype/technology and both source identities.
+
+Existing backend ComponentContextService, DiagramService load/save hydration and the Component context route already implemented the required root-coordinated validation and authoritative metadata projection in earlier phases. T030 therefore verifies and reuses those paths without redundant backend changes. The existing visual adapter, inert synthetic boundary and protocol-aware RelationshipEdge also already preserve the required fields/absolute coordinates; new tests verify them while node rendering now displays internal/supporting roles and technology at Component level. The toolbar exposes modeling and refresh controls, wraps within the workspace, and the inspector provides native Width/Height controls for keyboard resizing.
+
+### Modeling requirement evidence
+
+| Requirements | Evidence | Result |
+| --- | --- | --- |
+| FR-006/007/015 | `shared/tests/component-layout.test.ts`: 3 cases cover empty/populated bounds, exact insets/clearance, deterministic displacement, finite/overflow geometry, no source mutation and stable IDs/endpoints | PASS |
+| FR-007–010/015/021 | `backend/tests/contract/component-editing.test.ts`: 6 cases cover blank details, unsupported internals, local directed endpoint failures, eligible candidates without ancestor interactions, owner/canonical duplicate rejection, authoritative load/save/refresh metadata and unchanged local geometry/parent relationships | PASS |
+| FR-006–010/015 | `frontend/tests/component-diagram-store.test.ts`: 7 cases cover atomic internal editing, fit/displacement/undo/redo, invalid placement/endpoints, immediate-source inclusion, canonical duplicates, immutable role/source IDs, complete-context inclusion failure, batch refresh failure/stale responses, and authoritative save/history metadata | PASS |
+| FR-006–009/015/025 | `frontend/tests/react-flow-component.test.ts`: 1 case verifies projected metadata/roles, directed protocol-bearing edges, absolute geometry round-trip and synthetic-boundary exclusion | PASS |
+| FR-007/008/024/025 | `frontend/tests/component-diagram-ui.test.tsx`: 3 rendered cases verify Component-only fields, modeling/refresh controls, Application/Datastore after switching levels, required interaction labels and directed-only protocol controls | PASS |
+| FR-006–010/015/024/025 | `e2e/tests/component-diagram-editing.spec.ts`: 3 Chrome journeys model three Components, two interactions and two supporting participants; save/reopen with unchanged parent; keyboard move/undo/redo/resize; retain invalid field/interaction inputs; navigate to canonical source with Cancel/Discard protection; refresh both source levels and preserve local/source geometry on failure | PASS |
+| FR-001–005/024/025 | All 6 existing Component entry journeys plus 3 existing Container keyboard/move/resize/long-metadata journeys | PASS |
+
+The 20 new Vitest cases were authored before their corresponding production implementation. The first batch had 12 failures for missing Component commands, scoped layout, endpoint/placement/source state and UI controls. Two REST assertions were corrected to respect existing read-time metadata projection and save timestamp behavior. Browser validation corrected keyboard selection before movement, the source-navigation dialog's existing Discard and load label, and an ambiguous alert selector.
+
+### Commands and final results
+
+```powershell
+$env:RUN_POSTGRES_TESTS = '1'
+npm.cmd test -- --maxWorkers=2
+npm.cmd run build
+npx.cmd tsc -b frontend
+npx.cmd playwright test component-diagram-editing.spec.ts component-diagram-entry.spec.ts container-diagrams.spec.ts --config playwright.phase4.config.ts --grep "models three Components|retains invalid fields|retains invalid interactions|selects, enters, returns|retains parent drafts|offers named recovery|opens a supporting container canonical|suppresses modified|guards and preserves an unsaved ADR|persists keyboard and pointer geometry|resizes containers atomically|completes selection, child creation"
+git diff --check
+```
+
+- Full Vitest: **109 files, 613 tests passed, zero failures/skips** (40.03 s), including actual PostgreSQL migration/transaction/creation and existing Container persistence/save regressions. New Component modeling browser journeys use the established Fastify/memory-repository harness; the real HTTP/PostgreSQL multi-level journey remains T068.
+- Browser: **12/12 passed** (54.1 s): 3 modeling, 6 Component entry and 3 Container keyboard/geometry regression journeys. Google Chrome **154.0.8037.99**, existing executable `C:/Program Files/Google/Chrome/Application/chrome.exe`, headless; Node.js **v22.17.1**, Playwright **1.62.1**, Windows 11. Existing dependencies/lockfile retained.
+- All-package build, explicit frontend TypeScript and whitespace checks: PASS. Existing Vite bundle-size and pg transaction-query warnings remain non-failing diagnostics.
+- Visual QA: inspected `test-results/component-modeling.png` at 1280×720. The fitted dashed boundary, separate supporting Datastore/Person, Component responsibilities/technology, directed interaction/protocol labels, selected outline and wrapped toolbar use the existing visual system. This ignored screenshot is regenerated by the modeling journey.
+- Temporary `playwright.phase4.config.ts` inherited the normal configuration and changed only workers to 1 and headless options to true; removed after validation. Recreate that equivalent override to reproduce the recorded command.
+- Setup ignore patterns were verified; packages remain private. Active feature remains Spec 010. Requirements checklist markers were not changed. `.specify/extensions.yml` is absent; pre/post hooks skipped according to the implementation skill.
+
+US2 is independently demonstrable: a populated Component child can be edited, saved and reopened without changing ancestor content or source identity. T040 onward, real-runtime modeling/recovery, offline export/browser/Safari acceptance, scale and observed usability gates remain pending for their later phases.

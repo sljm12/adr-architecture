@@ -44,7 +44,7 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
   }, [onOpenContainerDiagram]);
   const visual = useMemo(() => document ? toReactFlow(document, undefined, adrCounts, onOpenComponentAdrs, requestContainerOpen) : { nodes: [], edges: [] }, [document, adrCounts, onOpenComponentAdrs, requestContainerOpen]);
   const [interactiveNodes, setInteractiveNodes] = useState<Node[]>([]);
-  useEffect(() => setInteractiveNodes(previous => document?.kind === 'container' ? visual.nodes.map(node=>({...node,selected:previous.find(item=>item.id===node.id)?.selected??false})) : visual.nodes), [visual, document?.kind]);
+  useEffect(() => setInteractiveNodes(previous => (document?.kind === 'container' || document?.kind === 'component') ? visual.nodes.map(node=>({...node,selected:previous.find(item=>item.id===node.id)?.selected??false})) : visual.nodes), [visual, document?.kind]);
   const selectedIds = useMemo(() => new Set(selectedComponentIds.length ? selectedComponentIds : selectedComponentId ? [selectedComponentId] : selectedCandidateComponentId ? [selectedCandidateComponentId] : []), [selectedCandidateComponentId, selectedComponentId, selectedComponentIds]);
   const renderedNodes = interactiveNodes.length || visual.nodes.length === 0 ? interactiveNodes : visual.nodes;
   const nodes = renderedNodes.map(node => ({ ...node, data: { ...node.data, isSelected: node.type === 'systemGroup' ? node.id === selectedGroupId : selectedIds.has(node.id), isCandidate: node.type === 'component' && node.id === selectedCandidateComponentId } }));
@@ -67,7 +67,7 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
     // Grouped members intentionally bypass constrainMemberPosition: the adapter fits the boundary
     // around their new absolute position instead of trapping them at the old edge.
     const nextDocument = fromReactFlow(document, interactiveNodes.map(item => item.id === node.id ? { ...item, position: node.position } : item));
-    if (document.kind === 'container') {
+    if ((document.kind === 'container' || document.kind === 'component')) {
       const accepted = applyComponentGeometry(nextDocument.components.map(c=>({id:c.id,position:c.position,size:c.size})));
       if (!accepted) setInteractiveNodes(visual.nodes);
       return;
@@ -87,11 +87,11 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     if (!document) return;
     const currentNodes = interactiveNodes.length ? interactiveNodes : visual.nodes;
-    const layoutChanges = changes.filter(change => change.type === 'position' || change.type === 'dimensions' || document.kind === 'container' && change.type === 'select');
+    const layoutChanges = changes.filter(change => change.type === 'position' || change.type === 'dimensions' || (document.kind === 'container' || document.kind === 'component') && change.type === 'select');
     const nextNodes = applyNodeChanges<Node>(layoutChanges, currentNodes);
     const dimensionChanges = changes.filter((change): change is Extract<NodeChange, { type: 'dimensions' }> => change.type === 'dimensions' && change.resizing !== undefined && Boolean(change.dimensions) && currentNodes.some(node => node.id === change.id && node.type === 'component'));
     setInteractiveNodes(nextNodes);
-    if (document.kind === 'container') {
+    if ((document.kind === 'container' || document.kind === 'component')) {
       if (dimensionChanges.some(change=>change.type==='dimensions'&&change.resizing===true)) resizing.current=true;
       const finishedResize=dimensionChanges.some(change=>change.type==='dimensions'&&change.resizing===false);
       const keyboardMove=changes.some(change=>change.type==='position'&&change.position&&change.dragging!==true)&&!dragging.current&&!resizing.current;
@@ -181,7 +181,7 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
   }, [selectNode, selectedIds]);
   const onNodeKeyDown = useCallback((event: KeyboardEvent<HTMLElement>) => {
     // Child select changes already reach the controlled inspector and keyboard geometry path.
-    if (document?.kind === 'container') return;
+    if ((document?.kind === 'container' || document?.kind === 'component')) return;
     const target = event.target;
     if (!(target instanceof HTMLElement) || target.closest('button,input,textarea,select,a')) return;
     const nodeId = target.closest('.react-flow__node')?.getAttribute('data-id');
@@ -203,7 +203,7 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
       else window.dispatchEvent(new CustomEvent('adr:open-component-diagram', { detail: { componentId: node.id } }));
       return;
     }
-    const eligible = component?.type === 'software-system' && (document?.kind === 'container' || document?.kind === 'component' ? component.role === 'external' : (component.role ?? 'element') === 'element');
+    const eligible = component?.type === 'software-system' && ((document?.kind === 'container' || document?.kind === 'component') ? component.role === 'external' : (component.role ?? 'element') === 'element');
     if (!eligible) return;
     if (onOpenContainerDiagram) onOpenContainerDiagram(node.id);
     else window.dispatchEvent(new CustomEvent('adr:open-container-diagram', { detail: { componentId: node.id } }));
@@ -214,5 +214,5 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
     emitSelection({ kind: 'relationship', id: edge.id }, `relationship:${edge.id}`);
   }, [emitSelection, groupingSelectionActive, onMultiSelectionChange]);
 
-  return <main id="diagram-canvas" tabIndex={-1} aria-label="Architecture diagram canvas" onKeyDownCapture={onNodeKeyDown}><ReactFlow key={`${document?.id ?? 'empty'}:${visual.nodes.length}:${canvasEpoch}`} nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={onNodesChange} onConnect={({source,target})=>{const a=document?.components.find(c=>c.id===source),b=document?.components.find(c=>c.id===target);if(!a||!b||source===target||document?.kind==='container'&&a.role!=='container'&&b.role!=='container'){useDiagramStore.setState({error:'Choose two different local components, including an internal container.'});return;}onCreateInteraction?.(source,target);}} onEdgesChange={() => undefined} onNodeDragStart={() => { dragging.current = true; }} onNodeDragStop={onNodeDragStop} onNodeClick={onNodeClick} onNodeDoubleClick={onNodeDoubleClick} onEdgeClick={onEdgeClick} onSelectionChange={handleSelectionChange} onPaneClick={() => { selectionSignature.current = ''; onMultiSelectionChange?.([]); onSelection(null); }} selectionOnDrag={false} selectionKeyCode="Shift" multiSelectionKeyCode="Shift" selectionMode={SelectionMode.Full} fitView fitViewOptions={{ padding: 0.4 }}><Background aria-hidden="true" /><Controls aria-label="Canvas zoom controls" /></ReactFlow>{document?.kind === 'container' && layoutError && <p className="canvas-edit-feedback" role="alert" aria-live="assertive">{layoutError}</p>}</main>;
+  return <main id="diagram-canvas" tabIndex={-1} aria-label="Architecture diagram canvas" onKeyDownCapture={onNodeKeyDown}><ReactFlow key={`${document?.id ?? 'empty'}:${visual.nodes.length}:${canvasEpoch}`} nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={onNodesChange} onConnect={({source,target})=>{const a=document?.components.find(c=>c.id===source),b=document?.components.find(c=>c.id===target);if(!a||!b||source===target||(document?.kind==='container'||document?.kind==='component')&&a.role!==(document.kind==='component'?'component':'container')&&b.role!==(document.kind==='component'?'component':'container')){useDiagramStore.setState({error:'Choose two different local components, including an internal element.'});return;}onCreateInteraction?.(source,target);}} onEdgesChange={() => undefined} onNodeDragStart={() => { dragging.current = true; }} onNodeDragStop={onNodeDragStop} onNodeClick={onNodeClick} onNodeDoubleClick={onNodeDoubleClick} onEdgeClick={onEdgeClick} onSelectionChange={handleSelectionChange} onPaneClick={() => { selectionSignature.current = ''; onMultiSelectionChange?.([]); onSelection(null); }} selectionOnDrag={false} selectionKeyCode="Shift" multiSelectionKeyCode="Shift" selectionMode={SelectionMode.Full} fitView fitViewOptions={{ padding: 0.4 }}><Background aria-hidden="true" /><Controls aria-label="Canvas zoom controls" /></ReactFlow>{(document?.kind === 'container' || document?.kind === 'component') && layoutError && <p className="canvas-edit-feedback" role="alert" aria-live="assertive">{layoutError}</p>}</main>;
 }

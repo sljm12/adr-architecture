@@ -1,4 +1,4 @@
-import type { Component, ComponentSize, GroupBoundaryLayout, Position } from './types';
+import type { Component, ComponentSize, DiagramDocument, GroupBoundaryLayout, Position } from './types';
 
 export const CONTAINER_BOUNDARY_PADDING = 24;
 export const CONTAINER_BOUNDARY_HEADER_HEIGHT = 44;
@@ -10,7 +10,7 @@ type Geometry = Pick<Component, 'position' | 'size'>;
 type LayoutExternal = Pick<Component, 'id' | 'position' | 'size'>;
 
 function assertGeometry({ position, size }: Geometry): void {
-  if (![position.x, position.y, size.width, size.height].every(Number.isFinite) || size.width <= 0 || size.height <= 0) {
+  if (![position.x, position.y, size.width, size.height, position.x + size.width, position.y + size.height].every(Number.isFinite) || size.width <= 0 || size.height <= 0) {
     throw new Error('Container layout requires finite positions and positive finite component sizes.');
   }
 }
@@ -28,6 +28,7 @@ export function fitContainerBoundary(containers: Geometry[]): GroupBoundaryLayou
     width: Math.max(CONTAINER_BOUNDARY_MINIMUM_SIZE.width, right - minX + CONTAINER_BOUNDARY_PADDING * 2),
     height: Math.max(CONTAINER_BOUNDARY_MINIMUM_SIZE.height, bottom - minY + TOP_PADDING + CONTAINER_BOUNDARY_PADDING),
   };
+  assertGeometry({ position, size });
   return { position, size };
 }
 
@@ -52,7 +53,7 @@ export function validateExternalPlacement(
 ): void {
   assertGeometry(external);
   if (!isExternalOutsideBoundary(boundary, external.position, external.size)) {
-    throw new Error(`External participants must remain outside the Software System boundary with ${EXTERNAL_BOUNDARY_CLEARANCE} units of clearance.`);
+    throw new Error(`Supporting participants must remain outside the scoped boundary with ${EXTERNAL_BOUNDARY_CLEARANCE} units of clearance.`);
   }
 }
 
@@ -92,7 +93,17 @@ export function fitContainerLayout<T extends LayoutExternal>(
       y = Math.max(...colliding.map(other => other.position.y + other.size.height)) + EXTERNAL_BOUNDARY_CLEARANCE;
       candidate = { ...external, position: { x, y } };
     }
+    assertGeometry(candidate);
     placed.set(external.id, candidate);
   }
   return { boundary, externalComponents: externalComponents.map(component => placed.get(component.id) ?? component) };
+}
+
+/** Fit either C4 child level without modifying identities, sources or local interactions. */
+export function fitScopedDiagramLayout(document: DiagramDocument): DiagramDocument {
+  if (document.kind !== 'container' && document.kind !== 'component') return document;
+  const internalRole = document.kind === 'component' ? 'component' : 'container';
+  const layout = fitContainerLayout(document.components.filter(c => c.role === internalRole), document.components.filter(c => c.role === 'external'));
+  const supporting = new Map(layout.externalComponents.map(c => [c.id, c]));
+  return { ...document, boundary: layout.boundary, components: document.components.map(c => supporting.get(c.id) ?? c) };
 }

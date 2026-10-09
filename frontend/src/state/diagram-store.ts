@@ -4,10 +4,14 @@ import { DiagramApiError, diagramClient, formatDiagramApiError } from '../api/di
 import { BoundedHistory } from './history';
 import { getDiagramName, isContainerDocument } from '../../../shared/src/index';
 import { reconcileParentDiagramSummaries } from './diagram-list';
-import { assertDiagramInvariants, containerContextSchema, diagramDocumentSchema, fitContainerLayout, getContainerComponentMinimumSize, isContainerType, validateExternalPlacement, type ContainerContext, type ContainerType, type ComponentSize } from '../../../shared/src/index';
+import { assertDiagramInvariants, containerContextSchema, componentContextSchema, diagramDocumentSchema, fitScopedDiagramLayout, getContainerComponentMinimumSize, isContainerType, validateExternalPlacement, type ContainerContext, type ComponentContext, type ContainerType, type ComponentSize } from '../../../shared/src/index';
 import { getComponentScope, getDiagramOwnerId, type ComponentAvailability } from '../../../shared/src/index';
 
 export type ContainerEdit = { name: string; description: string; technology: string; containerType: ContainerType };
+export type C4ComponentEdit = { name: string; description: string; technology: string };
+type SourceContext = ContainerContext | ComponentContext;
+const isComponentSourceContext = (context: SourceContext): context is ComponentContext => 'containerId' in context.scope;
+const isScoped = (document: DiagramDocument) => document.kind === 'container' || document.kind === 'component';
 export type ComponentGeometryEdit = { id: string; position: Position; size: ComponentSize };
 
 export type SaveStatus = 'idle' | 'unsaved' | 'saving' | 'saved' | 'failed';
@@ -33,7 +37,7 @@ type State = {
   navigationStatus: 'idle' | 'loading';
   savePending: boolean;
   revision: number;
-  sourceContext: ContainerContext | null;
+  sourceContext: SourceContext | null;
   sourceContextStatus: 'idle' | 'loading' | 'loaded' | 'failed';
   sourceContextError: string | null;
   containerOpenStatus: ContainerOpenStatus;
@@ -54,7 +58,9 @@ type State = {
   addComponent: (name: string, type: C4ArtifactType, description?: string | null) => boolean;
   addContainer: (details: ContainerEdit) => boolean;
   editContainer: (componentId: string, details: ContainerEdit) => boolean;
-  includeExternalParticipant: (sourceId: string, context: ContainerContext) => boolean;
+  addC4Component: (details: C4ComponentEdit) => boolean;
+  editC4Component: (componentId: string, details: C4ComponentEdit) => boolean;
+  includeExternalParticipant: (sourceId: string, context: SourceContext) => boolean;
   applyComponentGeometry: (edits: ComponentGeometryEdit[]) => boolean;
   setComponentType: (componentId: string, type: C4ArtifactType) => boolean;
   updateComponentType: (componentId: string, type: C4ArtifactType) => boolean;
@@ -81,7 +87,7 @@ type State = {
   loadSavedDocument: (id: string, options?: { canCommit?: () => boolean }) => Promise<boolean>;
   createOrOpenContainerDiagram: (componentId: string, options?: { canCommit?: () => boolean }) => Promise<boolean>;
   createOrOpenComponentDiagram: (componentId: string, options?: { canCommit?: () => boolean }) => Promise<boolean>;
-  applyContainerContext: (context: ContainerContext) => boolean;
+  applyContainerContext: (context: SourceContext) => boolean;
   refreshContainerContext: () => Promise<boolean>;
 };
 
@@ -115,29 +121,30 @@ const assertSaveIdentity = (request: DiagramDocument, response: DiagramDocument)
   const expectedName = request.kind === 'component' ? getComponentScope(response)?.containerName : request.kind === 'container' ? response.scope?.softwareSystemName : request.name.trim();
   if (response.id !== request.id || response.name?.trim() !== expectedName || (response.kind ?? 'general') !== (request.kind ?? 'general') || response.scope?.parentDiagramId !== request.scope?.parentDiagramId || getDiagramOwnerId(response) !== getDiagramOwnerId(request)) throw new Error('The save response did not match the diagram identity, name or parent/owner association. Your draft was kept. Retry saving this diagram.');
 };
-const overlayContext = (document: DiagramDocument, context: ContainerContext | null): DiagramDocument => {
-  if (!context || document.kind !== 'container') return copy(document);
-  if (context.scope.parentDiagramId !== document.scope?.parentDiagramId || context.scope.softwareSystemId !== document.scope.softwareSystemId) throw new Error('Source context did not match this container diagram. Refresh its source details.');
+const overlayContext = (document: DiagramDocument, context: SourceContext | null): DiagramDocument => {
+  if (!context || !isScoped(document)) return copy(document);
+  if (context.scope.parentDiagramId !== document.scope?.parentDiagramId || (document.kind === 'component' ? !isComponentSourceContext(context) || context.scope.containerId !== getComponentScope(document)?.containerId : isComponentSourceContext(context) || context.scope.softwareSystemId !== document.scope?.softwareSystemId)) throw new Error('Source context did not match this scoped diagram. Refresh its source details.');
   const sources = new Map(context.sources.map(source => [source.id, source]));
-  return { ...copy(document), name: context.scope.softwareSystemName, scope: { ...context.scope }, components: document.components.map(component => {
+  const canonicalIds = new Set<string>();
+  return { ...copy(document), name: isComponentSourceContext(context) ? context.scope.containerName : context.scope.softwareSystemName, scope: { ...context.scope }, components: document.components.map(component => {
     if (component.role !== 'external') return structuredClone(component);
     const source = sources.get(component.sourceComponentId!);
     if (!source) throw new Error(`External participant ${component.id} no longer has an eligible parent source. Repair the source before continuing.`);
-    return { ...structuredClone(component), name: source.name, description: source.description, type: source.type };
+    const canonicalId = 'canonicalSourceComponentId' in source ? source.canonicalSourceComponentId : source.id;
+    if (canonicalIds.has(canonicalId)) throw new Error('Include each canonical supporting source only once.');
+    canonicalIds.add(canonicalId);
+    return { ...structuredClone(component), name: source.name, description: source.description, type: source.type, containerType: 'containerType' in source ? source.containerType : null, technology: 'technology' in source ? source.technology : null };
   }) };
 };
 const normalizedGroupName = (name: string) => name.trim().toLocaleLowerCase();
 const validContainerDetails = (details: ContainerEdit) => isContainerType(details.containerType) && Boolean(details.name.trim()) && details.name.trim().length <= 200 && Boolean(details.description.trim()) && Boolean(details.technology.trim()) && details.technology.trim().length <= 200;
-const fitChild = (document: DiagramDocument): DiagramDocument => {
-  const internal = document.components.filter(c => c.role === 'container');
-  const layout = fitContainerLayout(internal, document.components.filter(c => c.role === 'external'));
-  const externals = new Map(layout.externalComponents.map(c => [c.id, c]));
-  return { ...document, boundary: layout.boundary, components: document.components.map(c => externals.get(c.id) ?? c) };
-};
+const validComponentDetails = (details: C4ComponentEdit) => Boolean(details.name.trim()) && details.name.trim().length <= 200 && Boolean(details.description.trim()) && Boolean(details.technology.trim()) && details.technology.trim().length <= 200;
+const fitChild = fitScopedDiagramLayout;
 const interactionError = (document: DiagramDocument, source: string, target: string, label: string | null, direction: string, protocol: string | null | undefined): string | null => {
   const a=document.components.find(c=>c.id===source), b=document.components.find(c=>c.id===target);
   if (!a || !b || source === target) return 'Choose two different local components.';
-  if (document.kind === 'container' && (direction !== 'directed' || !label?.trim() || (a.role !== 'container' && b.role !== 'container'))) return 'Interactions require a description, a directed connection, and at least one internal container.';
+  const internalRole = document.kind === 'component' ? 'component' : 'container';
+  if (isScoped(document) && (direction !== 'directed' || !label?.trim() || (a.role !== internalRole && b.role !== internalRole))) return `Interactions require a description, a directed connection, and at least one internal ${internalRole}.`;
   if (protocol && protocol.trim().length > 200) return 'Protocol must contain at most 200 characters.';
   return null;
 };
@@ -219,8 +226,12 @@ export const useDiagramStore = create<State>((set, get) => ({
     if (!current) return;
     try {
       let next = copy(fn(copy(current)));
-      if (current.kind === 'container') {
-        if (next.kind !== current.kind || next.id !== current.id || next.scope?.parentDiagramId !== current.scope?.parentDiagramId || next.scope?.softwareSystemId !== current.scope?.softwareSystemId) throw new Error('Container ownership cannot be changed.');
+      if (isScoped(current)) {
+        if (next.kind !== current.kind || next.id !== current.id || next.scope?.parentDiagramId !== current.scope?.parentDiagramId || getDiagramOwnerId(next) !== getDiagramOwnerId(current)) throw new Error('Scoped diagram ownership cannot be changed.');
+        for (const previous of current.components) {
+          const incoming = next.components.find(c => c.id === previous.id);
+          if (incoming && (incoming.role !== previous.role || incoming.sourceComponentId !== previous.sourceComponentId)) throw new Error('Component roles and immediate source identities cannot be reassigned.');
+        }
         const geometry = (document: DiagramDocument) => JSON.stringify(document.components.map(({ id, role, position, size }) => ({ id, role, position, size })));
         next = diagramDocumentSchema.parse(geometry(next) === geometry(current) ? next : fitChild(next)) as DiagramDocument;
         assertDiagramInvariants(next);
@@ -240,7 +251,7 @@ export const useDiagramStore = create<State>((set, get) => ({
   },
   addComponent: (name, type, description = null) => {
     const document = get().document;
-    if (document?.kind === 'container') { set({error:'Use Application or Datastore to add an internal container.'}); return false; }
+    if (document && isScoped(document)) { set({error:document.kind === 'component' ? 'Use the Component form with name, responsibilities and technology.' : 'Use Application or Datastore to add an internal container.'}); return false; }
     if (!document || !name.trim() || !isC4ArtifactType(type)) return false;
     const timestamp = now();
     get().update(current => ({
@@ -271,14 +282,35 @@ export const useDiagramStore = create<State>((set, get) => ({
     get().update(current=>({...current,components:current.components.map(c=>c.id===componentId?{...c,name:details.name.trim(),description:details.description.trim(),technology:details.technology.trim(),containerType:details.containerType,size:{width:Math.max(c.size.width,minimum.width),height:Math.max(c.size.height,minimum.height)},updatedAt:now()}:c)}));
     return get().document!==document;
   },
+  addC4Component: details => {
+    const document = get().document;
+    if (document?.kind !== 'component' || !validComponentDetails(details)) { set({ error: 'Provide a Component name, responsibilities and technology (name and technology at most 200 characters).' }); return false; }
+    const timestamp = now();
+    get().update(current => ({ ...current, components: [...current.components, {
+      id: crypto.randomUUID(), diagramId: current.id, name: details.name.trim(), description: details.description.trim(), technology: details.technology.trim(), type: 'component', role: 'component', containerType: null, sourceComponentId: null,
+      position: { x: 100 + current.components.filter(c => c.role === 'component').length * 480, y: 100 }, size: getContainerComponentMinimumSize(details), createdAt: timestamp, updatedAt: timestamp,
+    }] }));
+    return get().document !== document;
+  },
+  editC4Component: (componentId, details) => {
+    const document = get().document, component = document?.components.find(c => c.id === componentId);
+    if (document?.kind !== 'component' || component?.role !== 'component' || !validComponentDetails(details)) { set({ error: 'Provide a Component name, responsibilities and technology (name and technology at most 200 characters).' }); return false; }
+    const minimum = getContainerComponentMinimumSize(details);
+    get().update(current => ({ ...current, components: current.components.map(c => c.id === componentId ? { ...c, name: details.name.trim(), description: details.description.trim(), technology: details.technology.trim(), size: { width: Math.max(c.size.width, minimum.width), height: Math.max(c.size.height, minimum.height) }, updatedAt: now() } : c) }));
+    return get().document !== document;
+  },
   includeExternalParticipant: (sourceId,input) => {
     const document=get().document;
-    const parsed=containerContextSchema.safeParse(input);
-    if(document?.kind!=='container'||!parsed.success)return false;
+    const parsed=document?.kind === 'component' ? componentContextSchema.safeParse(input) : containerContextSchema.safeParse(input);
+    if(!document || !isScoped(document) || !parsed.success){set({error:'Choose a valid source context for this diagram.'});return false;}
     const context=parsed.data,source=context.sources.find(c=>c.id===sourceId);
-    if(!source||context.scope.parentDiagramId!==document.scope?.parentDiagramId||context.scope.softwareSystemId!==document.scope.softwareSystemId||sourceId===document.scope.softwareSystemId||document.components.some(c=>c.sourceComponentId===sourceId)){set({error:'Choose an eligible parent participant that is not already included.'});return false;}
+    const ownerId = getDiagramOwnerId(document);
+    const contextOwner = 'containerId' in context.scope ? context.scope.containerId : context.scope.softwareSystemId;
+    const canonical = (id: string) => { const source = context.sources.find(s => s.id === id); return source && 'canonicalSourceComponentId' in source ? source.canonicalSourceComponentId : id; };
+    if(!source||context.scope.parentDiagramId!==document.scope?.parentDiagramId||contextOwner!==ownerId||sourceId===ownerId||document.components.some(c=>c.sourceComponentId && canonical(c.sourceComponentId)===canonical(sourceId))){set({error:'Choose an eligible parent participant that is not already included.'});return false;}
     const timestamp=now(),boundary=document.boundary!;
-    get().update(current=>({...current,components:[...current.components,{diagramId:current.id,...source,id:crypto.randomUUID(),sourceComponentId:sourceId,role:'external',containerType:null,technology:null,position:{x:boundary.position.x+boundary.size.width+24,y:boundary.position.y},size:{width:280,height:Math.max(100,getContainerComponentMinimumSize({...source,technology:null}).height)},createdAt:timestamp,updatedAt:timestamp}]}));
+    const technology = 'technology' in source ? source.technology : null;
+    get().update(current=>overlayContext({...current,components:[...current.components,{diagramId:current.id,name:source.name,description:source.description,type:source.type,id:crypto.randomUUID(),sourceComponentId:sourceId,role:'external',containerType:'containerType' in source ? source.containerType : null,technology,position:{x:boundary.position.x+boundary.size.width+24,y:boundary.position.y},size:getContainerComponentMinimumSize({...source,technology}),createdAt:timestamp,updatedAt:timestamp}]},context));
     if (get().document !== document) get().applyContainerContext(context);
     return get().document!==document;
   },
@@ -286,16 +318,16 @@ export const useDiagramStore = create<State>((set, get) => ({
     const document=get().document;if(!document)return false;
     const byId=new Map(edits.map(e=>[e.id,e]));
     try {
-      for(const edit of edits){const c=document.components.find(c=>c.id===edit.id);if(!c)throw new Error('The component no longer exists.');if(![edit.position.x,edit.position.y,edit.size.width,edit.size.height].every(Number.isFinite)||edit.size.width<=0||edit.size.height<=0)throw new Error('Use finite positions and positive sizes.');if(document.kind==='container'&&c.role==='external')validateExternalPlacement(document.boundary!,edit);}
+      for(const edit of edits){const c=document.components.find(c=>c.id===edit.id);if(!c)throw new Error('The component no longer exists.');if(![edit.position.x,edit.position.y,edit.size.width,edit.size.height].every(Number.isFinite)||edit.size.width<=0||edit.size.height<=0)throw new Error('Use finite positions and positive sizes.');if(isScoped(document)&&c.role==='external')validateExternalPlacement(document.boundary!,edit);}
       set({error:null});
-      get().update(current=>({...current,components:current.components.map(c=>{const e=byId.get(c.id);if(!e||JSON.stringify(c.position)===JSON.stringify(e.position)&&JSON.stringify(c.size)===JSON.stringify(e.size))return c;const minimum=c.role==='container'?getContainerComponentMinimumSize(c):null;return {...c,position:e.position,size:minimum?{width:Math.max(e.size.width,minimum.width),height:Math.max(e.size.height,minimum.height)}:e.size,updatedAt:now()};})}));
+      get().update(current=>({...current,components:current.components.map(c=>{const e=byId.get(c.id);if(!e||JSON.stringify(c.position)===JSON.stringify(e.position)&&JSON.stringify(c.size)===JSON.stringify(e.size))return c;const minimum=c.role==='container'||c.role==='component'?getContainerComponentMinimumSize(c):null;return {...c,position:e.position,size:minimum?{width:Math.max(e.size.width,minimum.width),height:Math.max(e.size.height,minimum.height)}:e.size,updatedAt:now()};})}));
       return !get().error;
     }catch(error){set({error:saveErrorMessage(error)});return false;}
   },
   setComponentType: (componentId, type) => {
     const current = get().document;
     const component = current?.components.find(item => item.id === componentId);
-    if (!current || current.kind === 'container' || !component || !isC4ArtifactType(type)) return false;
+    if (!current || isScoped(current) || !component || !isC4ArtifactType(type)) return false;
     const memberGroup = (current.groups ?? []).find(group => group.memberComponentIds.includes(componentId));
     if (memberGroup && type !== 'software-system') return false;
     if (component.type === type) return true;
@@ -308,7 +340,7 @@ export const useDiagramStore = create<State>((set, get) => ({
   updateComponentType: (componentId, type) => get().setComponentType(componentId, type),
   createGroup: (name, memberComponentIds) => {
     const document = get().document;
-    if (document?.kind === 'container') { set({groupError:'Container diagrams cannot contain system groups.'}); return false; }
+    if (document && isScoped(document)) { set({groupError:'Scoped diagrams cannot contain system groups.'}); return false; }
     const validationError = document ? groupCreationError(document, name, memberComponentIds) : 'Create a diagram before grouping systems.';
     if (!document || validationError) {
       set({ groupError: validationError });
@@ -400,7 +432,7 @@ export const useDiagramStore = create<State>((set, get) => ({
     const document = get().document;
     const component = document?.components.find(item => item.id === componentId);
     if (!document || !component || !Number.isFinite(position.x) || !Number.isFinite(position.y)) return false;
-    if (document.kind === 'container') return get().applyComponentGeometry([{id:componentId,position,size:component.size}]);
+    if (isScoped(document)) return get().applyComponentGeometry([{id:componentId,position,size:component.size}]);
     get().update(current => ({
       ...current,
       components: current.components.map(item => item.id === componentId ? { ...item, position, updatedAt: now() } : item),
@@ -420,7 +452,7 @@ export const useDiagramStore = create<State>((set, get) => ({
     const document = get().document;
     const component = document?.components.find(item => item.id === componentId);
     if (!document || !component || !Number.isFinite(size.width) || !Number.isFinite(size.height) || size.width <= 0 || size.height <= 0) return false;
-    if (document.kind === 'container') return get().applyComponentGeometry([{id:componentId,position:component.position,size}]);
+    if (isScoped(document)) return get().applyComponentGeometry([{id:componentId,position:component.position,size}]);
     get().update(current => ({
       ...current,
       components: current.components.map(item => item.id === componentId ? { ...item, size: { ...size }, updatedAt: now() } : item),
@@ -490,6 +522,7 @@ export const useDiagramStore = create<State>((set, get) => ({
     if (!trimmedName || !get().document?.components.some(component => component.id === componentId)) return false;
     const component=get().document!.components.find(c=>c.id===componentId)!;
     if(component.role==='external')return false;
+    if(component.role==='component')return get().editC4Component(componentId,{name,description:component.description!,technology:component.technology!});
     if(component.role==='container')return get().editContainer(componentId,{name,description:component.description!,technology:component.technology!,containerType:component.containerType!});
     get().update(current => ({
       ...current,
@@ -556,11 +589,17 @@ export const useDiagramStore = create<State>((set, get) => ({
       const saved = diagramDocumentSchema.parse(response) as DiagramDocument;
       if (session === saveSession) {
         set(state => {
-          const sources = new Map(state.sourceContext?.sources.map(source => [source.id, source]) ?? []);
-          for (const occurrence of saved.components.filter(component => component.role === 'external')) {
-            sources.set(occurrence.sourceComponentId!, { id: occurrence.sourceComponentId!, name: occurrence.name, description: occurrence.description, type: occurrence.type as C4ArtifactType });
+          let sourceContext: SourceContext | null = state.sourceContext;
+          if (isContainerDocument(saved)) {
+            const sources = new Map<string, ContainerContext['sources'][number]>(sourceContext && !isComponentSourceContext(sourceContext) ? sourceContext.sources.map(source => [source.id, source]) : []);
+            for (const occurrence of saved.components.filter(c => c.role === 'external')) sources.set(occurrence.sourceComponentId!, { id: occurrence.sourceComponentId!, name: occurrence.name, description: occurrence.description, type: occurrence.type as C4ArtifactType });
+            sourceContext = { scope: saved.scope, sources: [...sources.values()], capturedAt: now() };
+          } else if (saved.kind === 'component' && sourceContext && isComponentSourceContext(sourceContext)) {
+            sourceContext = { ...sourceContext, scope: getComponentScope(saved)!, capturedAt: now(), sources: sourceContext.sources.map(source => {
+              const occurrence = saved.components.find(c => c.role === 'external' && c.sourceComponentId === source.id);
+              return occurrence ? { ...source, name: occurrence.name, description: occurrence.description, type: occurrence.type as ComponentContext['sources'][number]['type'], containerType: occurrence.containerType ?? null, technology: occurrence.technology ?? null } : source;
+            }) };
           }
-          const sourceContext = isContainerDocument(saved) ? { scope: saved.scope, sources: [...sources.values()], capturedAt: now() } : state.sourceContext;
           return { sourceContext,
             savedDocuments: reconcileParentDiagramSummaries(replaceSummary(state.savedDocuments, summary(saved)), saved),
             trashedDocuments: reconcileParentDiagramSummaries(state.trashedDocuments, saved),
@@ -646,22 +685,22 @@ export const useDiagramStore = create<State>((set, get) => ({
   },
   applyContainerContext: input => {
     const document = get().document;
-    if (!document || document.kind !== 'container') return false;
+    if (!document || !isScoped(document)) return false;
     try {
-      const context = containerContextSchema.parse(input);
+      const context = document.kind === 'component' ? componentContextSchema.parse(input) : containerContextSchema.parse(input);
       const refreshed = overlayContext(document, context);
       assertDiagramInvariants(refreshed);
-      set(state => ({ document: refreshed, sourceContext: context, sourceContextStatus: 'loaded', sourceContextError: null, savedDocuments: state.savedDocuments.map(item => item.id === document.id ? { ...item, name: context.scope.softwareSystemName, scope: context.scope } : item) }));
+      set(state => ({ document: refreshed, sourceContext: context, sourceContextStatus: 'loaded', sourceContextError: null, savedDocuments: state.savedDocuments.map(item => item.id === document.id ? { ...item, name: getDiagramName(refreshed), scope: context.scope } : item) }));
       return true;
     } catch (error) { set({ sourceContextStatus: 'failed', sourceContextError: saveErrorMessage(error) }); return false; }
   },
   refreshContainerContext: async () => {
     const document = get().document;
-    if (!document || document.kind !== 'container' || get().sourceContextStatus === 'loading') return false;
+    if (!document || !isScoped(document) || get().sourceContextStatus === 'loading') return false;
     const contextSession = session;
     set({ sourceContextStatus: 'loading', sourceContextError: null });
     try {
-      const context = await diagramClient.containerContext(document.id);
+      const context = await (document.kind === 'component' ? diagramClient.componentContext(document.id) : diagramClient.containerContext(document.id));
       if (contextSession !== session) return false;
       return get().applyContainerContext(context);
     } catch (error) { if (contextSession === session) set({ sourceContextStatus: 'failed', sourceContextError: saveErrorMessage(error) }); return false; }
