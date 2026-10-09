@@ -5,6 +5,7 @@ import { BoundedHistory } from './history';
 import { getDiagramName, isContainerDocument } from '../../../shared/src/index';
 import { reconcileParentDiagramSummaries } from './diagram-list';
 import { assertDiagramInvariants, containerContextSchema, diagramDocumentSchema, fitContainerLayout, getContainerComponentMinimumSize, isContainerType, validateExternalPlacement, type ContainerContext, type ContainerType, type ComponentSize } from '../../../shared/src/index';
+import { getComponentScope, getDiagramOwnerId, type ComponentAvailability } from '../../../shared/src/index';
 
 export type ContainerEdit = { name: string; description: string; technology: string; containerType: ContainerType };
 export type ComponentGeometryEdit = { id: string; position: Position; size: ComponentSize };
@@ -38,6 +39,10 @@ type State = {
   containerOpenStatus: ContainerOpenStatus;
   containerOpenError: string | null;
   containerOpenComponentId: string | null;
+  componentOpenStatus: ContainerOpenStatus;
+  componentOpenError: string | null;
+  componentOpenComponentId: string | null;
+  componentAvailability: ComponentAvailability | null;
   canUndo: boolean;
   canRedo: boolean;
   open: (document: DiagramDocument) => void;
@@ -75,6 +80,7 @@ type State = {
   registerRestoredSavedDocument: (document: DiagramDocument) => void;
   loadSavedDocument: (id: string, options?: { canCommit?: () => boolean }) => Promise<boolean>;
   createOrOpenContainerDiagram: (componentId: string, options?: { canCommit?: () => boolean }) => Promise<boolean>;
+  createOrOpenComponentDiagram: (componentId: string, options?: { canCommit?: () => boolean }) => Promise<boolean>;
   applyContainerContext: (context: ContainerContext) => boolean;
   refreshContainerContext: () => Promise<boolean>;
 };
@@ -106,8 +112,8 @@ const saveErrorMessage = (error: unknown): string => {
 const summary = (document: DiagramDocument): DiagramSummary => ({ id: document.id, name: getDiagramName(document), status: document.status, createdAt: document.createdAt, updatedAt: document.updatedAt, kind: document.kind ?? 'general', scope: document.scope ?? null });
 const replaceSummary = (items: DiagramSummary[], next: DiagramSummary) => items.some(item => item.id === next.id) ? items.map(item => item.id === next.id ? next : item) : [...items, next];
 const assertSaveIdentity = (request: DiagramDocument, response: DiagramDocument) => {
-  const expectedName = request.kind === 'container' ? response.scope?.softwareSystemName : request.name.trim();
-  if (response.id !== request.id || response.name?.trim() !== expectedName || (response.kind ?? 'general') !== (request.kind ?? 'general') || response.scope?.parentDiagramId !== request.scope?.parentDiagramId || response.scope?.softwareSystemId !== request.scope?.softwareSystemId) throw new Error('The save response did not match the diagram identity, name or parent/owner association. Your draft was kept. Retry saving this diagram.');
+  const expectedName = request.kind === 'component' ? getComponentScope(response)?.containerName : request.kind === 'container' ? response.scope?.softwareSystemName : request.name.trim();
+  if (response.id !== request.id || response.name?.trim() !== expectedName || (response.kind ?? 'general') !== (request.kind ?? 'general') || response.scope?.parentDiagramId !== request.scope?.parentDiagramId || getDiagramOwnerId(response) !== getDiagramOwnerId(request)) throw new Error('The save response did not match the diagram identity, name or parent/owner association. Your draft was kept. Retry saving this diagram.');
 };
 const overlayContext = (document: DiagramDocument, context: ContainerContext | null): DiagramDocument => {
   if (!context || document.kind !== 'container') return copy(document);
@@ -193,14 +199,16 @@ export const useDiagramStore = create<State>((set, get) => ({
   containerOpenStatus: 'idle',
   containerOpenError: null,
   containerOpenComponentId: null,
+  componentOpenStatus: 'idle', componentOpenError: null, componentOpenComponentId: null, componentAvailability: null,
   canUndo: false,
   canRedo: false,
   open: input => {
     session++; loadRequest++;
+    set({ componentOpenStatus: 'idle', componentOpenError: null, componentOpenComponentId: null, componentAvailability: null });
     const document = history.reset(copy(input));
     set({ document, status: 'saved', revision: 0, navigationStatus: 'idle', sourceContext: contextFromDocument(document), sourceContextStatus: 'idle', sourceContextError: null, error: null, groupError: null, loadError: null, containerOpenStatus: 'idle', containerOpenError: null, containerOpenComponentId: null, ...historyState() });
   },
-  startNew: () => { session++; loadRequest++; set({ document: null, status: 'idle', revision: 0, navigationStatus: 'idle', sourceContext: null, sourceContextStatus: 'idle', sourceContextError: null, error: null, groupError: null, containerOpenStatus: 'idle', containerOpenError: null, containerOpenComponentId: null, canUndo: false, canRedo: false }); },
+  startNew: () => { session++; loadRequest++; set({ document: null, status: 'idle', revision: 0, navigationStatus: 'idle', sourceContext: null, sourceContextStatus: 'idle', sourceContextError: null, error: null, groupError: null, containerOpenStatus: 'idle', containerOpenError: null, containerOpenComponentId: null, componentOpenStatus: 'idle', componentOpenError: null, componentOpenComponentId: null, componentAvailability: null, canUndo: false, canRedo: false }); },
   create: async name => {
     const created = await diagramClient.create(name);
     get().open(created);
@@ -537,7 +545,7 @@ export const useDiagramStore = create<State>((set, get) => ({
     }));
   },
   save: async () => {
-    if (get().savePending || get().status === 'saving' || get().navigationStatus === 'loading' || get().containerOpenStatus === 'loading') return;
+    if (get().savePending || get().status === 'saving' || get().navigationStatus === 'loading' || get().containerOpenStatus === 'loading' || get().componentOpenStatus === 'loading') return;
     const documentAtSaveStart = get().document;
     if (!documentAtSaveStart) return;
     const captured = copy(documentAtSaveStart), revision = get().revision, saveSession = session;
@@ -621,7 +629,7 @@ export const useDiagramStore = create<State>((set, get) => ({
     savedDocumentsDeleteMessage: null,
   })),
   loadSavedDocument: async (id, options = {}) => {
-    if (get().savePending || get().status === 'saving' || get().containerOpenStatus === 'loading') return false;
+    if (get().savePending || get().status === 'saving' || get().containerOpenStatus === 'loading' || get().componentOpenStatus === 'loading') return false;
     const request = ++loadRequest, source = get().document, revision = get().revision, loadSession = session;
     set({ loadError: null, navigationStatus: 'loading' });
     try {
@@ -659,11 +667,11 @@ export const useDiagramStore = create<State>((set, get) => ({
     } catch (error) { if (contextSession === session) set({ sourceContextStatus: 'failed', sourceContextError: saveErrorMessage(error) }); return false; }
   },
   createOrOpenContainerDiagram: async (componentId, options = {}) => {
-    if (get().containerOpenStatus === 'loading' || get().savePending || get().status === 'saving' || get().navigationStatus === 'loading') return false;
+    if (get().containerOpenStatus === 'loading' || get().componentOpenStatus === 'loading' || get().savePending || get().status === 'saving' || get().navigationStatus === 'loading') return false;
     const sourceDocument = get().document;
     const component = sourceDocument?.components.find(item => item.id === componentId);
-    const isOwnerElement = sourceDocument?.kind !== 'container' && (component?.role ?? 'element') === 'element' && component?.type === 'software-system';
-    const isExternalSystem = sourceDocument?.kind === 'container' && component?.role === 'external' && component.type === 'software-system';
+    const isOwnerElement = (sourceDocument?.kind ?? 'general') === 'general' && (component?.role ?? 'element') === 'element' && component?.type === 'software-system';
+    const isExternalSystem = (sourceDocument?.kind === 'container' || sourceDocument?.kind === 'component') && component?.role === 'external' && component.type === 'software-system';
     if (!sourceDocument || !component || (!isOwnerElement && !isExternalSystem)) {
       set({ containerOpenStatus: 'failed', containerOpenError: 'Select a Software System to open its container diagram.' });
       return false;
@@ -697,6 +705,47 @@ export const useDiagramStore = create<State>((set, get) => ({
     } catch (error) {
       if (error instanceof DiagramApiError && error.details.code === 'RESTORE_REQUIRED' && typeof (error.details.diagram as any)?.id === 'string' && get().document === sourceDocument && options.canCommit?.() !== false && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind: 'restore', id: (error.details.diagram as any).id } }));
       set({ containerOpenStatus: 'failed', containerOpenError: saveErrorMessage(error) });
+      return false;
+    }
+  },
+  createOrOpenComponentDiagram: async (componentId, options = {}) => {
+    if (get().componentOpenStatus === 'loading' || get().containerOpenStatus === 'loading' || get().savePending || get().status === 'saving' || get().navigationStatus === 'loading') return false;
+    const sourceDocument = get().document;
+    const component = sourceDocument?.components.find(c => c.id === componentId);
+    const eligible = component?.type === 'container' && isContainerType(component.containerType) && (sourceDocument?.kind === 'container' ? component.role === 'container' : sourceDocument?.kind === 'component' && component.role === 'external' && !!component.sourceComponentId);
+    if (!sourceDocument || !eligible || get().status !== 'saved' || sourceDocument.status !== 'active') {
+      set({ componentOpenStatus: 'failed', componentOpenComponentId: componentId, componentOpenError: 'Select a saved Application or Datastore. Save the current diagram before opening its Component diagram.' });
+      return false;
+    }
+    const requestSession = session;
+    const unchanged = () => session === requestSession && get().document === sourceDocument && get().status === 'saved' && options.canCommit?.() !== false;
+    set({ componentOpenStatus: 'loading', componentOpenError: null, componentOpenComponentId: componentId, componentAvailability: null });
+    try {
+      const availability = await diagramClient.componentAvailability(sourceDocument.id, componentId);
+      if (!unchanged()) throw new Error('Your diagram or decision changed while checking availability. Your work was kept; retry from the current selection.');
+      const expectedParentId = sourceDocument.kind === 'container' ? sourceDocument.id : sourceDocument.scope?.parentDiagramId;
+      const expectedOwnerId = sourceDocument.kind === 'container' ? component.id : component.sourceComponentId;
+      if (availability.parentDiagramId !== expectedParentId || availability.containerId !== expectedOwnerId) throw new Error('Component availability did not match the selected canonical container. Refresh its source and retry.');
+      set({ componentAvailability: availability });
+      if (availability.availability === 'trashed') {
+        if (availability.diagram && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind: 'restore', id: availability.diagram.id } }));
+        throw new Error('This container has a Component diagram in Trash. Restore it before opening.');
+      }
+      const target = availability.availability === 'active' && availability.diagram ? availability.diagram : await diagramClient.createOrOpenComponentDiagram(availability.parentDiagramId, availability.containerId);
+      if (!unchanged()) throw new Error('Your diagram or decision changed during creation. Your work was kept; retry to open the canonical child.');
+      const loaded = await diagramClient.get(target.id);
+      if (!unchanged()) throw new Error('Your diagram or decision changed while loading. Your work was kept; retry opening.');
+      const scope = getComponentScope(loaded);
+      if (!scope || loaded.id !== target.id || scope.parentDiagramId !== availability.parentDiagramId || scope.containerId !== availability.containerId) throw new Error('The loaded Component diagram did not match the selected container. Retry opening its canonical child.');
+      get().open(loaded);
+      set(state => ({ savedDocuments: replaceSummary(state.savedDocuments, summary(loaded)) }));
+      void get().refreshSavedDocuments();
+      return true;
+    } catch (error) {
+      if (session === requestSession) {
+        if (error instanceof DiagramApiError && error.details.code === 'RESTORE_REQUIRED' && unchanged() && typeof (error.details.diagram as any)?.id === 'string' && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind: 'restore', id: (error.details.diagram as any).id } }));
+        set({ componentOpenStatus: 'failed', componentOpenError: saveErrorMessage(error) });
+      }
       return false;
     }
   },

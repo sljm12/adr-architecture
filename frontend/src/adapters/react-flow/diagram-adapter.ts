@@ -1,4 +1,4 @@
-import { DEFAULT_COMPONENT_SIZE, fitGroupBoundsAfterLayout, getAbsoluteMemberPosition, getRelativeMemberPosition, type DiagramDocument, type Position } from '../../../../shared/src/index'; import type { Edge, Node } from '@xyflow/react';
+import { DEFAULT_COMPONENT_SIZE, fitGroupBoundsAfterLayout, getAbsoluteMemberPosition, getRelativeMemberPosition, getDiagramName, type DiagramDocument, type Position } from '../../../../shared/src/index'; import type { Edge, Node } from '@xyflow/react';
 export type HandleSide='top'|'right'|'bottom'|'left';
 export type RelationshipRouting={pairOffset:number;sourceFanOffset:number;targetFanOffset:number};
 type Relationship=DiagramDocument['relationships'][number];
@@ -58,10 +58,10 @@ export function toReactFlow(document:DiagramDocument,sizes?:ComponentSizeMap,adr
   const routed=document.relationships.map(relationship=>{const source=components.get(relationship.sourceComponentId);const target=components.get(relationship.targetComponentId);const handles=source&&target?nearestHandle(source.position,target.position):{source:'right' as HandleSide,target:'left' as HandleSide};return {relationship,...handles};});
   const routing=assignRouting(routed);
   const groups=[...(document.groups??[])].sort((a,b)=>a.id.localeCompare(b.id));
-  const boundaryNodes:Node[]=document.kind==='container'&&document.boundary?[{
+  const boundaryNodes:Node[]=(document.kind==='container'||document.kind==='component')&&document.boundary?[{
     id:`container-boundary-${document.id}`,
     position:document.boundary.position,
-    data:{label:document.scope?.softwareSystemName??document.name,diagramId:document.id},
+    data:{label:getDiagramName(document),diagramId:document.id,scopeKind:document.kind},
     type:'containerBoundary',
     style:{width:document.boundary.size.width,height:document.boundary.size.height},
     zIndex:-2,

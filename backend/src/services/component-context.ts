@@ -2,7 +2,7 @@ import { assertDiagramInvariants, diagramDocumentSchema, getComponentScope, getC
 import type { DiagramRepositoryLike } from '../persistence/diagram-repository';
 import { GraphTransaction } from '../persistence/graph-transaction';
 import { ApiConflictError, ApiValidationError } from '../api/errors';
-import { resolveContainerScope } from './container-context';
+import { ContainerContextNotFoundError, resolveContainerScope } from './container-context';
 
 const brokenSource = (message: string): never => { throw new ApiConflictError(`${message} Repair the immediate Container source and its System Context reference.`, 'DIAGRAM_REFERENCE_BROKEN'); };
 
@@ -11,9 +11,12 @@ export class ComponentContextService {
   constructor(private readonly repository: DiagramRepositoryLike) {}
 
   async context(diagramId: string): Promise<ComponentContext> {
+    const initial = await this.repository.get(diagramId);
+    if (!initial || initial.status !== 'active') throw new ContainerContextNotFoundError('Diagram not found');
     return new GraphTransaction(this.repository).run(diagramId, [], async ({ diagrams }) => {
       const child = await diagrams.get(diagramId);
-      if (!child || child.kind !== 'component') throw new ApiValidationError({ diagramId: 'Component source context requires a saved Component diagram.' });
+      if (!child || child.status !== 'active') throw new ContainerContextNotFoundError('Diagram not found');
+      if (child.kind !== 'component') throw new ApiValidationError({ diagramId: 'Component source context requires a saved Component diagram.' });
       return this.contextFromRepository(child, diagrams);
     });
   }

@@ -5,7 +5,7 @@ export function ComponentNode({ data }: { data: { id?: string; label: string; ty
   const typeLabel = getComponentTypeLabel({type:data.type??null,role:data.role,containerType:data.containerType});
   const minimum = data.role === 'container' || data.role === 'external' ? getContainerComponentMinimumSize({name:data.label,description:data.description??null,technology:data.technology??null}) : {width:120,height:56};
   const cue = data.type === 'person' ? '○' : data.type === 'software-system' ? '□' : '◇';
-  return <div className={`component-node component-node-${data.type ?? 'unclassified'}${data.isSelected ? ' is-selected' : ''}${data.isCandidate ? ' is-add-candidate' : ''}`} role="group" tabIndex={0} aria-selected={data.isSelected ? 'true' : 'false'} aria-label={`Component ${data.label}, ${typeLabel}`} aria-describedby={data.isCandidate ? `${data.id ?? 'component'}-group-candidate` : undefined} onDoubleClick={event => { if (!event.shiftKey && data.id && data.onOpenContainerDiagram) { event.stopPropagation(); data.onOpenContainerDiagram(data.id); } }}>
+  return <div className={`component-node component-node-${data.type ?? 'unclassified'}${data.isSelected ? ' is-selected' : ''}${data.isCandidate ? ' is-add-candidate' : ''}`} role="group" tabIndex={0} aria-selected={data.isSelected ? 'true' : 'false'} aria-label={`Component ${data.label}, ${typeLabel}`} aria-describedby={data.isCandidate ? `${data.id ?? 'component'}-group-candidate` : undefined}>
     <NodeResizer isVisible={Boolean(data.isSelected)} minWidth={minimum.width} minHeight={minimum.height} />
     <Handle id="target-top" type="target" position={Position.Top} aria-hidden="true" />
     <Handle id="target-right" type="target" position={Position.Right} aria-hidden="true" />

@@ -1,6 +1,6 @@
 # Implementation validation: C4 Component diagrams
 
-Scope: phases 1 and 2 (T001–T012). Story entry, UI, recovery and exports remain later-phase work.
+Scope: phases 1–3 (T001–T024). Component entry MVP is implemented; modeling, full hierarchy/list behavior, recovery and exports remain later-phase work.
 
 ## Environment and baseline (2026-10-09)
 
@@ -53,3 +53,48 @@ git diff --check
 - Usability SC-001/SC-003: pending observed first-time-author sessions; automated results do not satisfy this gate.
 - Safari acceptance: pending current stable Safari/OS version and direct-from-disk journey; WebKit does not satisfy this gate.
 - Other browser, runtime UI, export, exact recovery and scale observations: pending corresponding story phases.
+
+## Phase 3 — US1 entry MVP (2026-10-09)
+
+T013–T024: PASS. Authors can select an Application/Datastore, double-click or activate its native Create/Open/Restore action, and enter one canonical Component child. Supporting containers resolve the source owner's original parent association. The child opens with an empty 480×320 boundary at (0,0), an owner-derived read-only title, container/Software System/parent context, and guarded immediate-parent return selecting its owner and focusing the destination heading. Plain click remains selection; Shift/Control/Alt/Meta and multiple selection suppress entry. Internal Components and synthetic boundaries have no deeper entry or persisted endpoint identity.
+
+Implementation adds the three contracted Component availability/create/context routes, shared-response-validated client requests, root-coordinated idempotent creation and source-aware store/UI entry. Trashed children return RESTORE_REQUIRED, never a replacement. Expected owner-unique conflicts are reread in a new transaction after rollback. Parent/ADR Save/Discard/Cancel uses the existing dialog; failed/canceled saves retain the current document and draft. Retry after a committed create/load failure loads the same UUID without another POST. Stale diagram/ADR responses cannot replace current work. Component modeling controls await US2.
+
+### Entry requirement evidence
+
+| Requirements | Evidence | Result |
+| --- | --- | --- |
+| FR-001–005, FR-024 | `backend/tests/contract/component-diagrams.test.ts`: 5 cases (including both owner subtypes) cover read-only GET, bodyless POST 201/200, full Component response scope/context, canonical supporting entry, existing Software System entry through two source levels, invalid/mismatched owners, inactive ancestry, broken sources and RESTORE_REQUIRED | PASS |
+| FR-003/005/015/024 | `backend/tests/persistence/component-diagrams.test.ts`: 4 real PostgreSQL tests cover overlapping creation (exactly one created result/UUID), lost-response retry, recoverable-owner uniqueness, creation versus owner removal, root trash winning over entry, and unchanged Context/Container artifacts | PASS, no skips |
+| FR-003/005 | `frontend/tests/component-diagram-entry-store.test.ts`: 6 cases cover repeated activation, save prerequisite/failure, post-create load retry without repeated POST, superseded session errors, ADR draft commit guard and canonical supporting parent/owner routing | PASS |
+| FR-001/002/004/006/011/025 | `frontend/tests/component-diagram-entry-ui.test.tsx`: 4 rendered UI/adapter cases cover eligible native actions, Create/Open/Restore/progress/error labels, inert owner-labeled empty boundary/round-trip absolute coordinates, scope labels and read-only parent return | PASS |
+| FR-001–005/011/025 | `e2e/tests/component-diagram-entry.spec.ts`: 6 browser journeys cover pointer/keyboard creation, focus/owner return, repeat open, failed save/cancel, committed-load retry, recoverable-child identification/cancel, canonical supporting-container entry, internal/ineligible suppression, modifier/multiselection suppression, retained ADR draft and Software System regression | PASS |
+| FR-024 | 6 existing `container-diagrams.spec.ts` browser journeys: keyboard authoring/parent return, grouped duplicate owners, failed child load retry, unsaved owner Save/Discard/Cancel, canonical external System entry and dirty ADR cancellation | PASS |
+
+Canonical identities are asserted against persisted owners: parent `90000000-0000-4000-8000-000000000009`, Application `90000000-0000-4000-8000-000000000010`, Datastore `a0000000-0000-4000-8000-000000000001`. Generated child UUIDs are deliberately random; tests compare exact equality across every retry/reopen and verify distinct children for distinct owners despite matching names. Source entry targets the same Datastore child/parent rather than the initiating Component diagram. PostgreSQL suites use only their UUID-named isolated `spec010_*` schemas and clean them up afterward.
+
+### Commands and final checks
+
+```powershell
+$env:RUN_POSTGRES_TESTS = '1'
+npm.cmd test -- --maxWorkers=2
+npm.cmd run build
+npx.cmd tsc -b frontend
+npx.cmd playwright test component-diagram-entry.spec.ts --config playwright.phase3.config.ts
+npx.cmd playwright test container-diagrams.spec.ts --config playwright.phase3.config.ts --grep "creates distinct empty children|keeps the parent visible when child loading fails|guards an unsaved owner|opens an external Software System occurrence|keeps a dirty ADR|completes selection, child creation"
+npm.cmd test -- frontend/tests/component-diagram-entry-ui.test.tsx --maxWorkers=2
+git diff --check
+```
+
+- Full Vitest: **104 files, 592 tests passed, zero failures/skips** (38.79 s). After that run, one additional rendered feedback case was added; the final UI batch passed **4/4**. All production changes were included in the full run.
+- Browser: **6/6 Component entry journeys** (22.7 s) and **6/6 existing Container journeys** (32.0 s). These use Playwright request routing into the actual Fastify app with memory repositories (the existing browser harness), separately from real PostgreSQL concurrency evidence. Full real HTTP/PostgreSQL modeling/recovery journey remains T068.
+- Browser runtime: **Google Chrome 154.0.8037.99**, `C:/Program Files/Google/Chrome/Application/chrome.exe`, headless on Windows 11; Node.js **v22.17.1**, existing Playwright **1.62.1**. This is runtime UI evidence for the entry milestone, not offline multi-browser/Safari acceptance.
+- Temporary `playwright.phase3.config.ts` inherited the existing config and changed only workers to 1 and headless settings to true; it was removed after validation. To reproduce the headless run, create that equivalent temporary override or use the normal `playwright.config.ts` browser workflow.
+- Build and explicit frontend TypeScript check: PASS. Whitespace: PASS. Existing Vite chunk warning and pg transaction-query deprecation remain non-failing diagnostics.
+- Visual QA: inspected `test-results/component-entry.png` at 1280×720. The owner-labeled dashed empty boundary, Component heading, read-only title/help, Saved state and parent return are readable within the established workspace styling. Screenshot is an ignored test artifact, regenerated by the browser journey.
+- Test-first evidence: new entry tests were authored before the production changes; the first store run failed because `createOrOpenComponentDiagram` was absent. Corrected invalid test fixture construction and an ambiguous browser Cancel selector during validation. Narrowed the pre-existing group selection source-text assertion to its selection handler so double-click modifier suppression can coexist with Shift-only multiselection.
+- Current React Flow documentation was resolved/fetched through Context7 `/websites/reactflow_dev` for selection/events and synthetic visual nodes; installed packages and lockfile were retained.
+- Sandbox process initialization failed before execution. Approved outside-sandbox commands were used for reads/checks; all local edits used apply_patch. No deployment migration was applied.
+- Post-implementation hooks: `.specify/extensions.yml` is absent; hooks skipped under the implementation skill. Requirements checklist is unchanged; active feature still points to Spec 010.
+
+US1 is independently demonstrable. Full three-level confirmed recovery (US4), Component authoring (US2), list/name synchronization (US3), exports (US5), actual Safari and observed usability acceptance remain pending and are not claimed by this milestone.

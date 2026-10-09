@@ -1,4 +1,4 @@
-import { assertDiagramInvariants, diagramDocumentSchema, getDiagramName, getContainerScope, isC4ArtifactType, type ContainerAvailability, type ContainerContext, type ContainerScope, type DiagramDocument, type DiagramSummary } from '../../../shared/src/index';
+import { assertDiagramInvariants, diagramDocumentSchema, getDiagramName, getContainerScope, getComponentScope, isC4ArtifactType, type ContainerAvailability, type ContainerContext, type ContainerScope, type DiagramDocument, type DiagramSummary } from '../../../shared/src/index';
 import type { DiagramRepositoryLike } from '../persistence/diagram-repository';
 import { GraphTransaction } from '../persistence/graph-transaction';
 import { ApiConflictError, ApiValidationError } from '../api/errors';
@@ -158,11 +158,23 @@ export class ContainerContextService {
     let parentDiagramId = sourceDiagram.id;
     if (selected.role === 'external') {
       if (selected.type !== 'software-system' || !selected.sourceComponentId) throw new ApiValidationError({ componentId:'Only an external Software System can open a container diagram.' });
-      const source = await repository.findComponent(selected.sourceComponentId);
+      let source = await repository.findComponent(selected.sourceComponentId);
       if (!source) throw new ApiConflictError('The external Software System source no longer exists.', 'DIAGRAM_REFERENCE_BROKEN');
+      if (sourceDiagram.kind === 'component') {
+        const scope = getComponentScope(sourceDiagram);
+        const container = scope && await repository.get(scope.parentDiagramId);
+        if (!container || container.kind !== 'container' || container.status !== 'active') throw new ApiConflictError('Restore or repair the immediate Container source before opening its Software System.', 'PARENT_INACTIVE');
+        const containerScope = getContainerScope(container);
+        const ancestor = resolveContainerScope(container, containerScope ? await repository.get(containerScope.parentDiagramId) : undefined);
+        if (source.diagramId !== container.id || source.role !== 'external' || source.type !== 'software-system' || !source.sourceComponentId) throw new ApiConflictError('The immediate Software System source is broken or wrong-level.', 'DIAGRAM_REFERENCE_BROKEN');
+        source = await repository.findComponent(source.sourceComponentId);
+        if (!source || source.diagramId !== ancestor.parent.id || source.role !== 'element' || source.type !== 'software-system' || source.sourceComponentId) throw new ApiConflictError('The canonical Software System source is broken or cyclic.', 'DIAGRAM_REFERENCE_BROKEN');
+      }
       parentDiagramId = source.diagramId;
       const parent = await repository.get(parentDiagramId);
-      owner = parent?.components.find(component => component.id === source.id)!;
+      const canonical = parent?.components.find(component => component.id === source!.id);
+      if (!canonical) throw new ApiConflictError('The Software System owner reference is broken.', 'DIAGRAM_REFERENCE_BROKEN');
+      owner = canonical;
     }
     const parent = await repository.get(parentDiagramId);
     if (!parent || parent.status !== 'active') throw new ApiConflictError('The parent diagram must be active before opening its container diagram.', 'PARENT_INACTIVE');
@@ -186,7 +198,7 @@ export class ContainerContextService {
   }
 }
 
-function findPostgresError(error: unknown): { code?:string; constraint?:string } {
+export function findPostgresError(error: unknown): { code?:string; constraint?:string } {
   const seen = new Set<object>();
   let current = error;
   while (typeof current === 'object' && current !== null && !seen.has(current)) {

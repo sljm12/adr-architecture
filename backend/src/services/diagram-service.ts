@@ -1,9 +1,9 @@
-import { assertDiagramInvariants, diagramCreateSchema, diagramDocumentSchema, isC4ArtifactType, isContainerType, getDiagramOwnerId, getComponentScope, type DiagramDependencyBlocker, type DiagramDocument } from '../../../shared/src/index';
+import { assertDiagramInvariants, diagramCreateSchema, diagramDocumentSchema, isC4ArtifactType, isContainerType, getDiagramOwnerId, getComponentScope, getContainerScope, type ComponentAvailability, type ComponentScope, type DiagramDependencyBlocker, type DiagramDocument } from '../../../shared/src/index';
 import type { AdrDependencyBlocker } from '../../../shared/src/index';
 import type { AdrRepositoryLike } from '../persistence/adr-repository';
 import type { DiagramRepositoryLike, MaybePromise, RemoveComponentResult, RemoveRelationshipResult } from '../persistence/diagram-repository';
 import { ApiValidationError } from '../api/errors';
-import { ContainerContextService } from './container-context';
+import { ContainerContextService, resolveContainerScope, findPostgresError } from './container-context';
 import { ComponentContextService } from './component-context';
 import { GraphTransaction } from '../persistence/graph-transaction';
 import { ApiConflictError } from '../api/errors';
@@ -58,6 +58,71 @@ export class DiagramService {
   containerAvailability(diagramId: string, componentId: string) { return this.containerContext.availability(diagramId, componentId); }
   createOrOpenContainerDiagram(diagramId: string, componentId: string) { return this.containerContext.createOrOpen(diagramId, componentId); }
   containerSourceContext(diagramId: string) { return this.containerContext.context(diagramId); }
+  componentSourceContext(diagramId: string) { return this.componentContext.context(diagramId); }
+
+  async componentAvailability(diagramId: string, componentId: string): Promise<ComponentAvailability> {
+    if (!await this.repository.get(diagramId)) throw new DiagramNotFoundError('Diagram not found');
+    return this.graph.run(diagramId, [], async ({ diagrams }) => {
+      const owner = await this.resolveComponentOwner(diagramId, componentId, diagrams);
+      const child = await diagrams.findContainerForOwner(owner.scope.containerId);
+      if (child) this.assertComponentChild(child, owner.scope);
+      return { parentDiagramId: owner.scope.parentDiagramId, containerId: owner.scope.containerId, availability: !child ? 'none' : child.status === 'active' ? 'active' : 'trashed', diagram: child ? summary({ ...child, name: owner.scope.containerName, scope: owner.scope }) : null };
+    });
+  }
+
+  async createOrOpenComponentDiagram(diagramId: string, componentId: string): Promise<{ document: DiagramDocument; created: boolean }> {
+    if (!await this.repository.get(diagramId)) throw new DiagramNotFoundError('Diagram not found');
+    const open = async (diagrams: DiagramRepositoryLike, create: boolean) => {
+      const owner = await this.resolveComponentOwner(diagramId, componentId, diagrams);
+      const child = await diagrams.findContainerForOwner(owner.scope.containerId);
+      if (child) {
+        this.assertComponentChild(child, owner.scope);
+        if (child.status === 'trashed') throw new ApiConflictError('This container already has a Component diagram in Trash. Restore it before opening.', 'RESTORE_REQUIRED', summary({ ...child, name: owner.scope.containerName, scope: owner.scope }));
+        return { document: await this.componentContext.hydrateAndValidateDocument(child, diagrams), created: false };
+      }
+      if (!create) throw new ApiConflictError('The canonical child changed during creation. Retry from the owning container.', 'DIAGRAM_REFERENCE_BROKEN');
+      const now = new Date().toISOString();
+      const document: DiagramDocument = { id: crypto.randomUUID(), name: owner.scope.containerName, kind: 'component', status: 'active', scope: owner.scope, boundary: { position: { x: 0, y: 0 }, size: { width: 480, height: 320 } }, components: [], relationships: [], groups: [], createdAt: now, updatedAt: now, trashedAt: null };
+      const validated = await this.componentContext.hydrateAndValidateDocument(document, diagrams);
+      return { document: await diagrams.create(validated), created: true };
+    };
+    try { return await this.graph.run(diagramId, [], ({ diagrams }) => open(diagrams, true)); }
+    catch (error) {
+      const pgError = findPostgresError(error);
+      if (pgError.code !== '23505' || pgError.constraint !== 'diagrams_owner_component_unique') throw error;
+      // A failed PostgreSQL transaction cannot be queried. Reread in a new coordinated transaction.
+      return this.graph.run(diagramId, [], ({ diagrams }) => open(diagrams, false));
+    }
+  }
+
+  private assertComponentChild(child: DiagramDocument, scope: ComponentScope): void {
+    const childScope = getComponentScope(child);
+    if (!childScope || childScope.parentDiagramId !== scope.parentDiagramId || childScope.containerId !== scope.containerId || childScope.systemContextDiagramId !== scope.systemContextDiagramId || childScope.softwareSystemId !== scope.softwareSystemId) throw new ApiConflictError('The canonical Component child has a broken owner or ancestor reference. Repair its saved association.', 'DIAGRAM_REFERENCE_BROKEN');
+  }
+
+  private async resolveComponentOwner(diagramId: string, componentId: string, diagrams: DiagramRepositoryLike): Promise<{ scope: ComponentScope }> {
+    const source = await diagrams.get(diagramId);
+    if (!source) throw new DiagramNotFoundError('Diagram not found');
+    if (source.status !== 'active') throw new ApiConflictError('Restore the source diagram and its ancestors before opening a Component diagram.', 'PARENT_INACTIVE');
+    await this.assertActiveAncestors(diagramId, diagrams);
+    const selected = source.components.find(c => c.id === componentId);
+    if (!selected) throw new DiagramNotFoundError('Component not found in this diagram');
+    let parent = source, ownerId = selected.id;
+    if (source.kind === 'component' && selected.role === 'external' && selected.type === 'container') {
+      const context = await this.componentContext.contextFromRepository(source, diagrams);
+      const candidate = context.sources.find(c => c.id === selected.sourceComponentId);
+      if (!candidate || candidate.type !== 'container' || candidate.canonicalSourceComponentId !== candidate.id || candidate.sourceDiagramId !== context.scope.parentDiagramId) throw new ApiConflictError('This supporting container has a broken immediate source. Repair it in its parent Container diagram.', 'DIAGRAM_REFERENCE_BROKEN');
+      parent = (await diagrams.get(candidate.sourceDiagramId))!; ownerId = candidate.id;
+    } else if (source.kind !== 'container' || selected.role !== 'container' || selected.type !== 'container') {
+      throw new ApiValidationError({ componentId: 'Only an internal Application/Datastore or a supporting container can open a Component diagram.' });
+    }
+    const parentScope = getContainerScope(parent);
+    if (!parentScope) throw new ApiConflictError('The owning Container has a broken parent association.', 'DIAGRAM_REFERENCE_BROKEN');
+    const ancestor = resolveContainerScope(parent, await diagrams.get(parentScope.parentDiagramId));
+    const owner = parent.components.find(c => c.id === ownerId);
+    if (!owner || owner.diagramId !== parent.id || owner.role !== 'container' || owner.type !== 'container' || !isContainerType(owner.containerType) || owner.sourceComponentId || !owner.name.trim() || !owner.description?.trim() || !owner.technology?.trim()) throw new ApiConflictError('The owning Application/Datastore reference is missing or ineligible. Repair it in the parent Container.', 'DIAGRAM_REFERENCE_BROKEN');
+    return { scope: { parentDiagramId: parent.id, containerId: owner.id, parentDiagramName: ancestor.owner.name, containerName: owner.name, containerDescription: owner.description, containerTechnology: owner.technology, containerType: owner.containerType, systemContextDiagramId: ancestor.parent.id, softwareSystemId: ancestor.owner.id, softwareSystemName: ancestor.owner.name } };
+  }
   listSummaries(status: 'active' | 'trashed' = 'active') { return this.containerContext.summaries(status); }
 
   create(name: string): MaybePromise<DiagramDocument> {

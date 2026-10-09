@@ -1,4 +1,5 @@
 import { containerAvailabilitySchema, containerContextSchema, diagramDocumentSchema, diagramSummaryListSchema, trashImpactSchema, restoreImpactSchema, type RestoreConfirmation, type RestoreImpact, type TrashImpact, type ContainerAvailability, type ContainerContext, type DiagramDocument, type DiagramSummary } from '../../../shared/src/index';
+import { componentAvailabilitySchema, componentContextSchema, type ComponentAvailability, type ComponentContext } from '../../../shared/src/index';
 export class DiagramApiError extends Error { constructor(message: string, readonly status: number, readonly details: Record<string, unknown> = {}) { super(message); this.name = 'DiagramApiError'; } }
 export function formatDiagramApiError(error: unknown): string {
   if (!(error instanceof DiagramApiError)) return error instanceof Error ? error.message : 'Request failed';
@@ -12,6 +13,9 @@ export type ComponentRemovalConflict = { message: string; componentId: string; r
 const json = async (response: Response) => { const body = await response.json().catch(() => ({})); if (!response.ok) throw new DiagramApiError(body.message ?? 'Request failed', response.status, body); return body; };
 const summaries = async (response: Response): Promise<DiagramSummary[]> => diagramSummaryListSchema.parse(await json(response));
 export const diagramClient = {
+  componentAvailability: async (diagramId: string, componentId: string): Promise<ComponentAvailability> => componentAvailabilitySchema.parse(await json(await fetch(`/api/diagrams/${diagramId}/components/${componentId}/component-diagram`))),
+  componentContext: async (diagramId: string): Promise<ComponentContext> => componentContextSchema.parse(await json(await fetch(`/api/diagrams/${diagramId}/component-context`))),
+  createOrOpenComponentDiagram: async (parentDiagramId: string, containerId: string): Promise<DiagramDocument> => diagramDocumentSchema.parse(await json(await fetch(`/api/diagrams/${parentDiagramId}/components/${containerId}/component-diagram`, { method: 'POST' }))) as DiagramDocument,
   list: () => fetch('/api/diagrams').then(summaries), create: async (name: string) => diagramDocumentSchema.parse(await json(await fetch('/api/diagrams', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) }))) as DiagramDocument, get: async (id: string) => diagramDocumentSchema.parse(await json(await fetch(`/api/diagrams/${id}`))) as DiagramDocument, save: async (d: DiagramDocument) => diagramDocumentSchema.parse(await json(await fetch(`/api/diagrams/${d.id}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(d) }))) as DiagramDocument,
   containerAvailability: async (diagramId: string, componentId: string): Promise<ContainerAvailability> => containerAvailabilitySchema.parse(await json(await fetch(`/api/diagrams/${diagramId}/components/${componentId}/container-diagram`))),
   containerContext: async (diagramId: string): Promise<ContainerContext> => containerContextSchema.parse(await json(await fetch(`/api/diagrams/${diagramId}/container-context`))),

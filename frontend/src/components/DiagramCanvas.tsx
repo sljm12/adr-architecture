@@ -8,6 +8,7 @@ import { RelationshipEdge } from './RelationshipEdge';
 import { SystemGroupNode } from './SystemGroupNode';
 import { ContainerBoundaryNode } from './ContainerBoundaryNode';
 import type { CanvasSelection } from './WorkspaceInspector';
+import { canEnterComponentDiagram } from './ComponentDiagramEntry';
 
 const nodeTypes = { component: ComponentNode, systemGroup: SystemGroupNode, containerBoundary: ContainerBoundaryNode };
 const edgeTypes = { relationship: RelationshipEdge };
@@ -25,16 +26,18 @@ type DiagramCanvasProps = {
   adrCounts?: Record<string, number>;
   onOpenComponentAdrs?: (componentId: string) => void;
   onOpenContainerDiagram?: (componentId: string) => void;
+  onOpenComponentDiagram?: (componentId: string) => void;
   onCreateInteraction?: (source: string, target: string) => void;
 };
 
-export function DiagramCanvas({ onSelection, selectedComponentIds = [], selectedComponentId = null, selectedCandidateComponentId = null, selectedGroupId = null, selectedRelationshipId = null, onMultiSelectionChange, groupingSelectionActive = false, canvasEpoch = 0, adrCounts = {}, onOpenComponentAdrs, onOpenContainerDiagram, onCreateInteraction }: DiagramCanvasProps) {
+export function DiagramCanvas({ onSelection, selectedComponentIds = [], selectedComponentId = null, selectedCandidateComponentId = null, selectedGroupId = null, selectedRelationshipId = null, onMultiSelectionChange, groupingSelectionActive = false, canvasEpoch = 0, adrCounts = {}, onOpenComponentAdrs, onOpenContainerDiagram, onOpenComponentDiagram, onCreateInteraction }: DiagramCanvasProps) {
   const document = useDiagramStore(state => state.document);
   const update = useDiagramStore(state => state.update);
   const applyComponentGeometry = useDiagramStore(state => state.applyComponentGeometry);
   const layoutError = useDiagramStore(state => state.error);
   const dragging = useRef(false);
   const resizing = useRef(false);
+  const suppressDoubleClick = useRef(false);
   const requestContainerOpen = useCallback((componentId: string) => {
     if (onOpenContainerDiagram) onOpenContainerDiagram(componentId);
     else window.dispatchEvent(new CustomEvent('adr:open-container-diagram', { detail: { componentId } }));
@@ -145,6 +148,7 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
   }, [emitSelection, groupingSelectionActive, onMultiSelectionChange]);
 
   const selectNode = useCallback((shiftKey: boolean, node: Node) => {
+    if (node.type !== 'component' && node.type !== 'systemGroup') return;
     if (groupingSelectionActive) return;
     if (shiftKey && node.type !== 'component') return;
     if (shiftKey && selectedGroupId && node.type === 'component') {
@@ -171,7 +175,10 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
     if (node.type === 'systemGroup') emitSelection({ kind: 'group', id: node.id }, `group:${node.id}`);
     else emitSelection({ kind: 'component', id: node.id }, `component:${node.id}`);
   }, [emitSelection, groupingSelectionActive, onMultiSelectionChange, selectedCandidateComponentId, selectedGroupId, selectedIds]);
-  const onNodeClick = useCallback<NodeMouseHandler>((event, node) => selectNode(event.shiftKey, node), [selectNode]);
+  const onNodeClick = useCallback<NodeMouseHandler>((event, node) => {
+    if (event.detail <= 1) suppressDoubleClick.current = selectedIds.size > 1;
+    selectNode(event.shiftKey, node);
+  }, [selectNode, selectedIds]);
   const onNodeKeyDown = useCallback((event: KeyboardEvent<HTMLElement>) => {
     // Child select changes already reach the controlled inspector and keyboard geometry path.
     if (document?.kind === 'container') return;
@@ -189,13 +196,18 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
     }
   }, [document?.kind, nodes, selectNode, emitSelection, onMultiSelectionChange]);
   const onNodeDoubleClick = useCallback<NodeMouseHandler>((event, node) => {
-    if (groupingSelectionActive || event.shiftKey || node.type !== 'component') return;
+    if (groupingSelectionActive || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey || selectedIds.size > 1 || suppressDoubleClick.current || node.type !== 'component') return;
     const component = document?.components.find(item => item.id === node.id);
-    const eligible = component?.type === 'software-system' && (document?.kind === 'container' ? component.role === 'external' : (component.role ?? 'element') === 'element');
+    if (document && component && canEnterComponentDiagram(document, component)) {
+      if (onOpenComponentDiagram) onOpenComponentDiagram(node.id);
+      else window.dispatchEvent(new CustomEvent('adr:open-component-diagram', { detail: { componentId: node.id } }));
+      return;
+    }
+    const eligible = component?.type === 'software-system' && (document?.kind === 'container' || document?.kind === 'component' ? component.role === 'external' : (component.role ?? 'element') === 'element');
     if (!eligible) return;
     if (onOpenContainerDiagram) onOpenContainerDiagram(node.id);
     else window.dispatchEvent(new CustomEvent('adr:open-container-diagram', { detail: { componentId: node.id } }));
-  }, [document, groupingSelectionActive, onOpenContainerDiagram]);
+  }, [document, groupingSelectionActive, onOpenContainerDiagram, onOpenComponentDiagram, selectedIds]);
   const onEdgeClick = useCallback<EdgeMouseHandler>((_, edge) => {
     if (groupingSelectionActive) return;
     onMultiSelectionChange?.([]);
