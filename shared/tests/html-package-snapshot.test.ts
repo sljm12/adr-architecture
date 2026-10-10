@@ -1,3 +1,4 @@
+import { containerOwnerAvailability } from './html-package-input';
 import { describe, expect, it } from 'vitest';
 import { assembleHtmlPackageSnapshot, type HtmlExportSource } from '../src/export/html-package-snapshot';
 import { exportTimestamp } from './html-export-fixtures';
@@ -58,8 +59,9 @@ describe('aggregate HTML snapshot', () => {
     const parent = capture.overrides[fixture.parent.id].diagram;
     const person = parent.components.find(c => c.type === 'person')!;
     person.type = 'software-system'; person.name = 'Captured service';
+    // Source identity is established in saved membership; the draft changes metadata only.
+    child.components.find(c => c.role === 'external')!.sourceComponentId = person.id;
     const draftChild = structuredClone(child);
-    draftChild.components.find(c => c.role === 'external')!.sourceComponentId = person.id;
     capture.overrides[child.id] = { diagram: draftChild };
     const snapshot = assembleHtmlPackageSnapshot(capture, source);
     expect(snapshot.diagrams.find(d => d.diagram.id === child.id)!.diagram.components.find(c => c.role === 'external')).toMatchObject({ id: draftChild.components.find(c => c.role === 'external')!.id, name: 'Captured service', type: 'software-system', sourceComponentId: person.id });
@@ -114,9 +116,9 @@ describe('aggregate HTML snapshot', () => {
   it('exports a direct child using consistent source context and no parent membership', () => {
     const { fixture } = aggregateInput();
     const child = fixture.children.find(d => d.components.length)!;
-    const source: HtmlExportSource = { entryDiagramId: child.id, sourceCapturedAt: exportTimestamp, diagrams: [{ diagram: child, adrs: fixture.adrsByDiagram[child.id] }], availability: [],
-      containerContext: { scope: { ...child.scope!, softwareSystemName: 'Fresh owner' }, capturedAt: exportTimestamp,
-        sources: fixture.parent.components.filter(c => c.id !== child.scope!.softwareSystemId && (c.type === 'person' || c.type === 'software-system')).map(c => ({ id: c.id, name: c.name, description: c.description, type: c.type as 'person' | 'software-system' })) } };
+    const source: HtmlExportSource = { entryDiagramId: child.id, sourceCapturedAt: exportTimestamp, diagrams: [{ diagram: child, adrs: fixture.adrsByDiagram[child.id] }], availability: containerOwnerAvailability([child]),
+      sourceContexts: { [child.id]: { scope: { ...child.scope!, softwareSystemName: 'Fresh owner' }, capturedAt: exportTimestamp,
+        sources: fixture.parent.components.filter(c => c.id !== child.scope!.softwareSystemId && (c.type === 'person' || c.type === 'software-system')).map(c => ({ id: c.id, name: c.name, description: c.description, type: c.type as 'person' | 'software-system' })) } } };
     const draft = structuredClone(child);
     const person = fixture.parent.components.find(c => c.type === 'person')!;
     draft.components.push({ ...draft.components.find(c => c.role === 'external')!, id: crypto.randomUUID(), sourceComponentId: person.id, name: 'Cached name', position: { x: 1000, y: 100 } });
@@ -124,7 +126,7 @@ describe('aggregate HTML snapshot', () => {
     const result = assembleHtmlPackageSnapshot(capture, source);
     expect(result).toMatchObject({ ownerChildren: {}, diagrams: [{ diagram: { name: 'Fresh owner' } }] });
     expect(result.diagrams[0].diagram.components.at(-1)).toMatchObject({ name: person.name, type: 'person', sourceComponentId: person.id, id: draft.components.at(-1)!.id });
-    source.containerContext!.scope.softwareSystemId = crypto.randomUUID();
+    source.sourceContexts[child.id].scope.softwareSystemId = crypto.randomUUID();
     expect(() => assembleHtmlPackageSnapshot(capture, source)).toThrow(/scope/);
   });
 });

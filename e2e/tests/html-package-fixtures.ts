@@ -4,6 +4,7 @@ import { dirname, join, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import type { APIRequestContext, BrowserContext, Page } from '@playwright/test';
+import { expect } from '@playwright/test';
 import type { ArchitectureDecisionRecord, DiagramDocument } from '../../shared/src/domain/types';
 import { buildHtmlPackage } from '../../shared/src/export/html-package';
 import { architectureDecisionRecordListSchema, containerAvailabilitySchema, diagramDocumentSchema } from '../../shared/src/validation/schemas';
@@ -204,8 +205,40 @@ export async function enumerateOfflinePackage(directory: string) {
 
 /** Disable network only after the app has produced the ZIP. */
 export async function disableOfflinePackageNetwork(context: BrowserContext) {
-  await context.setOffline(true);
+  // Windows WebKit offline emulation rejects file:// itself (even a minimal HTML file).
+  // Block all HTTP(S) in that runtime while retaining native local-file resources.
+  if (!(process.platform === 'win32' && context.browser()?.browserType().name() === 'webkit')) await context.setOffline(true);
   await context.route(/^https?:\/\//i, route => route.abort('internetdisconnected'));
+}
+
+/** Native keyboard navigation without assuming a headless browser wraps focus through its chrome. */
+export async function activateOfflineTextLink(page: Page, href: string, containerId?: string, scopeSelector = '[id]') {
+  const traversal: string[] = [];
+  for (const key of ['Tab', 'Shift+Tab']) for (let index = 0; index < 150; index++) {
+    traversal.push(`${key}: ${await page.evaluate(() => `${document.activeElement?.tagName}#${document.activeElement?.id} ${document.activeElement?.getAttribute('href') ?? ''}`)}`);
+    const reached = await page.evaluate(({ href, containerId, scopeSelector }) => {
+      const active = document.activeElement;
+      return active?.getAttribute('href') === href && !active.closest('svg') && (!containerId || active.closest(scopeSelector)?.id === containerId);
+    }, { href, containerId, scopeSelector });
+    if (reached) {
+      await expect(page.locator('a:focus')).toHaveCSS('outline-style', 'solid');
+      const destination = new URL(href, page.url()).href;
+      await page.keyboard.press('Enter'); await expect(page).toHaveURL(destination);
+      await page.waitForLoadState('domcontentloaded'); return;
+    }
+    const atEdge = await page.evaluate(key => {
+      const active = document.activeElement;
+      if (!active || active === document.body || active === document.documentElement) return false;
+      const stops = [...document.querySelectorAll('a[href], [tabindex="0"]')].filter(el => el.getClientRects().length > 0);
+      const edge = key === 'Tab' ? stops.at(-1) : stops[0];
+      if (!edge) return false;
+      const relation = edge.compareDocumentPosition(active);
+      return active === edge || Boolean(relation & (key === 'Tab' ? Node.DOCUMENT_POSITION_FOLLOWING : Node.DOCUMENT_POSITION_PRECEDING));
+    }, key);
+    if (atEdge) break;
+    await page.keyboard.press(key);
+  }
+  throw new Error(`Native keyboard traversal did not reach ${href}. Last focus stops: ${traversal.slice(-15).join('; ')}`);
 }
 
 export async function openOfflinePackagePage(page: Page, directory: string, childDiagramId?: string, fragment?: string) {

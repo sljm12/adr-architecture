@@ -5,7 +5,7 @@ import { getComponentTypeLabel } from '../domain/c4';
 import { hasValidXmlCharacters } from './escaping';
 
 export class MermaidExportError extends Error {
-  constructor(message: string, readonly fields: Record<string, string>, readonly code?: 'EMPTY_CONTAINER_MERMAID') { super(message); this.name = 'MermaidExportError'; }
+  constructor(message: string, readonly fields: Record<string, string>, readonly code?: 'EMPTY_CONTAINER_MERMAID' | 'EMPTY_COMPONENT_MERMAID') { super(message); this.name = 'MermaidExportError'; }
 }
 
 const mermaidId = (id: string) => `component_${id.replaceAll('-', '_')}`;
@@ -38,6 +38,7 @@ export function exportMermaid(document: DiagramDocument): string {
   for (const relationship of document.relationships) if (relationship.protocol) safeText(relationship.protocol, 'Relationship', relationship.id);
   safeText(document.name, 'Diagram', document.id);
   if (document.scope) for (const value of [document.scope.parentDiagramName, document.scope.softwareSystemName, 'softwareSystemDescription' in document.scope ? document.scope.softwareSystemDescription : null]) if (value) safeText(value, 'Diagram', document.id);
+  if (document.scope && 'containerId' in document.scope) for (const value of [document.scope.containerName, document.scope.containerDescription, document.scope.containerTechnology]) if (value) safeText(value, 'Diagram', document.id);
   const parsed = diagramDocumentSchema.safeParse(document);
   if (!parsed.success) {
     const issue = parsed.error.issues[0], collection = issue.path[0], index = issue.path[1];
@@ -50,13 +51,14 @@ export function exportMermaid(document: DiagramDocument): string {
     throw new MermaidExportError('Diagram cannot be exported until validation errors are corrected', groupInvariantFields(parsed.data, message));
   }
   if (parsed.data.kind === 'container' && !parsed.data.components.some(c => c.role === 'container')) throw new MermaidExportError('Add a container or choose SVG/HTML for this empty container diagram.', { document: 'Empty container diagrams support SVG/HTML export.' }, 'EMPTY_CONTAINER_MERMAID');
+  if (parsed.data.kind === 'component' && !parsed.data.components.some(c => c.role === 'component')) throw new MermaidExportError('Add a Component or choose SVG/HTML for this empty Component diagram.', { document: 'Empty Component diagrams support SVG/HTML export.' }, 'EMPTY_COMPONENT_MERMAID');
   if (!parsed.data.components.length) throw new MermaidExportError('Add at least one component before exporting Mermaid.', { document: 'A Mermaid diagram needs at least one component.' });
   for (const component of parsed.data.components) if (component.diagramId !== parsed.data.id) throw new MermaidExportError(`Component ${component.id} does not belong to this diagram`, { [component.id]: 'Use a component from the active diagram.' });
   for (const relationship of parsed.data.relationships) if (relationship.diagramId !== parsed.data.id) throw new MermaidExportError(`Relationship ${relationship.id} does not belong to this diagram`, { [relationship.id]: 'Use a relationship from the active diagram.' });
   for (const group of parsed.data.groups) safeText(group.name, 'Group', group.id, `groups[${parsed.data.groups.indexOf(group)}].name`);
   const groupedComponentIds = new Set(parsed.data.groups.flatMap(group => group.memberComponentIds));
   const componentById = new Map(parsed.data.components.map(component => [component.id, component]));
-  const child = parsed.data.kind === 'container';
+  const child = parsed.data.kind === 'container' || parsed.data.kind === 'component';
   const nodes = parsed.data.components.filter(component => !groupedComponentIds.has(component.id)).map(component => componentNode(component, child));
   const subgraphs = parsed.data.groups.flatMap(group => [
     `  subgraph ${groupMermaidId(group.id)}["${safeText(group.name, 'Group', group.id, `groups[${parsed.data.groups.indexOf(group)}].name`)}"]`,
@@ -71,7 +73,10 @@ export function exportMermaid(document: DiagramDocument): string {
   if (child) {
     const scope = parsed.data.scope!;
     const comment = (value: string) => safeText(value, 'Diagram', parsed.data.id).replaceAll('<br/>', ' ');
-    return ['flowchart TD', `  %% Single-diagram snapshot: ${comment(parsed.data.name)}; Container diagram.`, `  %% Parent ${scope.parentDiagramId}; owner ${scope.softwareSystemId}; ${comment(scope.parentDiagramName)}`, ...parsed.data.components.filter(c => c.role === 'external').map(c => `  %% Occurrence ${c.id}; source ${c.sourceComponentId}`), `  subgraph system_${scope.softwareSystemId.replaceAll('-', '_')}["${safeText(scope.softwareSystemName, 'Diagram', parsed.data.id)}"]`, ...parsed.data.components.filter(c => c.role === 'container').map(c => componentNode(c, true)), '  end', ...parsed.data.components.filter(c => c.role === 'external').map(c => componentNode(c, true)), ...edges, ''].join('\n');
+    const componentLevel = parsed.data.kind === 'component' && 'containerId' in scope;
+    const ownerId = componentLevel ? scope.containerId : scope.softwareSystemId;
+    const ownerName = componentLevel ? scope.containerName : scope.softwareSystemName;
+    return ['flowchart TD', `  %% Single-diagram snapshot: ${comment(parsed.data.name)}; ${componentLevel ? 'Component' : 'Container'} diagram.`, `  %% Parent ${scope.parentDiagramId}; owner ${ownerId}; ${comment(scope.parentDiagramName)}`, ...(componentLevel ? [`  %% Software System ${scope.softwareSystemId}: ${comment(scope.softwareSystemName)}; ${scope.containerType}; ${comment(scope.containerDescription ?? '')}; Technology: ${comment(scope.containerTechnology)}`] : []), ...parsed.data.components.filter(c => c.role === 'external').map(c => `  %% Occurrence ${c.id}; source ${c.sourceComponentId}`), `  subgraph ${componentLevel ? 'container' : 'system'}_${ownerId.replaceAll('-', '_')}["${safeText(ownerName, 'Diagram', parsed.data.id)}"]`, ...parsed.data.components.filter(c => c.role === (componentLevel ? 'component' : 'container')).map(c => componentNode(c, true)), '  end', ...parsed.data.components.filter(c => c.role === 'external').map(c => componentNode(c, true)), ...edges, ''].join('\n');
   }
   return ['flowchart TD', '  %% Single-diagram snapshot. Child container contents are not bundled.', '  %% Semantic group membership is preserved; exact canvas positions are not exported.', ...nodes, ...subgraphs, ...edges, ''].join('\n');
 }

@@ -97,6 +97,10 @@ type State = {
 const history = new BoundedHistory<DiagramDocument>();
 let savedMetadata: DiagramDocument | null = null;
 const retained = new Map<string, { document: DiagramDocument; history: ReturnType<typeof history.snapshot>; context: SourceContext | null }>();
+/** Read-only export capture; never restores or advances editor history. */
+export function getRetainedExportDiagrams(): Record<string, DiagramDocument> {
+  return structuredClone(Object.fromEntries([...retained].map(([id, value]) => [id, value.document])));
+}
 const authoredContent = (document: DiagramDocument) => JSON.stringify({
   name: isScoped(document) ? undefined : document.name, boundary: document.boundary, groups: document.groups,
   components: document.components.map(({ createdAt, updatedAt, ...component }) => component.role === 'external' ? { ...component, name: undefined, description: undefined, type: undefined, technology: undefined, containerType: undefined } : component),

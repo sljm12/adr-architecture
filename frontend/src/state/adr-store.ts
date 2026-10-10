@@ -63,6 +63,10 @@ type State = {
 
 const history = new BoundedHistory<AdrDraft>();
 const retainedAdrs = new Map<string, { draft: AdrDraft; records: AdrSummary[]; history: ReturnType<typeof history.snapshot> }>();
+/** Only drafts that navigation actually retained are available to export. */
+export function getRetainedExportAdrDrafts(): Record<string, AdrDraft> {
+  return structuredClone(Object.fromEntries([...retainedAdrs].map(([id, value]) => [id, value.draft])));
+}
 let listRequest = 0;
 let pendingSaves = 0;
 const copy = (draft: AdrDraft) => structuredClone(draft);

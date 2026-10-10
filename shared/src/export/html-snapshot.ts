@@ -102,7 +102,7 @@ export function validateExportDiagram(input: DiagramDocument): DiagramDocument {
 
   validateText(diagram.name, 'diagram', diagram.id, 'name');
   for (const component of diagram.components) {
-    if (component.role !== 'container' && component.type !== null && !isC4ArtifactType(component.type)) {
+    if (component.role !== 'container' && component.role !== 'component' && !(diagram.kind === 'component' && component.role === 'external' && component.type === 'container') && component.type !== null && !isC4ArtifactType(component.type)) {
       throw new HtmlExportError('component', component.id, 'type', `Unsupported component type "${component.type}". Use Person or Software System, or clear the type.`);
     }
     validateText(component.name, 'component', component.id, 'name');
@@ -113,6 +113,7 @@ export function validateExportDiagram(input: DiagramDocument): DiagramDocument {
     validateText(diagram.scope.parentDiagramName, 'diagram', diagram.id, 'scope.parentDiagramName');
     validateText(diagram.scope.softwareSystemName, 'diagram', diagram.id, 'scope.softwareSystemName');
     if ('softwareSystemDescription' in diagram.scope) validateText(diagram.scope.softwareSystemDescription, 'diagram', diagram.id, 'scope.softwareSystemDescription');
+    if ('containerId' in diagram.scope) for (const field of ['containerName', 'containerDescription', 'containerTechnology'] as const) validateText(diagram.scope[field], 'diagram', diagram.id, `scope.${field}`);
   }
   for (const relationship of diagram.relationships) { validateText(relationship.label, 'relationship', relationship.id, 'label'); validateText(relationship.protocol ?? null, 'relationship', relationship.id, 'protocol'); }
   for (const group of diagram.groups ?? []) validateText(group.name, 'group', group.id, 'name');

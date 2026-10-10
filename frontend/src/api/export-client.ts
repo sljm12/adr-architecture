@@ -1,5 +1,5 @@
 import type { HtmlExportInput, HtmlPackageCapture } from '../../../shared/src/index';
-import { assembleHtmlPackageSnapshot, renderAggregateHtmlPackage, containerContextSchema, validateExportDiagram, assertSafePackagePath } from '../../../shared/src/index';
+import { assembleHtmlPackageSnapshot, renderAggregateHtmlPackage, componentContextSchema, containerContextSchema, validateExportDiagram, assertSafePackagePath, getDiagramOwnerId } from '../../../shared/src/index';
 import { DiagramApiError, diagramClient } from './diagram-client';
 
 export type HtmlExportStage = 'gathering' | 'validating' | 'rendering' | 'archiving';
@@ -7,18 +7,18 @@ let htmlExportInProgress = false;
 
 export async function resolveContainerExportInput(input: HtmlExportInput): Promise<HtmlExportInput> {
   const captured = structuredClone(input);
-  if (captured.diagram.kind !== 'container') return captured;
-  const context = containerContextSchema.parse(await diagramClient.containerContext(captured.diagram.id));
+  if (captured.diagram.kind !== 'container' && captured.diagram.kind !== 'component') return captured;
+  const context = captured.diagram.kind === 'component' ? componentContextSchema.parse(await diagramClient.componentContext(captured.diagram.id)) : containerContextSchema.parse(await diagramClient.containerContext(captured.diagram.id));
   const scope = captured.diagram.scope;
-  if (!scope || context.scope.parentDiagramId !== scope.parentDiagramId || context.scope.softwareSystemId !== scope.softwareSystemId) throw new Error('Export source context did not match the captured container scope. Refresh source details and retry.');
+  if (!scope || context.scope.parentDiagramId !== scope.parentDiagramId || getDiagramOwnerId({ kind: captured.diagram.kind, scope: context.scope }) !== getDiagramOwnerId(captured.diagram)) throw new Error('Export source context did not match the captured scope. Refresh source details and retry.');
   const sources = new Map(context.sources.map(source => [source.id, source]));
   captured.diagram.scope = context.scope;
-  captured.diagram.name = context.scope.softwareSystemName;
+  captured.diagram.name = 'containerId' in context.scope ? context.scope.containerName : context.scope.softwareSystemName;
   captured.diagram.components = captured.diagram.components.map(component => {
     if (component.role !== 'external') return component;
     const source = sources.get(component.sourceComponentId!);
     if (!source) throw new Error(`External participant ${component.id} has no eligible source. Repair its parent reference and retry export.`);
-    return { ...component, name: source.name, description: source.description, type: source.type };
+    return { ...component, name: source.name, description: source.description, type: source.type, ...('containerType' in source ? { containerType: source.containerType, technology: source.technology } : {}) };
   });
   captured.diagram = validateExportDiagram(captured.diagram);
   return captured;

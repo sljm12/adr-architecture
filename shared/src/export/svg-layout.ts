@@ -1,6 +1,7 @@
 import type { Component, DiagramDocument, Position, Relationship } from '../domain/types';
 import { fitContainerLayout } from '../domain/container-layout';
 import { containerLabelLines, wrapExportText } from './container-labels';
+import { getDiagramName } from '../domain/diagram-name';
 
 export type ExportRect = Position & { width: number; height: number };
 export type ExportPoint = Position;
@@ -91,14 +92,15 @@ function createRoute(relationship: Relationship, components: Map<string, Compone
 /** Calculates a stable SVG layout using validated domain positions and sizes. */
 export function layoutDiagramForSvg(diagram: DiagramDocument): DiagramSvgLayout {
   let boundaryRect: ExportRect | undefined;
-  if (diagram.kind === 'container') {
+  if (diagram.kind === 'container' || diagram.kind === 'component') {
+    const internalRole = diagram.kind === 'component' ? 'component' : 'container';
     const labelGap = Math.max(24, ...diagram.relationships.map(relationship => 24 + wrapExportText([relationship.label, relationship.protocol].filter(Boolean).join('\n'), 260).length * 18));
     let grown = diagram.components.map(component => {
       const width = Math.max(component.size.width, 280), height = Math.max(component.size.height, 32 + containerLabelLines(component, width).length * 18);
       return { ...component, size: { width, height } };
     });
     const placed: Component[] = [];
-    for (const component of grown.filter(c => c.role === 'container').sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x || a.id.localeCompare(b.id))) {
+    for (const component of grown.filter(c => c.role === internalRole).sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x || a.id.localeCompare(b.id))) {
       let candidate = component;
       for (;;) {
         const collisions = placed.filter(other => candidate.position.x < other.position.x + other.size.width && candidate.position.x + candidate.size.width > other.position.x && candidate.position.y < other.position.y + other.size.height && candidate.position.y + candidate.size.height > other.position.y);
@@ -109,9 +111,9 @@ export function layoutDiagramForSvg(diagram: DiagramDocument): DiagramSvgLayout 
     }
     const internalById = new Map(placed.map(component => [component.id, component]));
     grown = grown.map(component => internalById.get(component.id) ?? component);
-    const internal = grown.filter(c => c.role === 'container');
+    const internal = grown.filter(c => c.role === internalRole);
     let fitted = fitContainerLayout(internal, grown.filter(c => c.role === 'external'));
-    const headerLines = wrapExportText(diagram.scope?.softwareSystemName ?? '', fitted.boundary.size.width);
+    const headerLines = wrapExportText(getDiagramName(diagram) ?? '', fitted.boundary.size.width);
     const extraHeaderHeight = Math.max(0, headerLines.length - 1) * 18;
     if (extraHeaderHeight) {
       // A render-only envelope reserves every owner-label line while retaining the original body bounds.
@@ -142,10 +144,10 @@ export function layoutDiagramForSvg(diagram: DiagramDocument): DiagramSvgLayout 
   const labelObstacles: ExportRect[] = [
     ...componentRects.values(),
     ...(diagram.groups ?? []).map(group => ({ ...groupRects.get(group.id)!, width: Math.min(group.size.width, 28 + Array.from(group.name).length * 12), height: 44 })),
-    ...(boundaryRect ? [{ ...boundaryRect, width: Math.min(boundaryRect.width, 28 + Math.max(...wrapExportText(diagram.scope?.softwareSystemName ?? '', boundaryRect.width).map(line => Array.from(line).length)) * 12), height: 14 + wrapExportText(diagram.scope?.softwareSystemName ?? '', boundaryRect.width).length * 18 }] : []),
+    ...(boundaryRect ? [{ ...boundaryRect, width: Math.min(boundaryRect.width, 28 + Math.max(...wrapExportText(getDiagramName(diagram) ?? '', boundaryRect.width).map(line => Array.from(line).length)) * 12), height: 14 + wrapExportText(getDiagramName(diagram) ?? '', boundaryRect.width).length * 18 }] : []),
   ];
   for (const route of relationshipRoutes) {
-    const text = [route.relationship.label, ...(diagram.kind === 'container' ? [route.relationship.protocol] : [])].filter(Boolean).join('\n');
+    const text = [route.relationship.label, ...(diagram.scope ? [route.relationship.protocol] : [])].filter(Boolean).join('\n');
     if (!text) continue;
     const height = wrapExportText(text, 260).length * 18;
     let labelRect = { x: route.label.x - 130, y: route.label.y - 14, width: 260, height };

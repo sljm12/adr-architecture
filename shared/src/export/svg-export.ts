@@ -3,7 +3,8 @@ import { escapeMarkup } from './escaping';
 import { formatSvgNumber, layoutDiagramForSvg } from './svg-layout';
 import { validateExportDiagram } from './html-snapshot';
 import { containerLabelLines, wrapExportText } from './container-labels';
-import { getComponentTypeLabel } from '../domain/c4';
+import { getComponentTypeLabel, getDiagramOwnerId } from '../domain/c4';
+import { getDiagramName } from '../domain/diagram-name';
 
 export type SvgExportOptions = { standalone?: boolean };
 
@@ -66,7 +67,7 @@ export function renderDiagramSvg(diagram: DiagramDocument, options: SvgExportOpt
   }).join('');
   const relationships = layout.relationshipRoutes.map(route => {
     const relationship = route.relationship;
-    const labelText = [relationship.label, ...(diagram.kind === 'container' ? [relationship.protocol] : [])].filter(Boolean).join('\n');
+    const labelText = [relationship.label, ...(diagram.scope ? [relationship.protocol] : [])].filter(Boolean).join('\n');
     const label = labelText
       ? `<text class="relationship-label" x="${formatSvgNumber(route.label.x)}" y="${formatSvgNumber(route.label.y)}" text-anchor="middle">${wrapExportText(labelText, 260).map((line, index) => `<tspan x="${formatSvgNumber(route.label.x)}" dy="${index ? 18 : 0}">${escapeMarkup(line)}</tspan>`).join('')}</text>`
       : '';
@@ -77,15 +78,15 @@ export function renderDiagramSvg(diagram: DiagramDocument, options: SvgExportOpt
     return `<a href="#relationship-${relationship.id}" class="diagram-relationship-link" tabindex="0" aria-label="${escapeMarkup(accessibleLabel)}"><g id="visual-relationship-${relationship.id}" class="diagram-relationship" data-artifact-id="${relationship.id}"><path class="relationship-path" d="${route.path}"/>${arrow}${label}</g></a>`;
   }).map((markup, index) => options.standalone ? `<g id="relationship-${layout.relationshipRoutes[index].relationship.id}">${markup}</g>` : markup).join('');
   const components = diagram.components.map(component => {
-    const markup = componentMarkup(component, layout.componentRects.get(component.id)!, diagram.kind === 'container');
+    const markup = componentMarkup(component, layout.componentRects.get(component.id)!, diagram.kind === 'container' || diagram.kind === 'component');
     return options.standalone ? `<g id="component-${component.id}">${markup}</g>` : markup;
   }).join('');
   const rect = layout.boundaryRect;
-  const boundary = rect && diagram.scope ? `<g class="system-boundary" role="group" aria-label="${escapeMarkup(`Software System boundary for ${diagram.scope.softwareSystemName}`)}" data-parent-diagram-id="${diagram.scope.parentDiagramId}" data-owner-component-id="${diagram.scope.softwareSystemId}"><rect class="system-group-shape" x="${formatSvgNumber(rect.x)}" y="${formatSvgNumber(rect.y)}" width="${formatSvgNumber(rect.width)}" height="${formatSvgNumber(rect.height)}" rx="8"/><text class="system-group-label" x="${formatSvgNumber(rect.x + 14)}" y="${formatSvgNumber(rect.y + 28)}">${wrapExportText(diagram.scope.softwareSystemName, rect.width).map((line, index) => `<tspan x="${formatSvgNumber(rect.x + 14)}" dy="${index ? 18 : 0}">${escapeMarkup(line)}</tspan>`).join('')}</text></g>` : '';
+  const boundary = rect && diagram.scope ? `<g class="system-boundary" role="group" aria-label="${escapeMarkup(`${diagram.kind === 'component' ? 'Container' : 'Software System'} boundary for ${getDiagramName(diagram)}`)}" data-parent-diagram-id="${diagram.scope.parentDiagramId}" data-owner-component-id="${getDiagramOwnerId(diagram)}"><rect class="system-group-shape" x="${formatSvgNumber(rect.x)}" y="${formatSvgNumber(rect.y)}" width="${formatSvgNumber(rect.width)}" height="${formatSvgNumber(rect.height)}" rx="8"/><text class="system-group-label" x="${formatSvgNumber(rect.x + 14)}" y="${formatSvgNumber(rect.y + 28)}">${wrapExportText(getDiagramName(diagram), rect.width).map((line, index) => `<tspan x="${formatSvgNumber(rect.x + 14)}" dy="${index ? 18 : 0}">${escapeMarkup(line)}</tspan>`).join('')}</text></g>` : '';
   const standaloneStyle = options.standalone ? `<style>
-    .component-shape{fill:#fff;stroke:#707780;stroke-width:2}.component-person-shape{stroke-dasharray:6 4}.component-type-software-system .component-shape{stroke-dasharray:none}.component-type-person .component-shape{stroke-dasharray:6 4}.component-type-unclassified .component-shape{stroke-dasharray:2 3}.component-type-label,.system-group-label{font:600 12px system-ui,sans-serif;fill:#5f6368}.component-name{font:600 15px system-ui,sans-serif;fill:#1d1d1f}.system-group-shape{fill:#f5f5f7;fill-opacity:.5;stroke:#7a7a7a;stroke-width:2;stroke-dasharray:8 6}.relationship-path{fill:none;stroke:#5f6368;stroke-width:2}.relationship-arrow{fill:#5f6368}.relationship-label{font:600 13px system-ui,sans-serif;fill:#1d1d1f;paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+    .component-shape{fill:#fff;stroke:#707780;stroke-width:2}.diagram-component-link:focus-visible .component-shape,.diagram-relationship-link:focus-visible .relationship-path{stroke:#0071e3;stroke-width:4}.component-person-shape{stroke-dasharray:6 4}.component-type-software-system .component-shape{stroke-dasharray:none}.component-type-person .component-shape{stroke-dasharray:6 4}.component-type-unclassified .component-shape{stroke-dasharray:2 3}.component-type-label,.system-group-label{font:600 12px system-ui,sans-serif;fill:#5f6368}.component-name{font:600 15px system-ui,sans-serif;fill:#1d1d1f}.system-group-shape{fill:#f5f5f7;fill-opacity:.5;stroke:#7a7a7a;stroke-width:2;stroke-dasharray:8 6}.relationship-path{fill:none;stroke:#5f6368;stroke-width:2}.relationship-arrow{fill:#5f6368}.relationship-label{font:600 13px system-ui,sans-serif;fill:#1d1d1f;paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
   </style>` : '';
-  const scopeText = diagram.scope ? `Container diagram for ${diagram.scope.softwareSystemName}; parent ${diagram.scope.parentDiagramName}.` : 'Single-diagram snapshot. Child container contents are not bundled.';
+  const scopeText = diagram.scope ? `${diagram.kind === 'component' ? 'Component' : 'Container'} diagram for ${getDiagramName(diagram)}; parent ${diagram.scope.parentDiagramName}; Software System ${diagram.scope.softwareSystemName}.${'containerId' in diagram.scope ? ` ${diagram.scope.containerType}; ${diagram.scope.containerDescription}; Technology: ${diagram.scope.containerTechnology}.` : ''}` : 'Single-diagram snapshot. Child container contents are not bundled.';
   const title = `<title id="architecture-diagram-title">Architecture diagram: ${escapeMarkup(diagram.name)}</title><desc id="architecture-diagram-scope">${escapeMarkup(scopeText)}</desc>`;
   const width = formatSvgNumber(viewBox.width), height = formatSvgNumber(viewBox.height);
   const content = `<g class="diagram-groups">${boundary}${groups}</g><g class="diagram-relationships">${relationships}</g><g class="diagram-components">${components}</g>`;

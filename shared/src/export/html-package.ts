@@ -22,6 +22,7 @@ export function renderHtmlPackage(snapshot: HtmlExportSnapshot): HtmlPackageFile
     if (Object.hasOwn(files, path)) throw new Error(`Duplicate HTML package path: ${path}`);
     files[path] = renderAdrMarkdown(snapshot, adr);
   }
+  validatePackageReferences(files, snapshot.diagram.id);
   return files;
 }
 

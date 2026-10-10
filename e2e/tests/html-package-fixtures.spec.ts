@@ -6,8 +6,8 @@ import { disableOfflinePackageNetwork, extractHtmlPackageArchive, openOfflinePac
 test('offline helpers support native root/nested file navigation with network disabled after relocation', async ({ page, context }, testInfo) => {
   const childId = '90000000-0000-4000-8000-000000000008';
   const zip = new JSZip();
-  zip.file('index.html', `<html><body><h1 id="owner">Parent</h1><a href="diagrams/${childId}/index.html">Child</a></body></html>`);
-  zip.file(`diagrams/${childId}/index.html`, '<html><body><h1>Child</h1><a href="../../index.html#owner">Parent</a></body></html>');
+  zip.file('index.html', `<html><body><h1 id="owner">Parent</h1><a tabindex="0" href="diagrams/${childId}/index.html">Child</a></body></html>`);
+  zip.file(`diagrams/${childId}/index.html`, '<html><body><h1>Child</h1><a tabindex="0" href="../../index.html#owner">Parent</a></body></html>');
   const { directory } = await extractHtmlPackageArchive(await zip.generateAsync({ type: 'nodebuffer' }), testInfo.outputPath('package'));
   await disableOfflinePackageNetwork(context);
   await openOfflinePackagePage(page, directory);

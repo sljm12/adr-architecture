@@ -1,3 +1,4 @@
+import { containerOwnerAvailability } from '../../../shared/tests/html-package-input';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/api/app';
 import { htmlExportSourceSchema } from '../../../shared/src/index';
@@ -20,22 +21,22 @@ describe('GET HTML export source', () => {
     const body = htmlExportSourceSchema.parse(response.json());
     expect(body.diagrams.map(member => member.diagram.id)).toEqual(fixture.expected.diagramIds);
     for (const member of body.diagrams) expect(member.adrs).toEqual(fixture.adrsByDiagram[member.diagram.id]);
-    expect(body.availability).toMatchObject(fixture.availability);
-    expect(body.containerContext).toBeNull();
+    expect(body.availability.filter(a => 'softwareSystemId' in a)).toMatchObject(fixture.availability);
+    expect(Object.keys(body.sourceContexts).sort()).toEqual(fixture.children.map(c => c.id).sort());
   });
   it('returns only a selected child plus every eligible source, including unused sources', async () => {
     const { fixture, get } = setup(); const child = fixture.children.find(child => child.components.length)!;
     const response = await get(child.id); expect(response.statusCode).toBe(200);
     const body = htmlExportSourceSchema.parse(response.json());
     expect(body.diagrams.map(member => member.diagram.id)).toEqual([child.id]);
-    expect(body.availability).toEqual([]);
-    expect(body.containerContext?.scope).toMatchObject(child.scope!);
-    expect(body.containerContext?.sources.map(source => source.id).sort()).toEqual(fixture.parent.components.filter(component => component.id !== child.scope!.softwareSystemId && ['person', 'software-system'].includes(component.type!)).map(component => component.id).sort());
+    expect(body.availability).toEqual(containerOwnerAvailability([child]));
+    expect(body.sourceContexts[child.id].scope).toMatchObject(child.scope!);
+    expect(body.sourceContexts[child.id].sources.map(source => source.id).sort()).toEqual(fixture.parent.components.filter(component => component.id !== child.scope!.softwareSystemId && ['person', 'software-system'].includes(component.type!)).map(component => component.id).sort());
   });
   it('preserves no-child and legacy general entries', async () => {
     const { diagrams, get } = setup(); const legacy = exportDiagramFixture(); diagrams.create(legacy);
     const response = await get(legacy.id); expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ entryDiagramId: legacy.id, diagrams: [{ diagram: { kind: 'general' }, adrs: [] }], containerContext: null });
+    expect(response.json()).toMatchObject({ entryDiagramId: legacy.id, diagrams: [{ diagram: { kind: 'general' }, adrs: [] }], sourceContexts: {} });
     expect(response.json().availability.every((item: any) => item.availability === 'none')).toBe(true);
   });
   it('does not read global lists or hydrate unrelated corrupt diagrams', async () => {
@@ -56,7 +57,7 @@ describe('GET HTML export source', () => {
   it('fails the entire source when an expected active child cannot load', async () => {
     const { fixture, get } = setup(repository => ({ get: id => id === ids.emptyChild ? undefined : repository.get(id) }));
     const response = await get(); expect(response.statusCode).toBe(409);
-    expect(response.json()).toMatchObject({ code: 'HTML_EXPORT_SOURCE_INCOMPLETE', diagramId: fixture.children[0].id, artifactId: fixture.children[0].id, field: 'diagram', remedy: expect.any(String) });
+    expect(response.json()).toMatchObject({ code: 'HTML_EXPORT_INCOMPLETE', diagramId: fixture.children[0].id, artifactId: fixture.children[0].id, field: 'diagram', remedy: expect.any(String) });
     expect(response.json()).not.toHaveProperty('diagrams');
   });
   it.each(['owner', 'source'])('returns 409 identifying a broken %s', async kind => {
@@ -70,19 +71,19 @@ describe('GET HTML export source', () => {
     }
     parent.groups = []; parent.components.find(component => component.id === target)!.type = null; diagrams.replace(parent);
     const response = await get(); expect(response.statusCode).toBe(409);
-    expect(response.json()).toMatchObject({ code: 'HTML_EXPORT_SOURCE_INCOMPLETE', diagramId: child.id, artifactKind: 'component', artifactId: kind === 'owner' ? target : child.components.find(component => component.role === 'external')!.id, field: kind === 'owner' ? 'scope.softwareSystemId' : 'sourceComponentId' });
+    expect(response.json()).toMatchObject({ code: 'HTML_EXPORT_INCOMPLETE', diagramId: child.id, artifactKind: 'component', artifactId: kind === 'owner' ? target : child.components.find(component => component.role === 'external')!.id, field: kind === 'owner' ? 'scope.softwareSystemId' : 'sourceComponentId' });
   });
   it('returns artifact-specific 422 for unsupported saved content', async () => {
     const { fixture, get } = setup(repository => ({ get: async id => {
       const document = await repository.get(id); if (document && id === ids.parentDiagram) { document.groups = []; document.components[0].type = 'unsupported'; } return document;
     } }));
     const response = await get(); expect(response.statusCode).toBe(422);
-    expect(response.json()).toMatchObject({ code: 'HTML_EXPORT_VALIDATION_FAILED', diagramId: fixture.parent.id, artifactKind: 'component', artifactId: fixture.parent.components[0].id, field: 'type' });
+    expect(response.json()).toMatchObject({ code: 'HTML_EXPORT_INCOMPLETE', diagramId: fixture.parent.id, artifactKind: 'component', artifactId: fixture.parent.components[0].id, field: 'type' });
   });
   it('returns safe scoped 500 without leaking read failures or partial members', async () => {
     const { fixture, get } = setup(repository => ({ get: id => { if (id !== ids.parentDiagram) throw new Error('private database detail'); return repository.get(id); } }));
     const response = await get(); expect(response.statusCode).toBe(500);
-    expect(response.json()).toMatchObject({ code: 'HTML_EXPORT_SOURCE_FAILED', diagramId: fixture.children[0].id, field: 'source', remedy: expect.any(String) });
+    expect(response.json()).toMatchObject({ code: 'HTML_EXPORT_INCOMPLETE', diagramId: fixture.children[0].id, field: 'source', remedy: expect.any(String) });
     expect(response.body).not.toContain('private database detail'); expect(response.json()).not.toHaveProperty('diagrams');
   });
   it('rejects broken saved ADR artifact and replacement links before returning a source', async () => {
@@ -97,7 +98,7 @@ describe('GET HTML export source', () => {
   it('returns a valid empty directly selected child and no bundled navigation scope', async () => {
     const { fixture, get } = setup(); const child = fixture.children.find(child => !child.components.length)!;
     const response = await get(child.id); expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ diagrams: [{ diagram: { id: child.id, components: [], relationships: [], boundary: child.boundary }, adrs: [] }], availability: [], containerContext: { scope: child.scope } });
+    expect(response.json()).toMatchObject({ diagrams: [{ diagram: { id: child.id, components: [], relationships: [], boundary: child.boundary }, adrs: [] }], availability: [], sourceContexts: { [child.id]: { scope: child.scope } } });
     expect(response.json().diagrams).toHaveLength(1);
   });
   it.each(['scope', 'date', 'geometry', 'text', 'duplicate-ID'])('reports invalid saved child %s without partial content', async kind => {

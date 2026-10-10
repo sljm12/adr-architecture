@@ -23,4 +23,4 @@ export function wrapExportText(value: string, width: number): string[] {
     return [...lines, line];
   });
 }
-export const containerLabelLines = (component: Component, width: number) => [getComponentTypeLabel(component), component.name, component.description, component.technology ? `Technology: ${component.technology}` : null].filter((text): text is string => Boolean(text)).flatMap(text => wrapExportText(text, width));
+export const containerLabelLines = (component: Component, width: number) => [getComponentTypeLabel(component), component.role === 'external' ? 'Supporting participant' : null, component.name, component.description, component.technology ? `Technology: ${component.technology}` : null].filter((text): text is string => Boolean(text)).flatMap(text => wrapExportText(text, width));

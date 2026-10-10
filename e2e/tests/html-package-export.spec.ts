@@ -1,3 +1,4 @@
+import { containerOwnerAvailability } from '../../shared/tests/html-package-input';
 import { test, expect } from '@playwright/test';
 import JSZip from 'jszip';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -5,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { buildHtmlPackage } from '../../shared/src/export/html-package';
-import { disableOfflinePackageNetwork, openOfflinePackagePage, preparePersistedHtmlPackageFixture, downloadAndExtractOfflinePackage, offlineDiagram, offlineTimestamp, renderScaleOfflinePackage } from './html-package-fixtures';
+import { activateOfflineTextLink, disableOfflinePackageNetwork, openOfflinePackagePage, preparePersistedHtmlPackageFixture, downloadAndExtractOfflinePackage, offlineDiagram, offlineTimestamp, renderScaleOfflinePackage } from './html-package-fixtures';
 import { aggregateInput } from '../../shared/tests/html-package-input';
 import { diagramDocumentSchema } from '../../shared/src/index';
 
@@ -43,24 +44,11 @@ async function mockDiagramApi(page: import('@playwright/test').Page) {
   await page.route(`**/api/diagrams/${ids.diagram}/component-adr-counts`, route => route.fulfill({ contentType: 'application/json', body: JSON.stringify([{ componentId: ids.component, count: 1 }]) }));
   await page.route(`**/api/diagrams/${ids.diagram}/adrs/full`, route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(fullAdrs) }));
   await page.route(`**/api/diagrams/${ids.diagram}/export/html-source`, route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ entryDiagramId: ids.diagram, sourceCapturedAt: timestamp,
-    diagrams: [{ diagram: diagramDocumentSchema.parse(diagram), adrs: fullAdrs }], containerContext: null,
+    diagrams: [{ diagram: diagramDocumentSchema.parse(diagram), adrs: fullAdrs }], sourceContexts: {},
     availability: diagram.components.map(c => ({ parentDiagramId: ids.diagram, softwareSystemId: c.id, availability: 'none', diagram: null })) }) }));
 }
 
-async function tabToHref(page: import('@playwright/test').Page, href: string) {
-  for (let index = 0; index < 100; index++) {
-    await page.keyboard.press('Tab');
-    if (await page.evaluate(expected => document.activeElement?.getAttribute('href') === expected && !document.activeElement?.closest('svg'), href)) {
-      await expect(page.locator('a:focus')).toHaveCSS('outline-style', 'solid');
-      const destination = new URL(href, page.url()).href;
-      await page.keyboard.press('Enter');
-      await expect(page).toHaveURL(destination);
-      await page.waitForLoadState('domcontentloaded');
-      return;
-    }
-  }
-  throw new Error(`Native Tab navigation could not reach ${href}`);
-}
+async function tabToHref(page: import('@playwright/test').Page, href: string) { await activateOfflineTextLink(page, href); }
 
 test('exports the persisted parent and two children with exact offline ADR and native keyboard owner/source navigation', async ({ page, request, context }) => {
   const fixture = await preparePersistedHtmlPackageFixture(request, '/api');
@@ -132,7 +120,7 @@ for (const empty of [false, true]) test(`direct ${empty ? 'empty' : 'populated'}
   const { fixture } = aggregateInput();
   const child = fixture.children.find(d => Boolean(d.components.length) !== empty)!;
   const containerContext = { scope: child.scope, capturedAt: timestamp, sources: fixture.parent.components.filter(c => c.id !== child.scope!.softwareSystemId && (c.type === 'person' || c.type === 'software-system')).map(c => ({ id: c.id, name: c.name, description: c.description, type: c.type })) };
-  const source = { entryDiagramId: child.id, sourceCapturedAt: timestamp, diagrams: [{ diagram: child, adrs: fixture.adrsByDiagram[child.id] }], availability: [], containerContext };
+  const source = { entryDiagramId: child.id, sourceCapturedAt: timestamp, diagrams: [{ diagram: child, adrs: fixture.adrsByDiagram[child.id] }], availability: containerOwnerAvailability([child]), sourceContexts: { [child.id]: containerContext } };
   await page.route(/^https?:\/\/[^/]+\/api\//, async route => {
     const path = new URL(route.request().url()).pathname;
     const value = path.endsWith('/export/html-source') ? source : path.endsWith('/container-context') ? containerContext

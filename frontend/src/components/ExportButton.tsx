@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
 import { exportClient } from '../api/export-client';
 import { DiagramApiError } from '../api/diagram-client';
-import { useDiagramStore, type SaveStatus } from '../state/diagram-store';
-import { useAdrStore, type AdrDraft, type AdrSaveStatus } from '../state/adr-store';
+import { getRetainedExportDiagrams, useDiagramStore, type SaveStatus } from '../state/diagram-store';
+import { getRetainedExportAdrDrafts, useAdrStore, type AdrDraft, type AdrSaveStatus } from '../state/adr-store';
 import type { DiagramDocument, HtmlExportInput, HtmlPackageCapture } from '../../../shared/src/index';
 
 export function captureHtmlExportInput(diagram: DiagramDocument, draft: AdrDraft | null): HtmlExportInput {
@@ -10,8 +10,11 @@ export function captureHtmlExportInput(diagram: DiagramDocument, draft: AdrDraft
 }
 
 export function captureHtmlPackage(diagram: DiagramDocument, draft: AdrDraft | null): HtmlPackageCapture {
+  const retained = getRetainedExportDiagrams(), decisions = getRetainedExportAdrDrafts();
+  const overrides: HtmlPackageCapture['overrides'] = Object.fromEntries(Object.entries(retained).map(([id, document]) => [id, { diagram: document, draft: decisions[id] ?? null }]));
+  overrides[diagram.id] = { diagram, draft: draft?.diagramId === diagram.id ? draft : null };
   return structuredClone({ entryDiagramId: diagram.id, capturedAt: new Date().toISOString(),
-    overrides: { [diagram.id]: { diagram, draft: draft?.diagramId === diagram.id ? draft : null } } });
+    overrides });
 }
 
 export function getHtmlExportBlockReason(diagramStatus: SaveStatus, adrStatus: AdrSaveStatus, exporting = false): string | null {
@@ -104,5 +107,5 @@ export function ExportButton() {
     } finally { exporting.current = false; setHtmlExporting(false); }
   };
 
-  return <div className="export-control"><button className="secondary-action" type="button" onClick={() => void exportHtmlPackage()} disabled={!document || htmlExporting} aria-describedby="html-export-description html-export-status">Export HTML package</button><button className="primary-pill" type="button" onClick={() => void exportDiagram()} disabled={!document} aria-describedby="export-description export-status">Export Mermaid</button><p id="html-export-description" className="export-status">{document?.kind === 'container' ? 'Download this container diagram and its ADRs for offline review.' : 'Download this System context, its active container diagrams, and all their ADRs for offline review.'}</p><p id="export-description" className="export-description">Groups export as labeled Mermaid subgraphs. Exact canvas positions are not exported.</p><p id="html-export-status" className="export-status" role="status" aria-live="polite" aria-atomic="true">{htmlMessage}</p><p id="export-status" className="export-status" role="status" aria-live="polite" aria-atomic="true">{message}</p></div>;
+  return <div className="export-control"><button className="secondary-action" type="button" onClick={() => void exportHtmlPackage()} disabled={!document || htmlExporting} aria-describedby="html-export-description html-export-status">Export HTML package</button><button className="primary-pill" type="button" onClick={() => void exportDiagram()} disabled={!document} aria-describedby="export-description export-status">Export Mermaid</button><p id="html-export-description" className="export-status">{document?.kind === 'component' ? 'Download this Component diagram and its local ADRs for offline review.' : document?.kind === 'container' ? 'Download this Container, its active Component diagrams, and their ADRs for offline review.' : 'Download this System context, its active Container and Component diagrams, and their ADRs for offline review.'}</p><p id="export-description" className="export-description">Groups export as labeled Mermaid subgraphs. Exact canvas positions are not exported.</p><p id="html-export-status" className="export-status" role="status" aria-live="polite" aria-atomic="true">{htmlMessage}</p><p id="export-status" className="export-status" role="status" aria-live="polite" aria-atomic="true">{message}</p></div>;
 }

@@ -317,8 +317,8 @@ export const htmlExportSourceSchema = z.object({
   entryDiagramId: uuidSchema,
   sourceCapturedAt: z.string().datetime({ offset: true }),
   diagrams: z.array(z.object({ diagram: htmlSourceDiagramSchema, adrs: z.array(htmlSourceAdrSchema) }).strict()).min(1),
-  availability: z.array(containerAvailabilitySchema),
-  containerContext: containerContextSchema.nullable(),
+  availability: z.array(z.union([containerAvailabilitySchema, componentAvailabilitySchema])),
+  sourceContexts: z.record(uuidSchema, z.union([containerContextSchema, componentContextSchema])),
 }).strict();
 
 export const adrSummarySchema = z.object({

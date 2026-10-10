@@ -3,26 +3,9 @@ import { mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
-import { disableOfflinePackageNetwork, downloadAndExtractOfflinePackage, extractOfflinePackage, offlineIds, offlineAdrs, openOfflinePackagePage, preparePersistedHtmlPackageFixture, relocateOfflinePackage } from './html-package-fixtures';
+import { activateOfflineTextLink, disableOfflinePackageNetwork, downloadAndExtractOfflinePackage, extractOfflinePackage, offlineIds, offlineAdrs, openOfflinePackagePage, preparePersistedHtmlPackageFixture, relocateOfflinePackage } from './html-package-fixtures';
 
-async function activateTextLink(page: Page, href: string, containerId?: string) {
-  for (let index = 0; index < 150; index++) {
-    await page.keyboard.press('Tab');
-    const reached = await page.evaluate(({ href, containerId }) => {
-      const active = document.activeElement;
-      return active?.getAttribute('href') === href && !active.closest('svg') &&
-        (!containerId || active.closest('[id]')?.id === containerId);
-    }, { href, containerId });
-    if (!reached) continue;
-    await expect(page.locator('a:focus')).toHaveCSS('outline-style', 'solid');
-    const destination = new URL(href, page.url()).href;
-    await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(destination);
-    await page.waitForLoadState('domcontentloaded');
-    return;
-  }
-  throw new Error(`Native keyboard traversal did not reach ${href}`);
-}
+async function activateTextLink(page: Page, href: string, containerId?: string) { await activateOfflineTextLink(page, href, containerId); }
 
 test('aggregate SVG and scoped Markdown remain complete while shared recoloring and relocated keyboard journeys work offline', async ({ page, request, context }) => {
   const fixture = await preparePersistedHtmlPackageFixture(request, '/api');

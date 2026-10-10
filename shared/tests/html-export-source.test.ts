@@ -6,7 +6,7 @@ function source() {
   const fixture = htmlPackageFixture();
   return { entryDiagramId: fixture.parent.id, sourceCapturedAt: exportTimestamp,
     diagrams: [fixture.parent, ...fixture.children].map(diagram => ({ diagram, adrs: fixture.adrsByDiagram[diagram.id] })),
-    availability: fixture.availability, containerContext: null };
+    availability: fixture.availability, sourceContexts: {} };
 }
 
 describe('HTML export source wire schema', () => {
@@ -22,8 +22,8 @@ describe('HTML export source wire schema', () => {
     const fixture = htmlPackageFixture(), child = fixture.children[0];
     const input = { entryDiagramId: child.id, sourceCapturedAt: exportTimestamp,
       diagrams: [{ diagram: child, adrs: fixture.adrsByDiagram[child.id] }], availability: [],
-      containerContext: { scope: child.scope, capturedAt: exportTimestamp, sources: [{ id: fixture.parent.components[0].id, name: 'Source', description: null, type: 'person' }] } };
-    expect(htmlExportSourceSchema.parse(input).containerContext?.sources).toHaveLength(1);
+      sourceContexts: { [child.id]: { scope: child.scope, capturedAt: exportTimestamp, sources: [{ id: fixture.parent.components[0].id, name: 'Source', description: null, type: 'person' }] } } };
+    expect(htmlExportSourceSchema.parse(input).sourceContexts[child.id].sources).toHaveLength(1);
   });
   it.each([
     ['entry UUID', (input: any) => { input.entryDiagramId = 'invalid'; }],
@@ -36,7 +36,7 @@ describe('HTML export source wire schema', () => {
     ['diagram date', (input: any) => { input.diagrams[0].diagram.updatedAt = 'invalid'; }],
     ['member geometry', (input: any) => { input.diagrams[1].diagram.boundary.size.width = -1; }],
     ['availability', (input: any) => { input.availability[0].availability = 'unknown'; }],
-    ['context shape', (input: any) => { input.containerContext = { scope: {}, sources: [], capturedAt: exportTimestamp }; }],
+    ['context shape', (input: any) => { input.sourceContexts[input.entryDiagramId] = { scope: {}, sources: [], capturedAt: exportTimestamp }; }],
     ['extra root field', (input: any) => { input.partial = true; }],
   ])('rejects malformed %s', (_name, mutate) => {
     const input = source(); mutate(input);

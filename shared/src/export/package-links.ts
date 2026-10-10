@@ -1,5 +1,6 @@
 import type { HtmlPackageSnapshot } from './html-package-snapshot';
 import { HtmlExportError } from './html-snapshot';
+import { getDiagramOwnerId } from '../domain/c4';
 
 export function assertSafePackagePath(path: string): void {
   if (!path || /[\\:#?%\s]/.test(path) || path.startsWith('/') || path.split('/').some(segment => !segment || segment === '.' || segment === '..')) throw new Error(`Unsafe HTML package path: ${path}`);
@@ -50,12 +51,18 @@ export function createPackageLinks(snapshot: HtmlPackageSnapshot): PackageLinkCo
     adr: (origin, id) => { lookup(markdown, id); return relative(origin, `adrs.html#adr-${id}`); }, artifact,
     ownerReturn: id => {
       const scope = members.get(id)?.diagram.scope;
-      return scope && diagrams.has(scope.parentDiagramId) ? artifact(lookup(diagrams, id), scope.parentDiagramId, 'component', scope.softwareSystemId) : null;
+      return scope && diagrams.has(scope.parentDiagramId) ? artifact(lookup(diagrams, id), scope.parentDiagramId, 'component', getDiagramOwnerId(members.get(id)!.diagram)!) : null;
     },
     childAction: (id, componentId) => {
       const component = members.get(id)?.diagram.components.find(c => c.id === componentId);
-      if (!component || component.type !== 'software-system' || component.role === 'container') return null;
-      const ownerId = component.role === 'external' ? component.sourceComponentId : component.id;
+      if (!component || !['software-system', 'container'].includes(component.type ?? '') || component.role === 'component') return null;
+      let ownerId = component.role === 'external' ? component.sourceComponentId : component.id;
+      const seen = new Set<string>();
+      while (ownerId && !snapshot.ownerChildren[ownerId] && !seen.has(ownerId)) {
+        seen.add(ownerId);
+        const source = snapshot.diagrams.flatMap(m => m.diagram.components).find(c => c.id === ownerId);
+        ownerId = source?.role === 'external' ? source.sourceComponentId : null;
+      }
       const target = ownerId ? snapshot.ownerChildren[ownerId] : undefined;
       return target ? relative(lookup(diagrams, id), lookup(diagrams, target)) : null;
     },

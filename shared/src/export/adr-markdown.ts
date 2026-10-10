@@ -40,7 +40,7 @@ export function renderAdrMarkdown(snapshot: HtmlExportSnapshot, adr: Architectur
     '',
     `- ADR ID: ${adr.id}`,
     `- Diagram: [${escapeMarkdown(diagram.name)} (${diagram.id})](${diagramDestination})`,
-    `- Level: ${diagram.kind === 'container' ? 'Container diagram' : 'System context'}`,
+    `- Level: ${diagram.kind === 'component' ? 'Component diagram' : diagram.kind === 'container' ? 'Container diagram' : 'System context'}`,
     `- Status: ${adr.status}`,
     `- Created: ${escapeMarkdown(adr.createdAt)}`,
     `- Updated: ${escapeMarkdown(adr.updatedAt)}`,

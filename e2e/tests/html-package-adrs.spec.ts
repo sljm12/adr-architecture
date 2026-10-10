@@ -3,26 +3,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
-import { disableOfflinePackageNetwork, downloadAndExtractOfflinePackage, extractOfflinePackage, offlineIds, openOfflinePackagePage, preparePersistedHtmlPackageFixture } from './html-package-fixtures';
+import { activateOfflineTextLink, disableOfflinePackageNetwork, downloadAndExtractOfflinePackage, extractOfflinePackage, offlineIds, openOfflinePackagePage, preparePersistedHtmlPackageFixture } from './html-package-fixtures';
 
-async function activateTextLink(page: Page, href: string, articleId?: string) {
-  for (let index = 0; index < 150; index++) {
-    await page.keyboard.press('Tab');
-    const reached = await page.evaluate(({ href, articleId }) => {
-      const active = document.activeElement;
-      return active?.getAttribute('href') === href && !active.closest('svg') &&
-        (!articleId || active.closest('article')?.id === articleId);
-    }, { href, articleId });
-    if (!reached) continue;
-    await expect(page.locator('a:focus')).toHaveCSS('outline-style', 'solid');
-    const destination = new URL(href, page.url()).href;
-    await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(destination);
-    await page.waitForLoadState('domcontentloaded');
-    return;
-  }
-  throw new Error(`Native keyboard traversal did not reach ${href}`);
-}
+async function activateTextLink(page: Page, href: string, articleId?: string) { await activateOfflineTextLink(page, href, articleId, 'article'); }
 
 test('package-wide catalog exposes scoped decisions and exact parent/child backlinks with native offline keyboard navigation', async ({ page, request, context }) => {
   const fixture = await preparePersistedHtmlPackageFixture(request, '/api');

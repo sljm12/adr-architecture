@@ -1,43 +1,28 @@
-import type { ArchitectureDecisionRecord, ContainerAvailability, ContainerContext, DiagramDocument } from '../domain/types';
+import type { ArchitectureDecisionRecord, ContainerAvailability, ComponentAvailability, ContainerContext, ComponentContext, DiagramDocument } from '../domain/types';
 import type { AdrExportDraft, HtmlExportSnapshot } from './html-snapshot';
 import { HtmlExportError, mergeExportAdrDraft, validateExportAdrs, validateExportDiagram } from './html-snapshot';
 import { htmlExportSourceSchema, uuidSchema } from '../validation/schemas';
-import { isC4ArtifactType } from '../domain/c4';
+import { getDiagramOwnerId, isC4ArtifactType, isContainerType } from '../domain/c4';
 
-/** Transient cloned editor state. Providers contribute only drafts they actually retain. */
-export interface HtmlPackageOverride {
-  diagram: DiagramDocument;
-  draft?: AdrExportDraft | null;
-}
-export interface HtmlPackageCapture {
-  entryDiagramId: string;
-  capturedAt: string;
-  overrides: Record<string, HtmlPackageOverride>;
-}
-export interface HtmlExportSourceMember {
-  diagram: DiagramDocument;
-  adrs: ArchitectureDecisionRecord[];
-}
-/** Saved data only, detached after the coordinated graph read completes. */
+/** Cloned drafts actually retained by the session, keyed by stable saved identity. */
+export interface HtmlPackageOverride { diagram: DiagramDocument; draft?: AdrExportDraft | null }
+export interface HtmlPackageCapture { entryDiagramId: string; capturedAt: string; overrides: Record<string, HtmlPackageOverride> }
+export interface HtmlExportSourceMember { diagram: DiagramDocument; adrs: ArchitectureDecisionRecord[] }
+export type ExportAvailability = ContainerAvailability | ComponentAvailability;
+export type ExportSourceContext = ContainerContext | ComponentContext;
+/** Detached saved subtree plus context-only ancestor/source projections. */
 export interface HtmlExportSource {
-  entryDiagramId: string;
-  sourceCapturedAt: string;
-  diagrams: HtmlExportSourceMember[];
-  availability: ContainerAvailability[];
-  containerContext: ContainerContext | null;
+  entryDiagramId: string; sourceCapturedAt: string; diagrams: HtmlExportSourceMember[];
+  availability: ExportAvailability[]; sourceContexts: Record<string, ExportSourceContext>;
 }
 export interface HtmlPackageSnapshot {
-  entryDiagramId: string;
-  capturedAt: string;
-  diagrams: HtmlExportSnapshot[];
-  ownerChildren: Record<string, string>;
-  availability: ContainerAvailability[];
+  entryDiagramId: string; capturedAt: string; diagrams: HtmlExportSnapshot[];
+  ownerChildren: Record<string, string>; availability: ExportAvailability[];
 }
 
 function fail(diagramId: string, field: string, detail: string, kind: HtmlExportError['artifactKind'] = 'diagram', id = diagramId): never {
   throw new HtmlExportError(kind, id, field, detail, 'Repair the referenced artifact or field and retry the export.', diagramId);
 }
-
 function scoped<T>(diagramId: string, action: () => T): T {
   try { return action(); }
   catch (error) {
@@ -45,16 +30,16 @@ function scoped<T>(diagramId: string, action: () => T): T {
     throw error;
   }
 }
+const ownerKey = (value: ExportAvailability) => 'containerId' in value ? value.containerId : value.softwareSystemId;
 
-/** Assemble detached saved members with only the retained overrides frozen at export start. */
+/** Verify saved membership first, then hydrate overlays ancestor-first independently of output order. */
 export function assembleHtmlPackageSnapshot(captureInput: HtmlPackageCapture, sourceInput: HtmlExportSource): HtmlPackageSnapshot {
   const capture = structuredClone(captureInput);
   if (!uuidSchema.safeParse(capture.entryDiagramId).success) fail(capture.entryDiagramId, 'entryDiagramId', 'The selected identity must be a UUID.');
   if (!Number.isFinite(Date.parse(capture.capturedAt))) fail(capture.entryDiagramId, 'capturedAt', 'A valid capture timestamp is required.');
   const parsed = htmlExportSourceSchema.safeParse(sourceInput);
   if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    const index = issue.path[0] === 'diagrams' && typeof issue.path[1] === 'number' ? issue.path[1] : 0;
+    const issue = parsed.error.issues[0], index = issue.path[0] === 'diagrams' && typeof issue.path[1] === 'number' ? issue.path[1] : 0;
     const member = sourceInput?.diagrams?.[index];
     const collection = issue.path.findIndex(part => ['components', 'relationships', 'groups', 'adrs'].includes(String(part)));
     const kind = collection < 0 ? 'diagram' : ({ components: 'component', relationships: 'relationship', groups: 'group', adrs: 'ADR' } as const)[issue.path[collection] as 'components' | 'relationships' | 'groups' | 'adrs'];
@@ -63,93 +48,110 @@ export function assembleHtmlPackageSnapshot(captureInput: HtmlPackageCapture, so
     const id = collection >= 0 && artifact && typeof artifact === 'object' && 'id' in artifact ? String(artifact.id) : member?.diagram.id;
     fail(member?.diagram.id ?? capture.entryDiagramId, issue.path.join('.') || 'source', issue.message, kind, id);
   }
-  const source = parsed.data;
+  const source = parsed.data as HtmlExportSource;
   if (source.entryDiagramId !== capture.entryDiagramId || source.diagrams[0].diagram.id !== capture.entryDiagramId) fail(capture.entryDiagramId, 'entryDiagramId', 'Source and capture do not identify the same entry.');
-  const savedEntry = source.diagrams[0].diagram;
   const ids = new Map<string, Set<string>>();
   const unique = (diagramId: string, kind: HtmlExportError['artifactKind'], artifacts: Array<{ id: string }>) => {
     const seen = ids.get(kind) ?? new Set<string>(); ids.set(kind, seen);
-    for (const artifact of artifacts) {
-      if (seen.has(artifact.id)) fail(diagramId, 'id', 'Duplicate artifact identity across the included package.', kind, artifact.id);
-      seen.add(artifact.id);
-    }
+    for (const artifact of artifacts) { if (seen.has(artifact.id)) fail(diagramId, 'id', 'Duplicate artifact identity across the included package.', kind, artifact.id); seen.add(artifact.id); }
   };
-  const members = new Map(source.diagrams.map(member => [member.diagram.id, member]));
+  const members = new Map(source.diagrams.map(m => [m.diagram.id, m]));
+  const ownerChildren: Record<string, string> = {}, available = new Map<string, ExportAvailability>();
   for (const member of source.diagrams) unique(member.diagram.id, 'diagram', [member.diagram]);
-  if (savedEntry.kind === 'container') {
-    if (source.diagrams.length !== 1 || source.availability.length) fail(savedEntry.id, 'diagrams', 'Direct child export must contain only itself.');
-    const scope = source.containerContext?.scope;
-    if (!scope || scope.parentDiagramId !== savedEntry.scope?.parentDiagramId || scope.softwareSystemId !== savedEntry.scope?.softwareSystemId) fail(savedEntry.id, 'scope', 'Direct child source context does not match its canonical owner.');
-  } else if (source.containerContext !== null) fail(savedEntry.id, 'containerContext', 'A System context cannot carry direct-child context.');
-
-  const ownerChildren: Record<string, string> = {};
-  const available = new Map<string, ContainerAvailability>();
-  if (savedEntry.kind !== 'container') {
-    const owners = savedEntry.components.filter(c => c.type === 'software-system' && (c.role ?? 'element') === 'element');
-    for (const availability of source.availability) {
-      const owner = owners.find(c => c.id === availability.softwareSystemId);
-      if (!owner || availability.parentDiagramId !== savedEntry.id || available.has(owner.id)) fail(savedEntry.id, 'availability', 'Availability has an unrelated or duplicated owner.');
-      available.set(owner.id, availability);
-      const summary = availability.diagram;
-      if (availability.availability === 'none') {
-        if (summary !== null) fail(savedEntry.id, 'availability', 'A missing child must not have a destination.');
-        continue;
-      }
-      if (!summary || summary.status !== availability.availability || summary.kind !== 'container' || summary.scope?.parentDiagramId !== savedEntry.id || summary.scope.softwareSystemId !== owner.id) fail(summary?.id ?? savedEntry.id, 'availability', 'Child summary does not match its canonical membership.');
-      if (availability.availability === 'active') {
-        const child = members.get(summary.id)?.diagram;
-        if (!child || child.kind !== 'container' || child.status !== 'active' || child.scope?.parentDiagramId !== savedEntry.id || child.scope.softwareSystemId !== owner.id) fail(summary.id, 'scope', 'A required active child is missing or has mismatched ownership.');
-        ownerChildren[owner.id] = child.id;
-      } else if (members.has(summary.id)) fail(summary.id, 'status', 'A trashed child cannot be included.');
-    }
-    if (available.size !== owners.length) fail(savedEntry.id, 'availability', 'Availability must describe every saved Software System.');
-    const requiredIds = new Set([savedEntry.id, ...Object.values(ownerChildren)]);
-    for (const member of source.diagrams) if (!requiredIds.has(member.diagram.id)) fail(member.diagram.id, 'diagrams', 'An unrelated child cannot be included.');
+  for (const availability of source.availability) {
+    const ownerId = ownerKey(availability), parent = members.get(availability.parentDiagramId)?.diagram;
+    if (!parent || available.has(ownerId) || parent.kind === 'component' || ('containerId' in availability) !== (parent.kind === 'container')) fail(parent?.id ?? source.entryDiagramId, 'availability', 'Availability has an unrelated or duplicated owner or level.');
+    const owner = parent.components.find(c => c.id === ownerId);
+    if (!owner || (parent.kind === 'container' ? owner.role !== 'container' || owner.type !== 'container' : (owner.role ?? 'element') !== 'element' || owner.type !== 'software-system')) fail(parent.id, 'availability', 'An availability owner is missing or ineligible.');
+    available.set(ownerId, availability);
+    const summary = availability.diagram;
+    if (availability.availability === 'none') { if (summary) fail(parent.id, 'availability', 'A missing child must not have a destination.'); continue; }
+    if (!summary || summary.status !== availability.availability || summary.kind !== (parent.kind === 'container' ? 'component' : 'container') || summary.scope?.parentDiagramId !== parent.id || getDiagramOwnerId(summary) !== ownerId) fail(summary?.id ?? parent.id, 'availability', 'Child summary does not match its canonical membership.');
+    if (availability.availability === 'active') {
+      const child = members.get(summary.id)?.diagram;
+      if (!child || child.status !== 'active' || child.kind !== summary.kind || child.scope?.parentDiagramId !== parent.id || getDiagramOwnerId(child) !== ownerId) fail(summary.id, 'scope', 'A required active child is missing or has mismatched ownership.');
+      ownerChildren[ownerId] = child.id;
+    } else if (members.has(summary.id)) fail(summary.id, 'status', 'A trashed child cannot be included.');
   }
-
-  const overlaid = new Map<string, DiagramDocument>();
-  const savedAdrs = new Map<string, ArchitectureDecisionRecord[]>();
-  for (const member of source.diagrams) scoped(member.diagram.id, () => {
+  for (const member of source.diagrams) {
+    const saved = member.diagram;
+    for (const owner of saved.components.filter(c => saved.kind === 'container' ? c.role === 'container' && c.type === 'container' : saved.kind !== 'component' && (c.role ?? 'element') === 'element' && c.type === 'software-system')) if (!available.has(owner.id)) fail(saved.id, 'availability', 'Availability must describe every saved eligible owner.');
+    if (saved.id !== source.entryDiagramId && (!saved.scope || !members.has(saved.scope.parentDiagramId) || ownerChildren[getDiagramOwnerId(saved)!] !== saved.id)) fail(saved.id, 'diagrams', 'An unrelated diagram cannot be included.');
+    const context = source.sourceContexts[saved.id];
+    if (saved.scope) {
+      if (!context || context.scope.parentDiagramId !== saved.scope.parentDiagramId || getDiagramOwnerId({ kind: saved.kind, scope: context.scope }) !== getDiagramOwnerId(saved) || ('containerId' in context.scope) !== (saved.kind === 'component')) fail(saved.id, 'scope', 'Source context does not match canonical parent and owner.');
+      if (saved.kind === 'component' && 'containerId' in context.scope && 'containerId' in saved.scope && (context.scope.systemContextDiagramId !== saved.scope.systemContextDiagramId || context.scope.softwareSystemId !== saved.scope.softwareSystemId)) fail(saved.id, 'scope', 'Component context changed its ancestor identity.');
+      if (new Set(context.sources.map(s => s.id)).size !== context.sources.length) fail(saved.id, 'sources', 'Duplicate source identities in captured context.');
+      if ('containerId' in context.scope) {
+        const componentSources = (context as ComponentContext).sources;
+        if (new Set(componentSources.map(s => s.canonicalSourceComponentId)).size !== componentSources.length) fail(saved.id, 'sources', 'Duplicate canonical source identities.');
+        for (const s of componentSources) if (s.id === context.scope.containerId || (s.type === 'container' ? !isContainerType(s.containerType) || !s.technology?.trim() || !s.description?.trim() || s.id !== s.canonicalSourceComponentId || s.sourceDiagramId !== context.scope.parentDiagramId : s.containerType !== null || s.technology !== null || s.sourceDiagramId !== context.scope.systemContextDiagramId)) fail(saved.id, 'sources', 'Invalid supporting source context.');
+      }
+    } else if (context) fail(saved.id, 'sourceContexts', 'A System context cannot carry scoped source context.');
+  }
+  for (const id of Object.keys(source.sourceContexts)) if (!members.has(id)) fail(id, 'sourceContexts', 'Context-only ancestors cannot be included as package destinations.');
+  const resolved = new Map<string, HtmlExportSnapshot>(), visiting = new Set<string>();
+  const hydrate = (id: string): HtmlExportSnapshot => scoped(id, () => {
+    const previous = resolved.get(id); if (previous) return previous;
+    if (visiting.has(id)) fail(id, 'scope', 'Cyclic package hierarchy.'); visiting.add(id);
+    const member = members.get(id)!;
     const saved = validateExportDiagram(member.diagram);
-    if (saved.status !== 'active') fail(saved.id, 'status', 'Included diagrams must be active.');
-    savedAdrs.set(saved.id, validateExportAdrs(member.adrs, saved));
-    const override = capture.overrides[saved.id];
-    const diagram = override ? structuredClone(override.diagram) : saved;
-    if (diagram.id !== saved.id || (diagram.kind ?? 'general') !== saved.kind) fail(saved.id, 'kind', 'A retained override cannot change canonical identity or kind.');
-    if (diagram.status !== 'active') fail(saved.id, 'status', 'The captured diagram must remain active.');
-    if (saved.kind === 'container' && (diagram.scope?.parentDiagramId !== saved.scope?.parentDiagramId || diagram.scope?.softwareSystemId !== saved.scope?.softwareSystemId)) fail(saved.id, 'scope', 'A retained override cannot change canonical parent or owner identity.');
-    overlaid.set(saved.id, diagram);
-  });
-
-  const parent = savedEntry.kind === 'container' ? null : scoped(savedEntry.id, () => validateExportDiagram(overlaid.get(savedEntry.id)!));
-  if (parent) overlaid.set(parent.id, parent);
-  const snapshots: HtmlExportSnapshot[] = [];
-  const ordered = [source.diagrams[0], ...source.diagrams.slice(1).sort((a, b) => a.diagram.id.localeCompare(b.diagram.id))];
-  for (const member of ordered) scoped(member.diagram.id, () => {
-    let diagram = overlaid.get(member.diagram.id)!;
-    if (member.diagram.kind === 'container') {
-      const owner = parent?.components.find(c => c.id === member.diagram.scope!.softwareSystemId);
-      if (parent && (!owner || owner.type !== 'software-system' || (owner.role ?? 'element') !== 'element')) fail(diagram.id, 'scope.softwareSystemId', 'A required owner was removed or reclassified.', 'component', member.diagram.scope!.softwareSystemId);
-      const scope = parent ? { parentDiagramId: parent.id, softwareSystemId: owner!.id, parentDiagramName: parent.name, softwareSystemName: owner!.name, softwareSystemDescription: owner!.description } : source.containerContext!.scope;
-      const sources = parent ? parent.components.filter(c => c.id !== scope.softwareSystemId && (c.role ?? 'element') === 'element' && isC4ArtifactType(c.type)) : source.containerContext!.sources;
-      if (new Set(sources.map(s => s.id)).size !== sources.length) fail(diagram.id, 'sources', 'Duplicate source identities in container context.');
-      diagram = { ...diagram, name: scope.softwareSystemName, scope: structuredClone(scope), components: diagram.components.map(component => {
-        if (component.role !== 'external') return component;
-        const resolved = sources.find(s => s.id === component.sourceComponentId && s.id !== scope.softwareSystemId);
-        if (!resolved) fail(diagram.id, 'sourceComponentId', 'An external occurrence has no eligible source in the captured context.', 'component', component.id);
-        return { ...component, name: resolved.name, description: resolved.description, type: resolved.type };
-      }) };
+    if (saved.status !== 'active') fail(id, 'status', 'Included diagrams must be active.');
+    const savedAdrs = validateExportAdrs(member.adrs, saved);
+    const override = capture.overrides[id];
+    let diagram = override ? structuredClone(override.diagram) : saved;
+    if (diagram.id !== id || (diagram.kind ?? 'general') !== (saved.kind ?? 'general')) fail(id, 'kind', 'A retained override cannot change canonical identity or kind.');
+    if (diagram.status !== 'active') fail(id, 'status', 'The captured diagram must remain active.');
+    if (diagram.scope?.parentDiagramId !== saved.scope?.parentDiagramId || getDiagramOwnerId(diagram) !== getDiagramOwnerId(saved)) fail(id, 'scope', 'A retained override cannot change canonical parent or owner identity.');
+    if (diagram.scope && saved.scope && 'containerId' in diagram.scope && 'containerId' in saved.scope && (diagram.scope.systemContextDiagramId !== saved.scope.systemContextDiagramId || diagram.scope.softwareSystemId !== saved.scope.softwareSystemId)) fail(id, 'scope', 'A retained override cannot change ancestor identities.');
+    for (const component of diagram.components) {
+      const original = saved.components.find(c => c.id === component.id);
+      if (original && ((component.role ?? 'element') !== (original.role ?? 'element') || (component.sourceComponentId ?? null) !== (original.sourceComponentId ?? null))) fail(id, 'sourceComponentId', 'A retained override cannot change a role or source identity.', 'component', component.id);
+    }
+    if (saved.scope) {
+      const parent = members.has(saved.scope.parentDiagramId) ? hydrate(saved.scope.parentDiagramId).diagram : null;
+      const context = source.sourceContexts[id];
+      if (saved.kind === 'container') {
+        const owner = parent?.components.find(c => c.id === getDiagramOwnerId(saved));
+        if (parent && ((parent.kind ?? 'general') !== 'general' || !owner || owner.type !== 'software-system' || (owner.role ?? 'element') !== 'element')) fail(id, 'scope.softwareSystemId', 'A required owner was removed or reclassified.');
+        const scope = parent ? { parentDiagramId: parent.id, softwareSystemId: owner!.id, parentDiagramName: parent.name, softwareSystemName: owner!.name, softwareSystemDescription: owner!.description } : (context as ContainerContext).scope;
+        const sources = parent ? parent.components.filter(c => c.id !== scope.softwareSystemId && (c.role ?? 'element') === 'element' && isC4ArtifactType(c.type)) : (context as ContainerContext).sources;
+        diagram = { ...diagram, name: scope.softwareSystemName, scope, components: diagram.components.map(c => {
+          if (c.role !== 'external') return c;
+          const source = sources.find(s => s.id === c.sourceComponentId && s.id !== scope.softwareSystemId);
+          if (!source) fail(id, 'sourceComponentId', 'An external occurrence has no eligible source in captured context.', 'component', c.id);
+          return { ...c, name: source.name, description: source.description, type: source.type };
+        }) };
+      } else if (saved.kind === 'component') {
+        const capturedContext = context as ComponentContext;
+        const owner = parent?.components.find(c => c.id === getDiagramOwnerId(saved));
+        if (parent && (parent.kind !== 'container' || !owner || owner.role !== 'container' || owner.type !== 'container' || !isContainerType(owner.containerType) || !owner.technology?.trim() || !owner.description?.trim())) fail(id, 'scope.containerId', 'A required container owner was removed or reclassified.');
+        const scope = parent ? { ...capturedContext.scope, parentDiagramId: parent.id, containerId: owner!.id, parentDiagramName: parent.name, containerName: owner!.name, containerDescription: owner!.description, containerTechnology: owner!.technology!, containerType: owner!.containerType!, systemContextDiagramId: parent.scope!.parentDiagramId, softwareSystemId: parent.scope!.softwareSystemId, softwareSystemName: parent.scope!.softwareSystemName } : capturedContext.scope;
+        const canonical = new Set<string>();
+        diagram = { ...diagram, name: scope.containerName, scope, components: diagram.components.map(c => {
+          if (c.role !== 'external') return c;
+          const source = parent ? parent.components.find(s => s.id === c.sourceComponentId && s.id !== scope.containerId) : capturedContext.sources.find(s => s.id === c.sourceComponentId);
+          if (!source) fail(id, 'sourceComponentId', 'A supporting occurrence has no eligible immediate source in captured context.', 'component', c.id);
+          const sourceId = 'canonicalSourceComponentId' in source ? source.canonicalSourceComponentId : source.role === 'external' ? source.sourceComponentId! : source.id;
+          if (canonical.has(sourceId)) fail(id, 'sourceComponentId', 'Include each canonical supporting source only once.', 'component', c.id); canonical.add(sourceId);
+          return { ...c, name: source.name, description: source.description, type: source.type, containerType: source.containerType ?? null, technology: source.technology ?? null };
+        }) };
+      }
     }
     diagram = validateExportDiagram(diagram);
-    const draft = capture.overrides[diagram.id]?.draft;
-    const adrs = validateExportAdrs(mergeExportAdrDraft(savedAdrs.get(diagram.id)!, draft, capture.capturedAt), diagram);
-    for (const [kind, artifacts] of [['component', diagram.components], ['relationship', diagram.relationships], ['group', diagram.groups], ['ADR', adrs]] as const) unique(diagram.id, kind, artifacts);
-    snapshots.push({ diagram, adrs, capturedAt: capture.capturedAt, hasDraft: !!draft });
+    const draft = override?.draft, adrs = validateExportAdrs(mergeExportAdrDraft(savedAdrs, draft, capture.capturedAt), diagram);
+    for (const [kind, artifacts] of [['component', diagram.components], ['relationship', diagram.relationships], ['group', diagram.groups], ['ADR', adrs]] as const) unique(id, kind, artifacts);
+    const snapshot = { diagram, adrs, capturedAt: capture.capturedAt, hasDraft: !!draft };
+    visiting.delete(id); resolved.set(id, snapshot); return snapshot;
   });
-  const availability = parent ? snapshots[0].diagram.components.filter(c => c.type === 'software-system' && (c.role ?? 'element') === 'element').map(owner => {
+  for (const member of source.diagrams) hydrate(member.diagram.id);
+  const ordered = [source.diagrams[0], ...source.diagrams.slice(1).sort((a,b) => a.diagram.id.localeCompare(b.diagram.id))].map(m => resolved.get(m.diagram.id)!);
+  // Newly authored eligible owners have no included saved child. Navigation never creates one.
+  const availability = ordered.flatMap(({ diagram }) => diagram.components.filter(c => diagram.kind === 'container' ? c.role === 'container' && c.type === 'container' : diagram.kind !== 'component' && (c.role ?? 'element') === 'element' && c.type === 'software-system').map(owner => {
     const saved = available.get(owner.id);
-    if (!saved) return { parentDiagramId: parent.id, softwareSystemId: owner.id, availability: 'none' as const, diagram: null };
-    return { ...saved, diagram: saved.diagram ? { ...saved.diagram, name: owner.name, scope: { parentDiagramId: parent.id, softwareSystemId: owner.id, parentDiagramName: parent.name, softwareSystemName: owner.name, softwareSystemDescription: owner.description } } : null };
-  }) : [];
-  return structuredClone({ entryDiagramId: capture.entryDiagramId, capturedAt: capture.capturedAt, diagrams: snapshots, ownerChildren, availability });
+    if (!saved) return diagram.kind === 'container' ? { parentDiagramId: diagram.id, containerId: owner.id, availability: 'none' as const, diagram: null } : { parentDiagramId: diagram.id, softwareSystemId: owner.id, availability: 'none' as const, diagram: null };
+    const child = saved.diagram && resolved.get(saved.diagram.id)?.diagram;
+    return { ...saved, diagram: child ? { id: child.id, name: child.name, kind: child.kind, status: child.status, scope: child.scope, createdAt: child.createdAt, updatedAt: child.updatedAt } : saved.diagram };
+  }));
+  return structuredClone({ entryDiagramId: capture.entryDiagramId, capturedAt: capture.capturedAt, diagrams: ordered, ownerChildren, availability });
 }

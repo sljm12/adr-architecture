@@ -28,7 +28,8 @@ describe('parent and container package rendering', () => {
   it('keeps no-child and direct-child packages at the root without parent/sibling actions', () => {
     const { source, capture } = aggregateInput();
     source.diagrams = [source.diagrams[0]];
-    source.availability = source.availability.map(a => ({ ...a, availability: 'none', diagram: null }));
+    source.availability = source.availability.filter(a => a.parentDiagramId === source.entryDiagramId).map(a => ({ ...a, availability: 'none', diagram: null }));
+    source.sourceContexts = {};
     const files = buildAggregateHtmlPackage(capture, source);
     expect(Object.keys(files).some(p => p.startsWith('diagrams/'))).toBe(false);
     expect(files['index.html']).not.toContain('Open container diagram</a>');

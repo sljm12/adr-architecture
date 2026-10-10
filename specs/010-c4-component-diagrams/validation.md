@@ -1,6 +1,6 @@
 # Implementation validation: C4 Component diagrams
 
-Scope: phases 1–4 (T001–T039). Component entry and modeling are implemented; full hierarchy/list behavior, recovery and exports remain later-phase work.
+Scope: phases 1–6 and phase 7 implementation/automated validation (T001–T082). Component entry, modeling, hierarchy/navigation, recovery and exports are implemented. T083 actual-browser acceptance and phase 8 release gates remain pending as recorded below.
 
 ## Environment and baseline (2026-10-09)
 
@@ -235,3 +235,60 @@ git diff --check
 - Context7 resolved Playwright and checked its official runner/API-testing documentation for the real-runtime harness. Pre/post implementation hooks were checked; `.specify/extensions.yml` is absent, so hooks were skipped according to the skill.
 
 US4 is independently demonstrable and phase 6 is complete. Phase 7 exports and phase 8 release gates, including actual Safari and observed usability acceptance, remain pending in their assigned tasks.
+
+## Phase 7 — US5 Component exports (2026-10-10)
+
+T069–T082: PASS. Selected Component HTML, standalone SVG and Mermaid preserve owner-derived scope, internal responsibilities/technology, supporting Application/Datastore/Person/System metadata, local directed interactions/protocol and escaped stable identities. HTML/SVG retain the fitted boundary when empty. Mermaid reports `EMPTY_COMPONENT_MERMAID` with the remedy to add a Component or choose SVG/HTML; it does not fabricate nodes. Selected CLI exports keep their existing saved-document-only scope, exclusive-create overwrite protection and exit conventions. Existing CLI parsers/commands already consume the shared discriminated diagram schema, so they are reused; scope table labels now identify the Container owner.
+
+Browser packages include exactly the selected active subtree: Context plus Container/Component descendants, Container plus Component children, or Component alone. The representative hierarchy contains four saved members: one Context, one Container and two Component diagrams, giving exact entry counts **4/3/1**. Gathering resolves and rechecks the hierarchy under the highest Context root transaction, caches ancestor/source reads, captures full local ADRs and returns detached data without writes. Deliberate trash is excluded; unavailable or invalid required artifacts fail with `HTML_EXPORT_INCOMPLETE` and diagram/artifact/field/remedy details. The existing export route already delegates to this service and retains its typed error handler.
+
+The source API/client boundary now uses UUID-keyed discriminated `sourceContexts` and both Container/Component availability variants in place of singleton `containerContext`. Entry/member/capture fields and Container availability semantics remain intact. This is a coordinated source DTO change: the API and browser client must use the same updated contract.
+
+Capture clones the current document/ADR draft and only snapshots already-retained diagram/ADR sessions. Assembly validates saved membership before applying captured overlays ancestor-first, independently of UUID transport/output ordering. Owner names and supporting metadata propagate through both source hops. Omitted ancestors provide metadata through validated contexts without becoming files or navigation destinations. Invalid identity, parent, owner, ancestor, role/source changes or removal of a required owner/source abort the whole package. Export performs no save, session/history mutation or draft fabrication.
+
+The destination registry keeps selected root files and flat `diagrams/<uuid>/` member directories. Immediate-parent returns select the exact owner occurrence; supporting child actions follow canonical source chains only to included destinations. Internal Components have no deeper action. All local ADRs, including unlinked decisions, appear in one scoped catalog with exact artifact/replacement backlinks and individual Markdown files. File/fragment completeness is checked before ZIP creation for both selected and aggregate builders. Shared CSS variables and standalone SVG defaults remain portable; authored text is escaped and the package remains script-free.
+
+### Requirement evidence
+
+| Requirements | Evidence | Result |
+| --- | --- | --- |
+| FR-022; SC-009 | `shared/tests/component-export.test.ts`, `backend/tests/component-export.test.ts`, `cli/tests/component-export-command.test.ts`: selected metadata/scope, escaped IDs/content, empty boundary/remedy, owner hydration without writes, selected-only ZIP and overwrite behavior | PASS, 7 cases |
+| FR-023; SC-009 | `backend/tests/contract/component-html-export-source.test.ts`: exact 4/3/1 membership, both availability variants, per-member contexts/local ADRs, trash exclusion and required missing member/ancestor failures | PASS, 2 cases |
+| FR-021/023; SC-009 | `backend/tests/persistence/component-html-export-source.test.ts`: real PostgreSQL capture, omitted-ancestor hydration, detached results/unchanged timestamps and capture racing root trash yields a complete active hierarchy or 404 | PASS, 2 cases, no skips |
+| FR-022/023; SC-009 | `shared/tests/component-html-package.test.ts`: entry subtrees, flat paths, included-only returns/actions, canonical System child action through both hops, ancestor-first draft hydration, unchanged inputs, local ADR identities and required-member/source/ownership guards | PASS, 11 cases |
+| FR-023 | `frontend/tests/component-html-export.test.tsx`: frozen Component/ADR content exports from failed-save state, unchanged exact store objects/history and subsequent undo | PASS, 1 case |
+| FR-023/025; SC-009 | `e2e/tests/html-package-component.spec.ts`: native Tab/Enter across all three levels, sibling-source action, linked/unlinked catalog and exact backlink, visible focus, escaped script text/no scripts, failed HTTP fetch, shared recoloring/reload, directory relocation and required-member failure | PASS, 2 cases × 4 projects |
+| FR-022–025; SC-009/010 | Existing selected/Container/domain/API/CLI exports plus every `html-package-*.spec.ts` browser regression, including delayed draft capture, atomic failure, scoped ADR/replacement links, SVG/Markdown portability and the existing 100-component/200-relationship/100-ADR load bound | PASS |
+
+### Commands and final results
+
+```powershell
+# DATABASE_URL points at the configured disposable PostgreSQL database.
+$env:RUN_POSTGRES_TESTS = '1'
+npm.cmd test -- --maxWorkers=2
+npm.cmd run build
+npx.cmd tsc -b frontend
+npx.cmd playwright test --config=playwright.offline.config.ts --workers=1 --output=test-results/phase7-offline-final
+git diff --check
+```
+
+- Final full Vitest: **128 files, 669 tests passed, zero failures/skips** (63.33 s). Includes both new PostgreSQL source cases and existing migration, concurrency, rollback, Context/Container, ADR, recovery, selected export and CLI regressions. PostgreSQL fixtures apply migrations 0001–0007 to disposable UUID-named schemas; deployment data was not migrated.
+- Final offline browser suite: **60/60 passed** (2.8 min), **15/15 per project** across installed Chrome, installed Edge, Playwright Firefox and Playwright WebKit. Eight checks are the new Component cases. Browser packages open directly at `file://` with relative resources and normal browser security settings; no package HTTP server is used. Existing app-backed package fixtures use the configured real API/database before disabling network.
+- All-package build, explicit frontend TypeScript and whitespace checks: PASS. Existing Vite chunk-size, pg concurrent-query deprecation and runner color diagnostics remain non-failing. Dependencies and lockfile are unchanged; missing Playwright Firefox/WebKit browser binaries were installed for verification.
+- Keyboard verification exposed WebKit's omission of implicit HTML anchors from native Tab traversal. Generated HTML links now carry explicit zero tab stops, including ADR catalog links. Shared browser helpers traverse forward/backward without assuming focus wraps through headless browser chrome and assert visible focus before native Enter. No test uses scripted focus to replace these keyboard journeys.
+- Windows WebKit `setOffline(true)` rejects even minimal local `file://` pages. Its helper instead aborts every HTTP(S) request; the Component journey verifies that a real fetch fails. Chrome, Edge and Firefox additionally use offline emulation. This runtime workaround retains native local-file loading and does not establish Safari acceptance.
+- Visual QA: inspected `test-results/phase7-component-review.png` (Component scope, internal/supporting metadata, protocol, escaped labels and local ADR details) and the final Chrome `component-package.png` (Container return, exact owner selection, readable focus and red outline customization). Screenshots/logs are ignored artifacts. Final logs are `test-results/phase7-final-vitest.log` and `test-results/phase7-offline-final.log`.
+- Runtime: Node.js **v22.17.1**, Playwright **1.62.1**, Windows 11 build **10.0.26200**, PostgreSQL **17.4 (Debian 17.4-1.pgdg120+2)**. Browser versions were read from actual launches, not inferred from package versions.
+- Context7 resolved `/microsoft/playwright` and fetched official channel/network documentation outside the sandbox. Requirements checklist remains 16/16 complete; `.specify/feature.json` still points at Spec 010. Pre/post hook checks found no `.specify/extensions.yml`, so hooks were skipped according to the implementation skill. Ignore files/private-package settings remain valid.
+
+### T083 actual-browser acceptance status
+
+| Browser | Observed version/runtime | Direct-file navigation/ADRs/keyboard/recolor/reload/relocation | Acceptance status |
+| --- | --- | --- | --- |
+| Google Chrome | **154.0.8037.99**, installed `chrome` channel, Windows 11 | PASS in the new Component journey and all 15 offline checks | Actual installed product tested; latest-stable status not independently verified |
+| Microsoft Edge | **155.0.4283.45**, installed `msedge` channel, Windows 11 | PASS in the new Component journey and all 15 offline checks | Actual installed product tested; latest-stable status not independently verified |
+| Firefox | **153.0**, Playwright-provided Firefox, Windows 11 | PASS in the new Component journey and all 15 offline checks | Stock current stable Firefox acceptance pending; installed runtime evidence is separate |
+| Safari | Unavailable on this Windows workspace | Not executed | **PENDING** actual current stable Safari on a supported OS |
+| WebKit | **26.5**, Playwright WebKit, Windows 11 | PASS with HTTP(S) blocked, including the new Component journey and all 15 offline checks | Engine regression evidence only; not a Safari substitute |
+
+T083 remains unchecked. Re-run the exported Component fixture journeys in current stable stock Firefox and Safari, verify current stable Chrome/Edge versions, and append actual product/OS evidence before completing that gate. US5 implementation and automated validation are demonstrable; phase 7 acceptance and release sign-off remain incomplete. Phase 8 scale, documentation, application accessibility, broad final checks and observed usability gates remain in T084–T089.
