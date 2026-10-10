@@ -11,7 +11,7 @@ describe('selected Component exports', () => {
     const mermaid = exportMermaid(diagram), svg = renderDiagramSvg(diagram, { standalone: true });
     for (const output of [files['index.html'], svg, mermaid]) {
       expect(output).toContain('Component diagram');
-      expect(output).toContain('Validates and records requests');
+      expect(output.replace(/<\/tspan>\s*<tspan[^>]*>/g, ' ')).toContain('Validates and records requests');
       expect(output).toContain('TypeScript');
       expect(output).toContain('Datastore');
       expect(output).toContain('SQL');

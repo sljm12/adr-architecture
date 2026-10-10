@@ -31,7 +31,7 @@ export function renderAdrPage(snapshot: HtmlExportSnapshot, context?: { snapshot
     .map(adr => ({ adr, member })));
   const scope = (member: HtmlExportSnapshot) => {
     const { diagram } = member;
-    return `<p class="adr-scope">${escapeMarkup(diagram.name)} (${diagram.id}) · ${diagram.kind === 'component' ? 'Component diagram' : diagram.kind === 'container' ? 'Container diagram' : 'System context'}</p>`;
+    return `<p class="adr-scope">${escapeMarkup(diagram.name)} · ${diagram.kind === 'component' ? 'Component diagram' : diagram.kind === 'container' ? 'Container diagram' : 'System context'}<span class="artifact-id">${diagram.id}</span></p>`;
   };
   const emptyState = adrs.length === 0 ? `<p class="empty-state">${context ? 'No ADRs are included in this package.' : 'No ADRs belong to this diagram.'}</p>` : '';
   const index = adrs.length

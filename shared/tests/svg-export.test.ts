@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { renderDiagramSvg } from '../src/export/svg-export';
 import { layoutDiagramForSvg } from '../src/export/svg-layout';
-import { wrapExportText } from '../src/export/container-labels';
+import { relationshipLabelBlocks, exportLabelHeight } from '../src/export/container-labels';
 import { exportDiagramFixture, exportIds, htmlPackageFixture } from './html-export-fixtures';
 
 describe('domain-based SVG rendering', () => {
@@ -10,9 +10,7 @@ describe('domain-based SVG rendering', () => {
     for (const diagram of [fixture.parent, fixture.children.find(item => item.components.length)!]) {
       const layout = layoutDiagramForSvg(diagram);
       for (const route of layout.relationshipRoutes) {
-        const text = [route.relationship.label, ...(diagram.kind === 'container' ? [route.relationship.protocol] : [])].filter(Boolean).join('\n');
-        const lines = wrapExportText(text, 260);
-        const label = { x: route.label.x - 130, y: route.label.y - 14, width: 260, height: lines.length * 18 };
+        const label = { x: route.label.x - 130, y: route.label.y - 14, width: 260, height: exportLabelHeight(relationshipLabelBlocks(route.relationship, Boolean(diagram.scope))) };
         for (const rect of layout.componentRects.values()) {
           expect(label.x < rect.x + rect.width && label.x + label.width > rect.x && label.y < rect.y + rect.height && label.y + label.height > rect.y).toBe(false);
         }
@@ -94,8 +92,7 @@ describe('domain-based SVG rendering', () => {
     const svg = renderDiagramSvg(diagram);
     const componentName = svg.match(/<text class="component-name"[^>]*>(.*?)<\/text>/s)?.[1] ?? '';
 
-    expect(componentName).toContain('Architecture service label');
-    expect(componentName.match(/<tspan\b/g)).toHaveLength(7);
+    expect(componentName.replace(/<[^>]+>/g, ' ').trim().replace(/\s+/g, ' ')).toBe(diagram.components[0].name);
     expect(componentName).toContain('数据库');
     expect(svg).not.toContain('…');
   });

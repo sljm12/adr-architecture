@@ -105,6 +105,23 @@ the ZIP and open `index.html` directly to browse the diagram offline. The packag
 `adrs.html`, an editable `diagram.svg`, and one UUID-named Markdown file per ADR under `adrs/`.
 Its links are relative, so the extracted folder can be moved as a unit. Edit `--component-outline`
 and `--component-fill` near the top of `styles.css` to recolor component shapes in the HTML pages.
+System Context, Container and Component diagrams share a centered hierarchy: prominent names,
+smaller types/roles, regular responsibility text, and monospace technology/protocol text.
+The stylesheet is readable and documented. Change its font, color, field-size and page-spacing
+variables, or add rules in the **User overrides** section at the bottom. For example:
+
+```css
+.component-name { font-weight: 700; }
+.component-technology { font-family: Consolas, monospace; }
+.component-description { fill: #333333; }
+.diagram-level-component .component-technology { font-style: italic; }
+```
+
+Reload any HTML page after editing; root and nested pages all use the same `styles.css`.
+SVG text uses `fill` for color. Wrapping and SVG coordinates are calculated when exporting, so
+large manual font-size/family changes can require manual SVG adjustments. Standalone `diagram.svg`
+files embed matching default rules with resolved values for vector-editor compatibility; edit
+their `<style>` independently. New exports contain the default styles, not edits to older packages.
 The exact package paths and navigation contract are documented in
 [`package-format.md`](specs/007-export-interactive-html/contracts/package-format.md).
 

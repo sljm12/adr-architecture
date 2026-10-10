@@ -57,7 +57,7 @@ test('aggregate SVG and scoped Markdown remain complete while shared recoloring 
       }
     };
     const stylePath = join(directory, 'styles.css');
-    await writeFile(stylePath, files['styles.css'].replace('--component-outline:#707780;', '--component-outline:#123456;').replace('--component-fill:#ffffff;', '--component-fill:#abcdef;'));
+    await writeFile(stylePath, files['styles.css'].replace(/--component-outline:\s*#707780;/, '--component-outline: #123456;').replace(/--component-fill:\s*#ffffff;/, '--component-fill: #abcdef;'));
     await assertColors();
     movedDirectory = await relocateOfflinePackage(directory);
     await assertColors();
@@ -120,7 +120,7 @@ test('exported SVG, ADR Markdown, CSS colors, relative relocation, and keyboard 
 
     const stylePath = join(movedDirectory, 'styles.css');
     const styles = await readFile(stylePath, 'utf8');
-    await writeFile(stylePath, styles.replace('--component-outline:#707780;', '--component-outline:#123456;').replace('--component-fill:#ffffff;', '--component-fill:#abcdef;'));
+    await writeFile(stylePath, styles.replace(/--component-outline:\s*#707780;/, '--component-outline: #123456;').replace(/--component-fill:\s*#ffffff;/, '--component-fill: #abcdef;'));
     await page.goto(pathToFileURL(join(movedDirectory, 'index.html')).href);
     const componentLink = page.locator('.diagram-component-link').first();
     const componentShape = componentLink.locator('.component-shape');

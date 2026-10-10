@@ -140,13 +140,13 @@ describe('portable HTML package files', () => {
     expect(svg).toContain('class="diagram-components"');
     expect(svg).toContain('class="relationship-path"');
     expect(svg).toContain('<style>');
-    expect(styles.indexOf('--component-outline')).toBeLessThan(styles.indexOf('a{'));
+    expect(styles.indexOf('--component-outline')).toBeLessThan(styles.indexOf('a {'));
     expect(styles).toMatch(/--component-outline:\s*#[0-9a-f]{3,8}/i);
     expect(styles).toMatch(/--component-fill:\s*#[0-9a-f]{3,8}/i);
-    expect(styles).toContain('stroke:var(--component-outline)');
-    expect(styles).toContain('fill:var(--component-fill)');
+    expect(styles).toContain('stroke: var(--component-outline)');
+    expect(styles).toContain('fill: var(--component-fill)');
     expect(styles).toContain('a:focus-visible');
     expect(styles).toContain('.artifact-detail:target');
-    expect(styles).toContain('.empty-value{color:#5f6368;font-style:italic}');
+    expect(styles).toContain('.empty-value { color: var(--export-muted); font-style: italic; }');
   });
 });
