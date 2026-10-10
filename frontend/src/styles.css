@@ -153,6 +153,7 @@ html,body,#root{overflow:hidden}
 .diagram-context-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; width: 100%; }
 .diagram-context-controls label { font-size: 14px; font-weight: 600; }
 .diagram-context-controls input { min-height: 44px; max-width: 320px; min-width: 0; padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 11px; background: #fff; color: #1d1d1f; font: inherit; }
-.diagram-context-controls input:focus-visible, #diagram-heading:focus-visible, #container-diagram-heading:focus-visible { outline: 2px solid #0066cc; outline-offset: 3px; }
+.diagram-context-controls input:focus-visible, #diagram-heading:focus-visible, #container-diagram-heading:focus-visible, #component-diagram-heading:focus-visible, textarea:focus-visible { outline: 2px solid #0066cc; outline-offset: 3px; }
 .diagram-context-controls button { min-height: 44px; }
 .inspector-scope-context { margin: 0; padding: 12px 16px; color: #5f6368; font-size: 12px; line-height: 1.47; overflow-wrap: anywhere; border-bottom: 1px solid #e0e0e0; }
+.diagram-management summary { min-height: 44px; display: flex; align-items: center; }

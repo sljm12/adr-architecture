@@ -1,6 +1,6 @@
 # Implementation validation: C4 Component diagrams
 
-Scope: phases 1–6 and phase 7 implementation/automated validation (T001–T082). Component entry, modeling, hierarchy/navigation, recovery and exports are implemented. T083 actual-browser acceptance and phase 8 release gates remain pending as recorded below.
+Scope: phases 1–7 implementation/automated validation (T001–T082), plus Phase 8 engineering checks (T084–T087). Component entry, modeling, hierarchy/navigation, recovery and exports are implemented. T083 actual-product-browser acceptance, T088 first-time-author observations and T089 final release sign-off remain pending. Earlier checkpoints below retain their historical results; the Phase 8 section records the current engineering outcome.
 
 ## Environment and baseline (2026-10-09)
 
@@ -291,4 +291,101 @@ git diff --check
 | Safari | Unavailable on this Windows workspace | Not executed | **PENDING** actual current stable Safari on a supported OS |
 | WebKit | **26.5**, Playwright WebKit, Windows 11 | PASS with HTTP(S) blocked, including the new Component journey and all 15 offline checks | Engine regression evidence only; not a Safari substitute |
 
-T083 remains unchecked. Re-run the exported Component fixture journeys in current stable stock Firefox and Safari, verify current stable Chrome/Edge versions, and append actual product/OS evidence before completing that gate. US5 implementation and automated validation are demonstrable; phase 7 acceptance and release sign-off remain incomplete. Phase 8 scale, documentation, application accessibility, broad final checks and observed usability gates remain in T084–T089.
+T083 remains unchecked. Re-run the exported Component fixture journeys in current stable stock Firefox and Safari, verify current stable Chrome/Edge versions, and append actual product/OS evidence before completing that gate. US5 implementation and automated validation are demonstrable; actual-product-browser acceptance and release sign-off remain incomplete.
+
+## Phase 8 — scale, accessibility and engineering validation (2026-10-10)
+
+T084–T087: PASS. T088/T089 remain pending, together with T083. The user confirmed that no first-time-author or additional actual-product-browser observations are available and requested that those gates stay pending. No participant results or Safari acceptance are inferred from automation.
+
+### Scale evidence (T084)
+
+The deterministic fixture in `shared/tests/component-scale-fixture.ts` contains **1 Context, 3 Container and 6 Component diagrams**, with **100 internal artifacts, 100 supporting occurrences and 300 relationships per scoped diagram**. Every member has one linked and one unlinked local ADR: **20 ADRs total**. Component Person/System references exercise both the immediate Container occurrence and canonical Context source. Tests validate every diagram, preserve UUIDs/source IDs/layout, check artifact/relationship completeness, and resolve all package file/fragment links. The full hierarchy yields **10 diagrams and 42 files** without mutating the input. These volumes are validation fixtures, not product limits.
+
+[Raw measured samples and provenance](performance-samples.json) retain **five warmups and twenty measured samples per timed operation**, in milliseconds. The median averages sorted samples 10 and 11. Samples yield between synchronous operations to avoid starving Vitest runner IPC. Hardware/runtime: Windows 11 build **10.0.26200**, Intel **Core i7-13700H**, **20 logical processors**, **15.73 GiB RAM**, Node.js **22.17.1**, Playwright **1.62.1**, PostgreSQL **17.4**, installed Chrome **154.0.8037.99**. Domain measurements came from the full two-worker Vitest run; PostgreSQL measurements came from an isolated one-worker run; browser measurements came from the one-worker normal headless suite with tracing disabled for performance tests.
+
+| Operation, median ms | Container | Component | Change |
+| --- | ---: | ---: | ---: |
+| Shared schema/invariant validation | 1.92 | 1.61 | −16.3% |
+| Boundary fit | 0.143 | 0.122 | −14.8% |
+| Mermaid | 3.63 | 3.88 | +6.9% |
+| Standalone SVG | 66.68 | 71.55 | +7.3% |
+| Selected HTML assembly | 146.50 | 146.59 | +0.1% |
+| PostgreSQL source hydration | 6.89 | 10.24 | +48.6% |
+| PostgreSQL load | 49.86 | 54.35 | +9.0% |
+| PostgreSQL idempotent open | 43.91 | 62.06 | +41.3% |
+| PostgreSQL create, including transaction/rollback | 48.05 | 63.06 | +31.2% |
+| Browser load | 820.79 | 893.24 | +8.8% |
+| Browser edit | 444.45 | 421.95 | −5.1% |
+| Browser save | 269.69 | 268.63 | −0.4% |
+| In-process API idempotent open | 16.42 | 20.72 | +26.2% |
+
+Browser load/edit/save/ZIP composite medians were **2022.94/1793.66 ms**; ZIP steps were **492.28/215.74 ms**. ZIP/composite numbers have unequal output workloads: a Container entry includes itself and two Component children, while a Component entry includes one diagram. They do not establish a Component export speed advantage. Full ten-member hierarchy rendering measured **1318.74 ms**; PostgreSQL hierarchy gathering measured **189.73 ms**. Raw outliers remain recorded, including browser iterations above ten seconds; medians are engineering observations, not a general latency guarantee or observed usability result.
+
+Investigation of changes above 20%:
+
+- Component hydration resolves **two ancestor documents**, versus one for Container. The memory repository spy observes exactly two ancestor reads and **zero per-occurrence `findComponent` calls**. PostgreSQL hydration performs **11 queries versus 4**; query work is bounded by ancestor documents, not 100 supporting occurrence IDs. The extra ancestor load includes components/relationships and owner/scope resolution; the measured increase is **3.35 ms**. Both reference hops remain validated.
+- PostgreSQL idempotent open performs **100 queries versus 90**, and load **92 versus 83**, on the same ten-member root. Inspection of `DiagramService.resolveComponentOwner`, `ComponentContextService.resolve` and root coordination identifies the additional Container/Context eligibility and authoritative hydration work. The open increase is **18.15 ms**; the independently measured in-process open increase is **4.30 ms**, so this cost also exists without database round trips. Browser requests reference only the two deliberately selected internal IDs; there is no HTTP request per supporting source.
+- First-create samples retain the same ten-member graph by rolling each new child back under the existing root-coordinated transaction. The Component increase is **15.01 ms** and includes the extra owner/ancestor resolution plus rollback. These are service/transaction samples, not end-to-end user creation timings. No additional service, cache, migration or product cap was introduced to hide these costs.
+- Hierarchy gathering issues **187 queries** and locks exactly **10 rows**, Context first, then UUID-sorted Containers, then UUID-sorted Components. With the root deliberately held, `pg_stat_activity` reports an actual lock waiter, the action has not entered, and lower-level rows remain available to `FOR UPDATE NOWAIT`. Release completes the operation; the controlled wait was **43.94 ms**, not an uncontrolled contention SLA. Existing graph race/rollback suites validate concurrent outcomes separately.
+
+The legacy selected HTML **100-component/200-relationship/100-ADR ten-second bound** passes both `shared/tests/html-package-scale.test.ts` and the native direct-file browser test in all four offline projects. The larger new scoped and hierarchy fixtures also pass completeness checks without silently dropping artifacts.
+
+### Documentation and keyboard audit (T085/T086)
+
+README and quickstart now describe Component entry/modeling, authoritative source editing, nested lists/save/return, exact trash/restore, immediate-source removal, supported/empty formats, browser subtree versus selected-only saved CLI exports, migration 0007 and disposable database/browser prerequisites.
+
+`e2e/tests/component-diagram-accessibility.spec.ts` completes create/open, invalid-then-corrected edit, save, supporting inclusion, immediate-parent return, internal/supporting ADR linking and exact trash/restore through **native Tab/Shift+Tab, Enter/Space and text input**. It does not script focus or click to activate controls. Canceled unsaved navigation and canceled recovery return focus to their initiating buttons; successful entry/restore/return focus the destination heading and parent return selects the exact owner. Text identifies Component scope, Software System, Container parent, internal Component and Datastore Supporting roles, with read-only owner-derived title and retained invalid input.
+
+- Reached action buttons and recovery confirmation are at least **44×44 CSS px**. The diagram-management disclosure now has a 44px minimum height.
+- Component heading and textarea focus now use DESIGN.md's **2px Action Blue outline**, matching existing headings/fields. Computed outline checks require a visible nonzero stroke and non-`none` style; Windows display scaling can round an authored 2px outline to 1.6 CSS px.
+- Computed sampled text contrast: responsibilities/scope **16.83:1**, Save **12.12:1**, recovery confirmation **5.57:1**, all above **4.5:1**.
+- Visually inspected `test-results/phase8-keyboard-component.png`: visible heading focus, textual owner/parent scope, internal/supporting metadata, nested library and recovery feedback. Logs/screenshots remain ignored generated artifacts. This is the required keyboard/control audit, not a claim of exhaustive assistive-technology certification.
+
+### Complete engineering checks (T087)
+
+```powershell
+# DATABASE_URL and the API use the configured disposable database, migrated through 0007.
+$env:RUN_POSTGRES_TESTS = '1'
+npm.cmd test -- --maxWorkers=2
+npm.cmd run build
+npx.cmd tsc -b frontend
+npm.cmd run test:e2e -- --workers=1 --output=test-results/phase8-normal-headless
+npm.cmd run test:e2e -- component-diagram-persistence.spec.ts --config=playwright.component.config.ts --output=test-results/phase8-real-runtime-final
+npm.cmd run test:e2e -- --config=playwright.offline.config.ts --workers=1 --output=test-results/phase8-offline
+npm.cmd test -- backend/tests/persistence/component-scale.test.ts --maxWorkers=1
+git diff --check
+```
+
+| Check | Final result |
+| --- | --- |
+| Full Vitest | **130 files, 672 tests passed, zero failures/skips**, 82.79 s |
+| All-package build / explicit frontend TypeScript | PASS / PASS |
+| Complete normal E2E | **94/94 passed**, 7.2 min; machine report `status: passed`, no failed tests |
+| Separate real HTTP/PostgreSQL journey | **1/1 passed**, 12.0 s, test 9.5 s; no skip |
+| Offline direct-file browser matrix | **60/60 passed**, 2.9 min; **15/15 per project**, no failed tests |
+| Final isolated PostgreSQL scale rerun | **1/1 passed**, 22.69 s, test 17.60 s |
+| Whitespace / evidence JSON | PASS / PASS |
+
+The full run includes **23 non-skipped Spec 010 PostgreSQL cases**: migration 4, graph transactions 9, creation/entry 4, ADR 1, editing 1, recovery 1, hierarchy source 2 and scale 1, plus two memory graph cases. Every enabled legacy PostgreSQL suite also passes. Isolated Component schemas apply 0001–0007 and are cleaned up by their guarded fixture; no deployment migration was executed. Evidence covers migration preservation, overlapping creation/retry, Context-first locking, source/owner races, root trash versus Component/ADR mutation, diagram/ADR/link/provenance rollback, stable exact batches and invalid/stale confirmation rejection. Normal E2E includes the actual HTTP/PostgreSQL journey and all existing Context/Container groups, ADRs, recovery, export, keyboard and responsive-workspace regressions.
+
+Harness corrections made during verification: scale tests edit Responsibilities rather than the now read-only owner title, expect captured source contexts in the single export DTO, and use keyboard activation for off-viewport scale selections. Real-runtime recovery waits for completed UI feedback after database commit. A separate rerun exposed an in-place `.sort()` assertion followed by an order-sensitive ADR comparison; the test now compares full ADR content with exact normalized link sets without changing its snapshot, and the corrected standalone journey passes. The 94-test complete run preceded this final assertion-only correction. No production persistence change was needed. Windows normal runs now use Playwright's default headless mode; `--headed` remains available. Performance tests disable trace capture because repeated full-canvas snapshots distorted their timings. Initial headed/audit attempts and the order-sensitive assertion failure are superseded by the successful checks above, not counted as passes.
+
+Existing Vite chunk-size, pg concurrent-client-query deprecation and runner color warnings remain non-failing. Windows PowerShell can report redirected native stderr warnings as `NativeCommandError`; the recorded Playwright summaries and `.last-run.json` files confirm the successful runs independently of that shell diagnostic. Current Playwright keyboard/focus/headless and Drizzle logging/transaction documentation was fetched with Context7 outside the sandbox; dependencies/lockfile are unchanged.
+
+Browser versions were read from actual Phase 8 launches: **Chrome 154.0.8037.99**, **Edge 155.0.4283.45**, **Playwright Firefox 153.0**, **Playwright WebKit 26.5** on Windows 11. All 15 direct-file tests pass per project with normal local-file security, relocation, native keyboard traversal, ADR links, recoloring and reload. WebKit blocks HTTP(S) rather than using Windows WebKit's incompatible offline emulation, and verifies failed network fetch. These results retain the T083 distinction above: stock current stable Firefox/Safari and stable Chrome/Edge version confirmation remain pending.
+
+### Current requirement matrix and release status
+
+| Requirements / success criteria | Evidence / outcome |
+| --- | --- |
+| FR-001–005; SC-002 | Canonical entry, overlap/retry/source/duplicate-owner tests and real-runtime journey: PASS |
+| FR-006–010; SC-005/006 | Level-specific modeling, geometry/source/endpoint validation, corrective failures and preservation: PASS |
+| FR-011–016; SC-004 | Owner-derived naming, save/reopen/list/return, draft/history/retry, UUID/migration/link invariants: PASS |
+| FR-017–021; SC-006/007 | Local ADR lifecycle/links, protected immediate/canonical sources, exact recovery and real PostgreSQL races/rollback: PASS |
+| FR-022/023; SC-009 | Automated selected/subtree/CLI completeness and all offline project checks: PASS; actual-product-browser acceptance T083: PENDING |
+| FR-024; SC-010 | Full legacy Context/Container/groups/ADR/recovery/export/API/CLI/migration regressions: PASS |
+| FR-025; SC-008 | Application native keyboard audit, focus/labels/contrast/targets and offline keyboard links: PASS; T083 product-browser gate remains separate |
+| SC-001/003; T088 | **PENDING, zero participants observed**. No measured 90%-within-30-second entry rate or five-minute modeling observation is available |
+| T089 final acceptance | **PENDING** until T083 and T088 pass; no release sign-off |
+
+Constitution review: stable linked/versioned artifacts (I), complete local ADR lifecycle/content (II), explicit recoverable confirmation and atomic error handling (III), schema/persistence/export compatibility tests (IV), and the minimal existing stack plus keyboard/readable-label/contrast evidence (V) pass engineering review. Product-browser and first-time-author acceptance remain required release gates, without an exception or fabricated substitute. Working-tree changes are limited to Phase 8 checks, relevant focus/target fixes, runner/test corrections and documentation; no dependencies, lockfile, runtime schema, applied migrations or unrelated artifacts changed. Requirements checklist remains **16/16**, untouched; active feature is still Spec 010. `.specify/extensions.yml` is absent at final pre/post-hook verification, so hooks are skipped according to the implementation skill.

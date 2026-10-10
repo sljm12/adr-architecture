@@ -13,6 +13,8 @@ through the REST API, and validated diagrams can be downloaded as Mermaid files.
   unclassified components readable.
 - Create/reopen one C4 container diagram per Software System and model Application/Datastore
   containers with source-linked external participants.
+- Create/reopen one Component diagram per Application or Datastore, with internal Components,
+  supporting participants, local interactions and ADR links across the three-level hierarchy.
 - Connect components with labeled directed or undirected relationships.
 - Group two or more Software Systems inside a labeled, movable boundary without rearranging their
   existing positions.
@@ -51,6 +53,7 @@ psql "$DATABASE_URL" -f backend/drizzle/0003_system_groups.sql
 psql "$DATABASE_URL" -f backend/drizzle/0004_component_dimensions.sql
 psql "$DATABASE_URL" -f backend/drizzle/0005_c4_container_diagrams.sql
 psql "$DATABASE_URL" -f backend/drizzle/0006_container_component_types.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/drizzle/0007_c4_component_diagrams.sql
 ```
 
 Migration `0003_system_groups.sql` adds `system_groups` and normalized
@@ -65,6 +68,10 @@ unchanged. It never infers Datastore from metadata. Apply 0006 before deploying 
 that requires subtype; authors can then change existing data stores to Datastore. New internal
 writes missing a subtype fail validation.
 
+Migration 0007 widens the existing diagram/scope/role constraints for Component documents and
+requires valid child boundary values. It adds no tables, columns or backfill. Apply it after
+0001–0006; retain applied migrations and apply only pending migrations on existing deployments.
+
 ## Tests
 
 ```text
@@ -78,6 +85,10 @@ For release validation, configure a dedicated migrated `DATABASE_URL` and set
 `RUN_POSTGRES_TESTS=1`; skipped database tests do not establish migration, rollback or race safety.
 See the [container quickstart](specs/009-c4-container-diagrams/quickstart.md) and
 [validation evidence](specs/009-c4-container-diagrams/validation.md) for commands and outstanding gates.
+The [Component quickstart](specs/010-c4-component-diagrams/quickstart.md) includes the three-level
+journeys, disposable PostgreSQL setup, real HTTP/database workflow, offline browser matrix and
+scale checks. [Spec 010 evidence](specs/010-c4-component-diagrams/validation.md) records results
+and pending product-browser/usability acceptance; Playwright WebKit does not establish Safari acceptance.
 
 ## Mermaid preview
 
@@ -89,7 +100,7 @@ labeled `subgraph`. Mermaid preserves group meaning and membership, but not exac
 
 ## Interactive HTML package
 
-Choose **Export HTML package** to download the active diagram and all of its ADRs as a ZIP. Extract
+Choose **Export HTML package** to download the active diagram, its active descendants and their local ADRs as a ZIP. Extract
 the ZIP and open `index.html` directly to browse the diagram offline. The package also includes
 `adrs.html`, an editable `diagram.svg`, and one UUID-named Markdown file per ADR under `adrs/`.
 Its links are relative, so the extracted folder can be moved as a unit. Edit `--component-outline`
@@ -113,13 +124,15 @@ npm run cli -- diagrams export 00000000-0000-4000-8000-000000000001 --output .\a
 
 The list shows each diagram's stable UUID, name, and timestamps. Name filtering ignores case, and
 JSON output is an array suitable for scripts. Export uses the persisted diagram and its full ADR set
-to create the same portable package as the browser exporter. The output path must end in `.zip`,
+to create a selected-diagram-only portable package, including for Component diagrams. Browser
+exports include the active subtree and retained drafts; CLI exports use saved data for the selected
+diagram and its ADRs. The output path must end in `.zip`,
 its parent directory must already exist, and an existing file is never replaced.
 
 Successful commands exit with status `0`. Service, validation, and file errors exit with status `1`;
 invalid command syntax exits with status `2`. Diagnostics are written to standard error.
 
-The list table also identifies diagram level, parent and owning Software System. JSON remains a flat
+The list table also identifies diagram level, parent and owner. JSON remains a flat
 array with `kind` and resolved `scope`. Container exports retain the child's own name, canonical scope,
 Application/Datastore subtypes, responsibilities, technologies, protocols and local ADR links.
 
@@ -153,8 +166,8 @@ and a null component type is shown as **Unclassified** until it is classified.
 
 Save a general diagram containing a Software System, then double-click the system or select/view it
 and activate **Create container diagram**. Both entry points reopen the same canonical child after
-creation, including grouped systems or systems with identical names. A Person, group or internal
-container cannot own a child. An external Software System action resolves its parent source identity.
+creation, including grouped systems or systems with identical names. A Person or group cannot
+own a child. An external Software System action resolves its parent source identity.
 Unsaved parent/ADR work uses Save/Discard/Cancel; failed creation/loading leaves current work visible
 and offers retry. A trashed child offers restoration and reserves its identity.
 
@@ -197,8 +210,46 @@ Populated children export scope/boundary, subtypes, metadata, externals and inte
 captures the current diagram and ADR draft, then resolves current parent source metadata without
 saving; CLI HTML uses persisted data. Empty children retain their boundary in SVG/HTML; Mermaid
 returns `422 EMPTY_CONTAINER_MERMAID` with those alternatives and produces no file. Unsupported
-content fails explicitly. Parent packages contain one diagram and state that child contents are
-not bundled. Extract the ZIP and open `index.html` offline to follow local ADR links.
+content fails explicitly. Browser Context packages include active Container and Component descendants;
+Container packages include active Component children; Component packages contain only that child.
+Single-diagram builders and the CLI remain selected-only. Navigation appears only for included
+destinations. Extract the ZIP and open `index.html` offline to follow local ADR links.
+
+## C4 Component diagrams
+
+In a saved Container diagram, select an Application or Datastore and activate **Create component
+diagram**, or double-click it. Later entry uses **Open component diagram** or **Restore component
+diagram** and retains the same UUID and owner. Save-before-first-create must succeed; canceled or
+failed saves retain the draft. Retry after a failed load reuses the created child.
+
+Add internal **Components** with name, responsibilities and technology. Container-level forms keep
+Application/Datastore choices; Component forms offer only Component. Include sibling containers or
+existing Container Person/Software System occurrences as supporting participants. Interactions require
+a description and at least one internal endpoint; protocols are optional. Supporting details are
+read-only: use **Edit source** to reach the authoritative Container or Context, then reopen or
+**Refresh source details**. Moving/resizing local occurrences preserves source layout and identities.
+
+The boundary fits internals and displaces overlapping supporting participants in one undoable edit.
+Save/reopen preserves local architecture and ADR links. Titles follow the owner and are read-only;
+draft owner renames update library previews before filtering/sorting. The library nests Component
+children under their Container and Context UUIDs. **Return to** opens the immediate parent and
+selects the exact owner, with Save/Discard/Cancel protection for diagram and ADR drafts.
+
+Owner/source removal is blocked by active or recoverable children. A supporting Person/System retains
+its immediate Container occurrence reference and its canonical Context source. Keeping the Context
+source does not permit removing that Container occurrence: restore each affected child as needed,
+resolve its relationship/ADR blockers and explicitly remove its local occurrence, then remove the
+parent occurrence once all dependencies are cleared. No removal cascades or retargets these references.
+Changing an owner between Application and Datastore retains its child.
+
+Trash previews list all active affected descendants. Restore confirms the exact recorded batch,
+ancestor-first; previously independently trashed descendants stay trashed and need separate
+confirmation after their ancestors are active. Changed impact requires a fresh confirmation.
+
+Populated Components export scope, responsibilities, technology, supporting roles, interactions and
+local ADRs. Empty SVG/HTML retain the boundary; Mermaid returns `EMPTY_COMPONENT_MERMAID` with the
+remedy to add a Component or choose SVG/HTML. Mermaid preserves semantic information rather than
+exact canvas geometry. Invalid or unavailable required artifacts fail the entire export.
 
 ## Project boundaries
 

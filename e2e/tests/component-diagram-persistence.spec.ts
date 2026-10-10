@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { buildApp } from '../../backend/src/api/app';
 import { componentTestDatabase, postgresEnabled } from '../../backend/tests/persistence/component-test-database';
 import { componentContextFixture, componentParentFixture, emptyComponentFixture, componentFixtureIds as ids } from '../../shared/tests/component-fixtures';
-import type { DiagramDocument } from '../../shared/src/index';
+import type { ArchitectureDecisionRecord, DiagramDocument } from '../../shared/src/index';
 
 test('real HTTP/PostgreSQL: authors and reopens local ADR content, blocks immediate source removal and stages exact recovery', async ({ page }) => {
   test.skip(!postgresEnabled, 'Requires RUN_POSTGRES_TESTS=1 and a dedicated DATABASE_URL');
@@ -45,7 +45,7 @@ test('real HTTP/PostgreSQL: authors and reopens local ADR content, blocks immedi
     await page.getByRole('checkbox', { name: /Relationship Request handler/ }).check();
     await page.getByRole('button', { name: 'Save decision', exact: true }).click(); await expect(page.getByRole('button', { name: 'Delete decision', exact: true })).toBeVisible();
     const adr = (await database.adrs.listFull(ids.child))[0];
-    expect(adr.componentIds.sort()).toEqual([internal.id, occurrence.id].sort()); expect(adr.relationshipIds).toHaveLength(1);
+    expect([...adr.componentIds].sort()).toEqual([internal.id, occurrence.id].sort()); expect(adr.relationshipIds).toHaveLength(1);
     await page.reload(); await row(ids.child).click(); await expect(page.locator('#component-diagram-heading')).toBeVisible();
     expect((await database.diagrams.get(ids.child))!.components.map(c => c.id)).toEqual(child.components.map(c => c.id));
     await page.getByRole('button', { name: /^Return to Payments, owner Payment API/ }).click();
@@ -55,11 +55,14 @@ test('real HTTP/PostgreSQL: authors and reopens local ADR content, blocks immedi
     expect((await database.diagrams.get(ids.parent))!.components.some(c => c.id === ids.personOccurrence)).toBe(true);
     await recover('trash', ids.datastoreChild); await page.getByRole('button', { name: 'Move to trash', exact: true }).click();
     await expect.poll(async () => (await database.diagrams.get(ids.datastoreChild))?.status).toBe('trashed');
+    await expect(page.locator('.container-navigation-feedback').filter({ hasText: 'Confirmed diagrams moved to recoverable trash.' })).toBeVisible();
     const independent = await database.diagrams.getTrashProvenance(ids.datastoreChild);
     await recover('trash', ids.context); await expect(page.getByRole('alertdialog')).toContainText(ids.child);
     await expect(page.getByRole('alertdialog')).not.toContainText(ids.datastoreChild);
     await page.getByRole('button', { name: 'Move to trash', exact: true }).click();
     await expect.poll(async () => (await database.diagrams.get(ids.child))?.status).toBe('trashed');
+    // The commit precedes list refresh; a new recovery intent is available after UI completion.
+    await expect(page.locator('.container-navigation-feedback').filter({ hasText: 'Confirmed diagrams moved to recoverable trash.' })).toBeVisible();
     await recover('restore', ids.datastoreChild); await expect(page.getByRole('alertdialog')).toContainText('will remain in trash');
     await page.getByRole('button', { name: 'Restore diagrams', exact: true }).click();
     await expect(page.getByRole('alertdialog')).toContainText('separate restoration');
@@ -67,7 +70,10 @@ test('real HTTP/PostgreSQL: authors and reopens local ADR content, blocks immedi
     expect(await database.diagrams.getTrashProvenance(ids.datastoreChild)).toEqual(independent);
     await page.getByRole('button', { name: 'Restore diagrams', exact: true }).click();
     await expect(page.locator('#component-diagram-heading')).toBeVisible();
-    expect((await database.diagrams.get(ids.datastoreChild))?.status).toBe('active'); expect(await database.adrs.get(adr.id)).toEqual(adr);
+    expect((await database.diagrams.get(ids.datastoreChild))?.status).toBe('active');
+    // SQL link rows have no ordering contract; compare the full ADR and exact link sets.
+    const orderedLinks = (decision: ArchitectureDecisionRecord) => ({ ...decision, componentIds: [...decision.componentIds].sort(), relationshipIds: [...decision.relationshipIds].sort() });
+    expect(orderedLinks((await database.adrs.get(adr.id))!)).toEqual(orderedLinks(adr));
     expect(httpRequests).toBeGreaterThan(30);
   } finally { await app.close(); await database.close(); }
 });
