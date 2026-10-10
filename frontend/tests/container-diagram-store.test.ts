@@ -1,10 +1,11 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { adrClient } from '../src/api/adr-client';
 import { diagramDocumentSchema, type DiagramDocument } from '../../shared/src/index';
 import { emptyChildFixture, populatedChildFixture, containerFixtureIds as ids } from '../../shared/tests/container-fixtures';
 import { useDiagramStore } from '../src/state/diagram-store';
 const store = () => useDiagramStore.getState();
 const child = () => diagramDocumentSchema.parse(populatedChildFixture()) as DiagramDocument;
-beforeEach(() => store().open(diagramDocumentSchema.parse(emptyChildFixture()) as DiagramDocument));
+beforeEach(() => { vi.restoreAllMocks(); store().open(diagramDocumentSchema.parse(emptyChildFixture()) as DiagramDocument); });
 describe('atomic container authoring commands', () => {
   it('adds a complete artifact atomically and restores an empty boundary through history',()=>{
     const before=structuredClone(store().document!);
@@ -48,7 +49,7 @@ describe('atomic container authoring commands', () => {
     store().undo();
     expect(store().document).toEqual(before);
   });
-  it('validates interaction endpoints, description, direction and protocol before creating an edge', () => {
+  it('validates interaction endpoints, description, direction and protocol before creating an edge', async () => {
     store().open(child());
     const before = store().document;
     expect(store().addRelationship(ids.container, ids.person, 'calls', 'directed')).toBe(false);
@@ -58,7 +59,8 @@ describe('atomic container authoring commands', () => {
     expect(store().addRelationship(ids.container, ids.externalOccurrence, 'calls', 'directed', ' HTTPS ')).toBe(true);
     expect(store().document!.relationships.at(-1)?.protocol).toBe('HTTPS');
     expect(store().setRelationshipDirection(ids.childRelationship, 'undirected')).toBe(false);
-    const linked=structuredClone(store().document!);store().removeRelationship(ids.childRelationship);expect(store().document!.relationships.some(r=>r.id===ids.childRelationship)).toBe(false);store().undo();expect(store().document).toEqual(linked);
+    vi.spyOn(adrClient, 'relationshipSummaries').mockResolvedValue([]);
+    const linked=structuredClone(store().document!);await store().removeRelationship(ids.childRelationship);expect(store().document!.relationships.some(r=>r.id===ids.childRelationship)).toBe(false);store().undo();expect(store().document).toEqual(linked);
   });
   it('protects external source details and caps undo history', () => {
     store().open(child());

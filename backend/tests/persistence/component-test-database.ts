@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import * as schema from '../../src/persistence/schema';
@@ -21,8 +22,8 @@ export async function componentTestDatabase(includeComponentMigration = true) {
   try {
     await admin.query(`CREATE SCHEMA ${schemaName}`);
     pool = new Pool({ connectionString: process.env.DATABASE_URL, options: `-c search_path=${schemaName}`, connectionTimeoutMillis: 5000 });
-    for (const name of priorMigrations) await pool.query(await readFile(new URL(`../../drizzle/${name}`, import.meta.url), 'utf8'));
-    if (includeComponentMigration) await pool.query(await readFile(new URL('../../drizzle/0007_c4_component_diagrams.sql', import.meta.url), 'utf8'));
+    for (const name of priorMigrations) await pool.query(await readFile(resolve('backend/drizzle', name), 'utf8'));
+    if (includeComponentMigration) await pool.query(await readFile(resolve('backend/drizzle/0007_c4_component_diagrams.sql'), 'utf8'));
     const db = drizzle(pool, { schema });
     return { pool, db, diagrams: new PostgresDiagramRepository(db), adrs: new PostgresAdrRepository(db), close };
   } catch (error) { await close(); throw error; }

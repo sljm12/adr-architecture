@@ -132,4 +132,46 @@ describe.skipIf(!postgresEnabled)('Component PostgreSQL graph foundations', () =
       expect(await database.adrs.list(ids.child)).toEqual([]);
     } finally { release(); await rootWrite; await database.diagrams.restore(ids.context); }
   });
+  it('serializes confirmed root trash against Component and ADR writes without active orphans', async () => {
+    const service = new DiagramService(database.diagrams, database.adrs);
+    const child = await service.load(ids.child);
+    const impact = await service.trashImpact(ids.context);
+    const results = await Promise.allSettled([
+      service.trash(ids.context, impact.affectedDiagramIds),
+      service.save(ids.child, child),
+      new AdrService(database.adrs, database.diagrams).create(ids.child, { title: 'Concurrent', context: 'Context', decision: 'Decision', consequences: 'Consequences', status: 'draft' }),
+    ]);
+    expect(results[0].status).toBe('fulfilled');
+    for (const id of [ids.context, ids.parent, ids.child, ids.datastoreChild]) expect((await database.diagrams.get(id))?.status).toBe('trashed');
+    for (const result of results.slice(1)) if (result.status === 'rejected') expect(['Diagram not found', 'Restore every inactive ancestor before changing this diagram.', 'Restore every inactive ancestor before accessing or changing decisions.']).toContain(result.reason.message);
+    const restore = await service.restoreImpact(ids.child);
+    await service.restore(ids.context, { confirmedDiagramIds: restore.affectedDiagramIds, confirmedTrashBatchId: restore.trashBatchId });
+  });
+  it('rechecks confirmation membership under the root lock', async () => {
+    const service = new DiagramService(database.diagrams);
+    const stale = await service.trashImpact(ids.context);
+    await service.trash(ids.datastoreChild);
+    const before = await database.diagrams.listAll();
+    await expect(service.trash(ids.context, stale.affectedDiagramIds)).rejects.toMatchObject({ code: 'TRASH_IMPACT_CHANGED' });
+    expect(await database.diagrams.listAll()).toEqual(before);
+    await service.restore(ids.datastoreChild);
+  });
+  it('serializes independent child trash versus confirmed ancestor trash with exact batches', async () => {
+    const service = new DiagramService(database.diagrams);
+    const impact = await service.trashImpact(ids.context);
+    const results = await Promise.allSettled([service.trash(ids.context, impact.affectedDiagramIds), service.trash(ids.datastoreChild)]);
+    expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
+    if ((await database.diagrams.get(ids.context))?.status === 'trashed') {
+      expect(results[0].status).toBe('fulfilled');
+      expect(await database.diagrams.getTrashProvenance(ids.datastoreChild)).toEqual(await database.diagrams.getTrashProvenance(ids.context));
+      const restore = await service.restoreImpact(ids.child);
+      await service.restore(ids.context, { confirmedDiagramIds: restore.affectedDiagramIds, confirmedTrashBatchId: restore.trashBatchId });
+    } else {
+      expect(results[1].status).toBe('fulfilled');
+      if (results[0].status === 'rejected') expect(results[0].reason).toMatchObject({ code: 'TRASH_IMPACT_CHANGED' });
+      expect((await database.diagrams.get(ids.child))?.status).toBe('active');
+      expect(await database.diagrams.getTrashProvenance(ids.datastoreChild)).toMatchObject({ trashRootDiagramId: ids.datastoreChild });
+      await service.restore(ids.datastoreChild);
+    }
+  });
 });

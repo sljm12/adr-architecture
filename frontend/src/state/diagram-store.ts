@@ -6,6 +6,8 @@ import { getDiagramName, isContainerDocument } from '../../../shared/src/index';
 import { reconcileParentDiagramSummaries } from './diagram-list';
 import { assertDiagramInvariants, containerContextSchema, componentContextSchema, diagramDocumentSchema, fitScopedDiagramLayout, getContainerComponentMinimumSize, isContainerType, validateExternalPlacement, type ContainerContext, type ComponentContext, type ContainerType, type ComponentSize } from '../../../shared/src/index';
 import { getComponentScope, getDiagramOwnerId, type ComponentAvailability } from '../../../shared/src/index';
+import { useAdrStore } from './adr-store';
+import { adrClient } from '../api/adr-client';
 
 export type ContainerEdit = { name: string; description: string; technology: string; containerType: ContainerType };
 export type C4ComponentEdit = { name: string; description: string; technology: string };
@@ -23,6 +25,7 @@ type State = {
   document: DiagramDocument | null;
   status: SaveStatus;
   error: string | null;
+  dependencyError: string | null;
   groupError: string | null;
   clearGroupError: () => void;
   savedDocuments: DiagramSummary[];
@@ -52,9 +55,9 @@ type State = {
   open: (document: DiagramDocument, retainHistory?: boolean) => void;
   startNew: () => void;
   create: (name: string) => Promise<void>;
-  update: (fn: (document: DiagramDocument) => DiagramDocument) => void;
-  undo: () => void;
-  redo: () => void;
+  update: (fn: (document: DiagramDocument) => DiagramDocument, options?: { confirmedRemoval?: boolean }) => void | Promise<void>;
+  undo: () => void | Promise<void>;
+  redo: () => void | Promise<void>;
   addComponent: (name: string, type: C4ArtifactType, description?: string | null) => boolean;
   addContainer: (details: ContainerEdit) => boolean;
   editContainer: (componentId: string, details: ContainerEdit) => boolean;
@@ -77,7 +80,7 @@ type State = {
   updateRelationship: (relationshipId: string, updates: Partial<Pick<Relationship, 'sourceComponentId' | 'targetComponentId' | 'direction' | 'label' | 'protocol'>>) => boolean;
   reverseRelationship: (relationshipId: string) => boolean;
   setRelationshipDirection: (relationshipId: string, direction: RelationshipDirection) => boolean;
-  removeRelationship: (relationshipId: string) => void;
+  removeRelationship: (relationshipId: string) => void | Promise<void>;
   save: () => Promise<void>;
   retry: () => Promise<void>;
   refreshSavedDocuments: () => Promise<void>;
@@ -165,6 +168,36 @@ const interactionError = (document: DiagramDocument, source: string, target: str
   if (protocol && protocol.trim().length > 200) return 'Protocol must contain at most 200 characters.';
   return null;
 };
+/** Destructive snapshots are checked against current server dependencies before history moves. */
+const removalChecks = (current: DiagramDocument, next: DiagramDocument): Promise<void> | undefined => {
+  const allRemoved = current.components.filter(c => !next.components.some(n => n.id === c.id));
+  const allRelationships = current.relationships.filter(r => !next.relationships.some(n => n.id === r.id));
+  const draft = useAdrStore.getState().draft;
+  if (draft?.diagramId === current.id && (allRemoved.some(c => draft.componentIds.includes(c.id)) || allRelationships.some(r => draft.relationshipIds.includes(r.id)))) throw new Error(`Repair links in decision ${draft.title || 'Untitled ADR'} before removing its local artifacts.`);
+  const saved = savedMetadata?.id === current.id ? savedMetadata : null;
+  const removed = allRemoved.filter(c => saved?.components.some(s => s.id === c.id));
+  const reclassified = current.components.filter(c => saved?.components.some(s => s.id === c.id && next.components.some(n => n.id === c.id && n.type !== c.type && (!isC4ArtifactType(n.type) || s.type === 'software-system' && n.type !== 'software-system'))));
+  const relationships = allRelationships.filter(r => saved?.relationships.some(s => s.id === r.id));
+  if (!removed.length && !reclassified.length && !relationships.length) return;
+  return (async () => {
+    for (const component of [...removed, ...reclassified]) {
+      const removing = removed.includes(component);
+      let dependencies;
+      try { dependencies = await diagramClient.dependencyCount(current.id, component.id); }
+      catch (error) {
+        if (error instanceof DiagramApiError && error.status === 404 && savedMetadata?.id === current.id && !savedMetadata.components.some(c => c.id === component.id)) continue;
+        throw error;
+      }
+      const diagramBlockers = (dependencies.diagramBlockers ?? []).filter((b: any) => removing || !isC4ArtifactType(next.components.find(c => c.id === component.id)?.type) || b.componentId === component.id);
+      if (diagramBlockers.length || removing && (dependencies.relationshipCount || dependencies.blockers?.length || dependencies.groupIds?.length)) throw new DiagramApiError('Repair dependent diagrams, occurrences, relationships, decisions or groups before removing or reclassifying this element.', 409, { ...dependencies, diagramBlockers });
+    }
+    for (const relationship of relationships) {
+      if (savedMetadata?.id === current.id && !savedMetadata.relationships.some(r => r.id === relationship.id)) continue;
+      const blockers = await adrClient.relationshipSummaries(current.id, relationship.id);
+      if (blockers.length) throw new Error(`Repair linked decisions before removing relationship ${relationship.id}: ${blockers.map(b => `${b.title} (${b.id})`).join(', ')}.`);
+    }
+  })();
+};
 export const describeGroupSelection = (document: DiagramDocument, memberComponentIds: string[], excludedGroupId?: string): string | null => {
   if (memberComponentIds.length < 2) return 'Select at least two Software System components before grouping.';
   if (new Set(memberComponentIds).size !== memberComponentIds.length) return 'Group members must be unique; remove duplicate component selections.';
@@ -212,6 +245,7 @@ export const useDiagramStore = create<State>((set, get) => ({
   document: null,
   status: 'idle',
   error: null,
+  dependencyError: null,
   groupError: null,
   clearGroupError: () => set({ groupError: null }),
   savedDocuments: [], trashedDocuments: [], savedDocumentsStatus: 'idle', savedDocumentsError: null,
@@ -227,6 +261,7 @@ export const useDiagramStore = create<State>((set, get) => ({
   canUndo: false,
   canRedo: false,
   open: (input, retainHistory = false) => {
+    set({ dependencyError: null });
     const current = get().document;
     if (retainHistory && current && current.id !== input.id) {
       if (get().status === 'saved') retained.set(current.id, { document: copy(current), history: history.snapshot(), context: get().sourceContext });
@@ -257,7 +292,7 @@ export const useDiagramStore = create<State>((set, get) => ({
     get().open(created);
     set(state => ({ savedDocuments: replaceSummary(state.savedDocuments, summary(created)) }));
   },
-  update: fn => {
+  update: (fn, options) => {
     const current = get().document;
     if (!current) return;
     try {
@@ -273,17 +308,40 @@ export const useDiagramStore = create<State>((set, get) => ({
         assertDiagramInvariants(next);
       }
       if (JSON.stringify(next) === JSON.stringify(current)) return;
-      const document = history.push(next);
-      set(state => ({ document, revision: state.revision + 1, status: 'unsaved', error: null, groupError: null, ...historyState() }));
+      const revision = get().revision;
+      const commit = () => {
+        if (get().document !== current || get().revision !== revision) return;
+        const document = history.push(next);
+        set(state => ({ document, revision: state.revision + 1, status: 'unsaved', error: null, dependencyError: null, groupError: null, ...historyState() }));
+      };
+      let checks: Promise<void> | undefined;
+      try { checks = options?.confirmedRemoval ? undefined : removalChecks(current, next); }
+      catch (error) { set({ error: saveErrorMessage(error), dependencyError: saveErrorMessage(error) }); return; }
+      if (checks) return checks.then(commit).catch(error => { if (get().document === current && get().revision === revision) set({ error: saveErrorMessage(error), dependencyError: saveErrorMessage(error) }); });
+      commit();
     } catch (error) { set({ error: saveErrorMessage(error) }); }
   },
   undo: () => {
-    const document = history.undo();
-    if (document) set(state => ({ document: overlayContext(document, state.sourceContext), revision: state.revision + 1, status: 'unsaved', error: null, groupError: null, ...historyState() }));
+    const current = get().document, target = history.peekUndo(), revision = get().revision;
+    if (!current || !target) return;
+    try {
+      const document = overlayContext(target, get().sourceContext);
+      const commit = () => { if (get().document !== current || get().revision !== revision) return; history.undo(); set({ document, revision: revision + 1, status: 'unsaved', error: null, dependencyError: null, groupError: null, ...historyState() }); };
+      const checks = removalChecks(current, document);
+      if (checks) return checks.then(commit).catch(error => { if (get().document === current && get().revision === revision) set({ error: saveErrorMessage(error), dependencyError: saveErrorMessage(error) }); });
+      commit();
+    } catch (error) { set({ error: saveErrorMessage(error), dependencyError: saveErrorMessage(error) }); }
   },
   redo: () => {
-    const document = history.redo();
-    if (document) set(state => ({ document: overlayContext(document, state.sourceContext), revision: state.revision + 1, status: 'unsaved', error: null, groupError: null, ...historyState() }));
+    const current = get().document, target = history.peekRedo(), revision = get().revision;
+    if (!current || !target) return;
+    try {
+      const document = overlayContext(target, get().sourceContext);
+      const commit = () => { if (get().document !== current || get().revision !== revision) return; history.redo(); set({ document, revision: revision + 1, status: 'unsaved', error: null, dependencyError: null, groupError: null, ...historyState() }); };
+      const checks = removalChecks(current, document);
+      if (checks) return checks.then(commit).catch(error => { if (get().document === current && get().revision === revision) set({ error: saveErrorMessage(error), dependencyError: saveErrorMessage(error) }); });
+      commit();
+    } catch (error) { set({ error: saveErrorMessage(error), dependencyError: saveErrorMessage(error) }); }
   },
   addComponent: (name, type, description = null) => {
     const document = get().document;
@@ -608,7 +666,7 @@ export const useDiagramStore = create<State>((set, get) => ({
   removeRelationship: relationshipId => {
     const document = get().document;
     if (!document || !document.relationships.some(relationship => relationship.id === relationshipId)) return;
-    get().update(current => ({
+    return get().update(current => ({
       ...current,
       relationships: current.relationships.filter(relationship => relationship.id !== relationshipId),
     }));

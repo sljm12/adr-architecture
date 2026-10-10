@@ -55,7 +55,7 @@ export function RecoveryCoordinator({ onLoad, onExitAffected }: { onLoad: (id: s
   const confirm = async (discard = false) => {
     if (!intent || mutating.current) return;
     const state = useDiagramStore.getState(), adr = useAdrStore.getState();
-    if (state.savePending || state.navigationStatus === 'loading' || state.containerOpenStatus === 'loading' || adr.status === 'saving') return;
+    if (state.savePending || state.navigationStatus === 'loading' || state.containerOpenStatus === 'loading' || state.componentOpenStatus === 'loading' || adr.status === 'saving') return;
     const affectsEditor = intent.impact.affectedDiagramIds.includes(state.document?.id ?? '');
     if (intent.kind === 'trash' && affectsEditor && !discard && (['unsaved', 'failed'].includes(state.status) || ['unsaved', 'failed'].includes(adr.status))) { setGuard(true); return; }
     mutating.current = true; setBusy(true); setGuard(false); setNotice(intent.kind === 'trash' ? 'Moving confirmed diagrams to trash…' : 'Restoring confirmed diagrams…');

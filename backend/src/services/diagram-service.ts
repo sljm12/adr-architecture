@@ -166,7 +166,7 @@ export class DiagramService {
       if (!previous || previous.status !== 'active') throw new DiagramNotFoundError('Diagram not found');
       await this.assertActiveAncestors(id, diagrams);
       const currentChildren = await diagrams.findChildren(id);
-      const hierarchyBlockers = this.findHierarchyBlockers(document, currentChildren);
+      const hierarchyBlockers = await this.hierarchyBlockers(document, diagrams, currentChildren);
       if (hierarchyBlockers.length) throw new ApiConflictError('Keep the owners and immediate sources used by active or recoverable child diagrams. Repair their dependencies first.', 'DIAGRAM_DEPENDENCY', undefined, undefined, hierarchyBlockers);
       this.assertDocumentTransition(previous, document);
       const incoming = previous.kind === 'container'
@@ -233,6 +233,21 @@ export class DiagramService {
     return blockers.filter((blocker, index, all) => all.findIndex(candidate => candidate.diagramId === blocker.diagramId && candidate.componentId === blocker.componentId && candidate.sourceComponentId === blocker.sourceComponentId) === index);
   }
 
+  private async hierarchyBlockers(incoming: DiagramDocument, repository: DiagramRepositoryLike, children?: DiagramDocument[]): Promise<DiagramDependencyBlocker[]> {
+    const immediate = children ?? await repository.findChildren(incoming.id);
+    const blockers = this.findHierarchyBlockers(incoming, immediate);
+    // A Context source is also used through the exact Container occurrence; report both hops.
+    for (const child of immediate) {
+      const childBlockers = blockers.filter(b => b.diagramId === child.id);
+      if (!childBlockers.length) continue;
+      for (const descendant of await repository.findChildren(child.id)) {
+        for (const occurrence of descendant.components.filter(c => c.role === 'external' && childBlockers.some(b => b.componentId === c.sourceComponentId))) blockers.push(occurrenceBlocker(descendant, occurrence));
+        if (childBlockers.some(b => b.componentId === getDiagramOwnerId(child))) blockers.push({ diagramId: descendant.id, name: descendant.name, status: descendant.status, componentId: getDiagramOwnerId(descendant) ?? undefined, reason: 'The owning ancestor is required by this Component diagram.', nextAction: 'Keep the ancestor owner and its UUID. Use confirmed graph recovery to move the hierarchy to trash.' });
+      }
+    }
+    return blockers;
+  }
+
   private async assertActiveAncestors(id: string, diagrams: DiagramRepositoryLike): Promise<void> {
     for (const ancestor of await diagrams.findAncestors(id)) if (ancestor.status !== 'active') throw new ApiConflictError('Restore every inactive ancestor before changing this diagram.', 'PARENT_INACTIVE');
   }
@@ -281,7 +296,7 @@ export class DiagramService {
       await this.validateScopedDocument(current, diagrams);
       const relationships = current.relationships.filter(r => r.sourceComponentId === componentId || r.targetComponentId === componentId);
       const blockers = adrs ? (await Promise.all([adrs.componentBlockers(componentId), ...relationships.map(r => adrs.relationshipBlockers(r.id))])).flat() : [];
-      return { relationshipCount: relationships.length, groupIds: current.groups.filter(g => g.memberComponentIds.includes(componentId)).map(g => g.id), blockers: blockers.filter((b, i, all) => all.findIndex(other => other.adrId === b.adrId) === i), diagramBlockers: this.findHierarchyBlockers({ ...current, components: current.components.filter(c => c.id !== componentId) }, await diagrams.findChildren(diagramId)) };
+      return { relationshipCount: relationships.length, groupIds: current.groups.filter(g => g.memberComponentIds.includes(componentId)).map(g => g.id), blockers: blockers.filter((b, i, all) => all.findIndex(other => other.adrId === b.adrId) === i), diagramBlockers: await this.hierarchyBlockers({ ...current, components: current.components.filter(c => c.id !== componentId) }, diagrams) };
     });
   }
 
@@ -295,7 +310,7 @@ export class DiagramService {
       const current = await diagrams.get(diagramId);
       if (!current || current.status !== 'active' || !current.components.some(component => component.id === componentId)) throw new DiagramNotFoundError('Diagram or component not found');
       await this.validateScopedDocument(current, diagrams);
-      const blockers = this.findHierarchyBlockers({ ...current, components: current.components.filter(c => c.id !== componentId) }, await diagrams.findChildren(diagramId));
+      const blockers = await this.hierarchyBlockers({ ...current, components: current.components.filter(c => c.id !== componentId) }, diagrams);
       if (blockers.length) throw new ApiConflictError('Element cannot be removed while active or recoverable child diagrams depend on it.', 'DIAGRAM_DEPENDENCY', undefined, undefined, blockers);
       const dependentRelationships = current.relationships.filter(relationship => relationship.sourceComponentId === componentId || relationship.targetComponentId === componentId);
       const adrBlockers = adrs ? await Promise.all([adrs.componentBlockers(componentId), ...dependentRelationships.map(relationship => adrs.relationshipBlockers(relationship.id))]) : [];
@@ -330,16 +345,17 @@ export class DiagramService {
   private async recoveryTransaction<T>(id: string, action: (repository: DiagramRepositoryLike) => Promise<T>): Promise<T> {
     const initial = await this.repository.get(id);
     if (!initial) throw new DiagramNotFoundError('Diagram not found');
-    const parentId = initial.kind === 'container' ? initial.scope?.parentDiagramId : id;
-    if (!parentId) throw new ApiConflictError('Repair the missing container parent reference.', 'DIAGRAM_REFERENCE_BROKEN');
-    const children = await this.repository.findChildren(parentId);
-    return this.graph.run(parentId, children.map(child => child.id), ({ diagrams }) => action(diagrams));
+    return this.graph.run(id, [], ({ diagrams }) => action(diagrams));
   }
 
   private async trashSnapshot(id: string, repository: DiagramRepositoryLike): Promise<TrashImpact> {
     const root = await repository.get(id);
     if (!root || root.status !== 'active') throw new DiagramNotFoundError('Active diagram not found');
-    const children = root.kind === 'general' ? (await repository.findChildren(id)).filter(child => child.status === 'active') : [];
+    const children = await Promise.all((await repository.findDescendants(id)).filter(child => child.status === 'active').map(async child => {
+      const document = await repository.get(child.id);
+      if (!document) throw new ApiConflictError('A required descendant is unavailable. Repair its saved references before recovery.', 'DIAGRAM_REFERENCE_BROKEN');
+      return document;
+    }));
     const affected = [root, ...children].sort((a, b) => a.id.localeCompare(b.id));
     return { diagramId: id, affectedDiagramIds: affected.map(d => d.id), affectedDiagrams: affected.map(summary) };
   }
@@ -363,17 +379,23 @@ export class DiagramService {
     if (!requested) throw new DiagramNotFoundError('Diagram not found');
     if (requested.status !== 'trashed') throw new DiagramConflictError('Diagram is not trashed');
     let root = requested;
-    if (requested.kind === 'container') {
-      const parent = requested.scope && await repository.get(requested.scope.parentDiagramId);
-      if (!parent) throw new ApiConflictError('Repair the missing parent reference before restoring.', 'DIAGRAM_REFERENCE_BROKEN');
-      if (parent.status === 'trashed') root = parent;
+    for (const ancestor of await repository.findAncestors(id)) {
+      if (ancestor.status === 'trashed') {
+        const parent = await repository.get(ancestor.id);
+        if (!parent) throw new ApiConflictError('Repair the missing parent reference before restoring.', 'DIAGRAM_REFERENCE_BROKEN');
+        root = parent;
+      }
     }
     const provenance = await repository.getTrashProvenance(root.id);
     const affected = [root];
-    if (root.kind === 'general' && provenance.trashBatchId && provenance.trashRootDiagramId === root.id) {
-      for (const child of await repository.findChildren(root.id)) {
+    if (provenance.trashBatchId && provenance.trashRootDiagramId === root.id) {
+      for (const child of await repository.findDescendants(root.id)) {
         const childProvenance = await repository.getTrashProvenance(child.id);
-        if (child.status === 'trashed' && childProvenance.trashRootDiagramId === root.id && childProvenance.trashBatchId === provenance.trashBatchId) affected.push(child);
+        if (child.status === 'trashed' && childProvenance.trashRootDiagramId === root.id && childProvenance.trashBatchId === provenance.trashBatchId) {
+          const document = await repository.get(child.id);
+          if (!document) throw new ApiConflictError('A required batch member is unavailable. Repair its references before recovery.', 'DIAGRAM_REFERENCE_BROKEN');
+          affected.push(document);
+        }
       }
     }
     affected.sort((a, b) => a.id.localeCompare(b.id));
@@ -389,7 +411,7 @@ export class DiagramService {
       if (!confirmation && impact.affectedDiagramIds.length > 1) throw new ApiConflictError('Preview and confirm every diagram in this restoration batch.', 'RESTORE_CONFIRMATION_REQUIRED', undefined, undefined, undefined, id);
       if (confirmation && (!sameIds(confirmation.confirmedDiagramIds, impact.affectedDiagramIds) || confirmation.confirmedTrashBatchId !== impact.trashBatchId)) throw new ApiConflictError('The restoration set or trash batch changed. Preview and confirm again.', 'RESTORE_IMPACT_CHANGED', undefined, undefined, undefined, id);
       // Stage the entire post-restore graph on the transaction. Any invalid reference rolls it all back.
-      const ordered = [id, ...impact.affectedDiagramIds.filter(affectedId => affectedId !== id)];
+      const ordered = [id, ...(await repository.findDescendants(id)).filter(member => impact.affectedDiagramIds.includes(member.id)).map(member => member.id)];
       for (const affectedId of ordered) if (!await repository.restore(affectedId)) throw new DiagramConflictError('Diagram activity changed during restoration.');
       for (const affectedId of ordered) {
         const document = (await repository.get(affectedId))!;

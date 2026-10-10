@@ -188,3 +188,50 @@ git diff --check
 - Post-implementation hooks: `.specify/extensions.yml` is absent; pre/post hooks skipped under the implementation skill.
 
 US3 is independently demonstrable. Phase 6/7 work, the real-runtime recovery journey, export/browser/Safari acceptance, scale observations and first-time-author usability gates remain pending for their assigned phases.
+
+## Phase 6 — US4 local decisions, dependencies and exact recovery (2026-10-10)
+
+T052–T068: PASS. Component decisions link exact local internal, supporting-occurrence and relationship UUIDs, retain existing lifecycle/replacement/count/review rules, and survive rename, movement, save, reopen and recovery. Context/Container decisions are not inherited. The existing level-independent ADR service/repository/routes/store/pickers/summaries already implement these behaviors; this phase verifies them through new REST, PostgreSQL, state/UI and keyboard browser evidence rather than duplicating their implementation.
+
+Owner/source protections now report all affected Container occurrences and downstream Component occurrences through both source hops, including recoverable children. Direct DELETE, whole-document omission and unsupported reclassification leave protected content unchanged. Application↔Datastore switches remain eligible. Fresh dependency checks precede persisted removal/reclassification and undo/redo; a blocked or failed check leaves the document and history cursor intact. Delayed checks cannot overwrite a newer edit or navigation. Unsaved additions retain immediate undo. Current ADR draft links are protected locally, and server-confirmed deletion responses are applied without querying an already-deleted artifact. The inspector exposes actionable dependency feedback separately from field-validation messages.
+
+Trash discovers active descendants at both depths under the existing highest-Context-root transaction. All confirmed members receive one batch/root; earlier independent trash remains separate. Restore walks to the highest required inactive ancestor, previews its exact existing batch, rejects changed IDs/batch, restores ancestor-first and validates the staged result before atomic commit. A requested child outside that batch remains trashed and receives another explicit confirmation after ancestor recovery. Existing confirmation schemas, conflict responses and typed client integration remain sufficient. Component impact labels now identify level, owner, parent, Software System and UUID. Recovery preserves drafts on cancel/failure and distinguishes committed recovery from failed refresh/load; retry loading does not repeat restoration. Both entry kinds are guarded while opening. Recovery dialog buttons use the established primary/secondary pill styles and existing focus handling.
+
+### Requirement evidence
+
+| Requirements | Evidence | Result |
+| --- | --- | --- |
+| FR-017/021 | `backend/tests/contract/component-adrs.test.ts`, `backend/tests/persistence/component-adrs.test.ts`, `frontend/tests/component-adrs.test.tsx`: local targets, no inheritance, supersession/replacement protection, count/review, saved links and ADR history | PASS; PostgreSQL executed |
+| FR-018/021; SC-006 | Expanded `backend/tests/contract/component-dependencies.test.ts`: both source hops, active/recoverable blockers, direct/PUT omission, unsupported Context source classification and eligible subtype switch | PASS |
+| FR-016/018/021 | `frontend/tests/component-diagram-dependencies.test.ts`: blocked undo, redo and direct removal, ADR blockers, failed checks and delayed-check suppression preserve document/cursor | PASS, 3 cases |
+| FR-019/020; SC-007 | `backend/tests/contract/component-recovery.test.ts`: exact Context/Container descendant sets, independent child trash, highest inactive ancestor, staged restore, stale confirmations and legacy safe single-member restore | PASS, 2 cases |
+| FR-019–021; SC-007 | `backend/tests/persistence/component-recovery.test.ts`: independent provenance remains unchanged; final child/source validation failure rolls every staged status/provenance back; successful recovery retains artifact UUIDs | PASS; PostgreSQL executed |
+| FR-018–020 | Expanded `backend/tests/persistence/component-graph-transactions.test.ts`: root trash vs diagram/ADR writes, independent child trash vs confirmed root trash, changed confirmation membership, source inclusion vs omission and root-first coordination | PASS, 11 cases; PostgreSQL executed |
+| FR-018/020 | Existing `backend/tests/persistence/component-diagrams.test.ts`: owner deletion vs child creation, root trash vs creation, uniqueness/retry and recoverable owner identity | PASS, 4 cases; PostgreSQL executed |
+| FR-017/020/025 | `frontend/tests/component-diagram-recovery.test.tsx`, `e2e/tests/component-diagram-recovery.spec.ts`: named scope, retained draft, canceled-dialog focus, committed restore/load retry with exactly one mutation | PASS |
+| FR-017–021/025; SC-006/007 | `e2e/tests/component-diagram-persistence.spec.ts`: real listening Fastify HTTP server and migrated isolated PostgreSQL schema; authors/saves/reopens Component/interaction, keyboard-links exact local ADR UUIDs, blocks immediate source deletion, restores three levels and independently confirms the earlier child batch | PASS, no skip |
+| FR-024/025 | Existing Component entry/modeling/navigation, 22 Container browser journeys and 2 general recovery journeys; full domain/API/persistence/export/CLI regression suite | PASS; corrected field-feedback journey rerun |
+
+### Commands and final results
+
+```powershell
+$env:RUN_POSTGRES_TESTS = '1'
+npm.cmd test -- --maxWorkers=2
+npm.cmd run build
+npx.cmd tsc -b frontend
+npx.cmd playwright test component-diagram-recovery.spec.ts component-diagram-persistence.spec.ts --config playwright.component.config.ts
+npx.cmd playwright test component-diagram-entry.spec.ts component-diagram-editing.spec.ts component-diagram-navigation.spec.ts container-diagrams.spec.ts recovery.spec.ts --config playwright.component.config.ts
+npx.cmd playwright test component-diagram-editing.spec.ts component-diagram-persistence.spec.ts --config playwright.component.config.ts
+git diff --check
+```
+
+- Full final Vitest run: **121 files, 646 tests passed, zero failures/skips** (47.48 s). This includes actual PostgreSQL migrations, concurrency, rollback and existing Container recovery checks. Phase-6-focused execution also passed **28/28** tests across 10 files, including the reused owner-creation races.
+- Browser evidence covers **39 distinct journeys** across the regression and focused runs: 3 Component modeling, 6 entry, 4 navigation, 1 new recovery, 1 real HTTP/PostgreSQL persistence, 22 Container and 2 general recovery. The broad run initially passed 37/38 and exposed duplicated field-validation feedback; the corrected modeling batch passed 3/3 and the real-runtime journey passed again. The new recovery test additionally confirms exactly one restore POST across a failed subsequent load and successful load retry. Final styling verification passed both new journeys (15.5 s), **14/14** Component/Container/group recovery unit checks, the frontend typecheck and whitespace check. The final named-dialog screenshot confirms the styled actions.
+- Runtime: headless Google Chrome **154.0.8037.99**, executable `C:/Program Files/Google/Chrome/Application/chrome.exe`; Node.js **v22.17.1**, Playwright **1.62.1**, Windows build **10.0.26200**, PostgreSQL **17.4 (Debian 17.4-1.pgdg120+2)**. Existing dependency versions/lockfile retained. `playwright.component.config.ts` is a reproducible one-worker/headless override using the existing frontend server. The persistence journey forwards browser API traffic to an actual listening HTTP server, not Fastify injection or mocked response bodies, and asserts more than 30 HTTP requests.
+- All-package build, explicit frontend TypeScript and whitespace checks: PASS. Existing Vite bundle-size and pg transaction-query diagnostics remain non-failing.
+- Test-first evidence: initial recovery tests failed for omitted Component descendants and incorrect Container impact; dependency tests failed for missing downstream canonical-source occurrences; history tests failed because the cursor/document changed before checking blockers; UI markup treated Component diagrams as General. The ADR REST test already passed. PostgreSQL failures initially reproduced the incorrect batch membership. Final tests distinguish schema-invalid dangling relationships from valid whole-document omissions and verify the same dependency safeguards on those valid payloads.
+- Visual QA: inspected `test-results/component-recovery-impact.png` and `test-results/component-recovery.png` at 1280×720. Named three-level impact, duplicate-name UUIDs, Component scope and recovery feedback are readable. Visual inspection caught missing button classes; confirmation and unsaved-deletion dialogs now reuse the existing 44-pixel primary/secondary pill classes, visible focus and press feedback. Screenshots are ignored test artifacts regenerated by the recovery journey.
+- Database work used disposable UUID-named `spec010_*` schemas, applied migrations 0001–0007 within them and cleaned them up. Production/deployment data was not migrated. Requirements checklist markers were unchanged; ignore files/private packages remain valid; `.specify/feature.json` still points to Spec 010.
+- Context7 resolved Playwright and checked its official runner/API-testing documentation for the real-runtime harness. Pre/post implementation hooks were checked; `.specify/extensions.yml` is absent, so hooks were skipped according to the skill.
+
+US4 is independently demonstrable and phase 6 is complete. Phase 7 exports and phase 8 release gates, including actual Safari and observed usability acceptance, remain pending in their assigned tasks.

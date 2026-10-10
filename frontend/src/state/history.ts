@@ -7,6 +7,8 @@ export class BoundedHistory<T> {
   push(value: T): T { this.entries = [...this.entries.slice(0, this.cursor + 1), value].slice(-this.limit); this.cursor = this.entries.length - 1; return value; }
   undo(): T | undefined { return this.cursor <= 0 ? undefined : this.entries[--this.cursor]; }
   redo(): T | undefined { return this.cursor >= this.entries.length - 1 ? undefined : this.entries[++this.cursor]; }
+  peekUndo(): T | undefined { return this.canUndo ? this.entries[this.cursor - 1] : undefined; }
+  peekRedo(): T | undefined { return this.canRedo ? this.entries[this.cursor + 1] : undefined; }
   /** Reconcile derived metadata without recording another authored edit. */
   map(transform: (value: T) => T): void { this.entries = this.entries.map(transform); }
   snapshot(): { entries: T[]; cursor: number } { return structuredClone({ entries: this.entries, cursor: this.cursor }); }

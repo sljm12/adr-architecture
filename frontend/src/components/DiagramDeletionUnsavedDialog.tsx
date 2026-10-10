@@ -28,6 +28,6 @@ export function DiagramDeletionUnsavedDialog({ onSaveAndDelete, onDiscardAndDele
   return <div className="dialog-backdrop" role="presentation"><section ref={dialogRef} className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={messageId}>
     <h2 id={titleId}>Resolve unsaved changes before deletion</h2>
     <p id={messageId}>The confirmed batch includes the diagram you are editing. Save your diagram and ADR changes, discard them, or cancel deletion. All affected diagrams will move to recoverable trash only after you choose a resolution.</p>
-    <div className="dialog-actions"><button className="recovery-button recovery-button-secondary" type="button" onClick={onCancel}>Cancel</button><button className="recovery-button recovery-button-secondary" type="button" onClick={onDiscardAndDelete}>Discard and delete</button><button className="recovery-button" type="button" onClick={onSaveAndDelete}>Save and delete</button></div>
+    <div className="dialog-actions"><button className="recovery-button recovery-button-secondary secondary-action" type="button" onClick={onCancel}>Cancel</button><button className="recovery-button recovery-button-secondary secondary-action" type="button" onClick={onDiscardAndDelete}>Discard and delete</button><button className="recovery-button primary-pill" type="button" onClick={onSaveAndDelete}>Save and delete</button></div>
   </section></div>;
 }

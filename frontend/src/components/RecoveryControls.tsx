@@ -42,15 +42,15 @@ export function RecoveryControls({ selection, onSelectionClear }: { selection: S
   const removeComponent = async () => {
     if (!removal || removing) return;
     setRemoving(true);
-    try { const result = await diagramClient.removeComponent(document.id, removal.componentId); update(() => result.document); setRemoval(null); onSelectionClear?.(); setNotice(`${component?.name ?? 'Component'} removed. Undo available.`); }
+    try { const result = await diagramClient.removeComponent(document.id, removal.componentId); update(() => result.document, { confirmedRemoval: true }); setRemoval(null); onSelectionClear?.(); setNotice(`${component?.name ?? 'Component'} removed. Undo available.`); }
     catch (error) { setNotice(formatComponentRemovalError(error, removal.name)); setRemoval(null); }
     finally { setRemoving(false); }
   };
   const removeRelationship = async () => {
     if (!relationship || removingRelationship) return;
     setRemovingRelationship(true);
-    try { const result = await diagramClient.removeRelationship(document.id, relationship.id); update(() => result.document); onSelectionClear?.(); setNotice('Relationship removed.'); }
-    catch (error) { setNotice(error instanceof DiagramApiError && error.status === 409 ? `Cannot remove relationship: ${error.message}` : error instanceof Error ? `Could not remove relationship: ${error.message}` : 'Could not remove relationship.'); }
+    try { const result = await diagramClient.removeRelationship(document.id, relationship.id); update(() => result.document, { confirmedRemoval: true }); onSelectionClear?.(); setNotice('Relationship removed.'); }
+    catch (error) { setNotice(`Cannot remove relationship: ${formatDiagramApiError(error)}`); }
     finally { setRemovingRelationship(false); }
   };
   const moveToTrash = () => window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind: 'trash', id: document.id } }));

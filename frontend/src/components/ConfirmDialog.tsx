@@ -24,6 +24,6 @@ export function ConfirmDialog({ title, message, confirmLabel = 'Confirm', onConf
   }, []);
   return <div className="dialog-backdrop" role="presentation"><section ref={dialogRef} className="confirm-dialog" role="alertdialog" tabIndex={-1} aria-modal="true" aria-busy={busy} aria-labelledby={titleId} aria-describedby={messageId}>
     <h2 id={titleId}>{title}</h2><p id={messageId}>{message}</p>
-    <div className="dialog-actions"><button className="recovery-button recovery-button-secondary" type="button" onClick={onCancel} disabled={busy}>Cancel</button>{onConfirm && confirmLabel && <button className="recovery-button" type="button" onClick={onConfirm} disabled={busy}>{confirmLabel}</button>}</div>
+    <div className="dialog-actions"><button className="recovery-button recovery-button-secondary secondary-action" type="button" onClick={onCancel} disabled={busy}>Cancel</button>{onConfirm && confirmLabel && <button className="recovery-button primary-pill" type="button" onClick={onConfirm} disabled={busy}>{confirmLabel}</button>}</div>
   </section></div>;
 }

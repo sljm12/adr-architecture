@@ -34,7 +34,8 @@ describe('container diagram entry store action', () => {
 
   it('requires a saved owner and leaves an unsaved or missing owner untouched', async () => {
     useDiagramStore.getState().open(parent());
-    useDiagramStore.getState().update(current => ({ ...current, components: current.components.filter(component => component.id !== ids.owner) }));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ relationshipCount: 0 })));
+    await useDiagramStore.getState().update(current => ({ ...current, components: current.components.filter(component => component.id !== ids.owner) }));
     const fetchMock = vi.fn(); vi.stubGlobal('fetch', fetchMock);
     expect(await useDiagramStore.getState().createOrOpenContainerDiagram(ids.owner)).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
