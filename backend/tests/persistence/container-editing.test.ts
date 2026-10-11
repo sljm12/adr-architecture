@@ -12,7 +12,7 @@ const enabled=process.env.RUN_POSTGRES_TESTS==='1'&&Boolean(process.env.DATABASE
 for(const postgres of [false,true]) describe.skipIf(postgres&&!enabled)(`container editing ${postgres?'PostgreSQL':'memory'}`,()=>{
   let repository:DiagramRepositoryLike; let pool:Pool; let admin:Pool; const schemaName=`editing_${randomUUID().replaceAll('-','')}`;
   beforeAll(async()=>{
-    if(postgres){admin=new Pool({connectionString:process.env.DATABASE_URL});await admin.query(`CREATE SCHEMA ${schemaName}`);pool=new Pool({connectionString:process.env.DATABASE_URL,options:`-c search_path=${schemaName}`});for(const name of ['0001_initial','0002_adrs','0003_system_groups','0004_component_dimensions','0005_c4_container_diagrams','0006_container_component_types'])await pool.query(await readFile(new URL(`../../drizzle/${name}.sql`,import.meta.url),'utf8'));repository=new PostgresDiagramRepository(drizzle(pool,{schema}));}
+    if(postgres){admin=new Pool({connectionString:process.env.DATABASE_URL});await admin.query(`CREATE SCHEMA ${schemaName}`);pool=new Pool({connectionString:process.env.DATABASE_URL,options:`-c search_path=${schemaName}`});for(const name of ['0001_initial','0002_adrs','0003_system_groups','0004_component_dimensions','0005_c4_container_diagrams','0006_container_component_types','0007_c4_component_diagrams','0008_diagram_deletion_revision'])await pool.query(await readFile(new URL(`../../drizzle/${name}.sql`,import.meta.url),'utf8'));repository=new PostgresDiagramRepository(drizzle(pool,{schema}));}
     else repository=new DiagramRepository();
     await repository.create(diagramDocumentSchema.parse(generalParentFixture()) as DiagramDocument);
     await repository.create(diagramDocumentSchema.parse(populatedChildFixture()) as DiagramDocument);

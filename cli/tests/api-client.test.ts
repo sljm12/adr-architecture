@@ -11,6 +11,34 @@ function response(body: unknown, status = 200): Response {
 }
 
 describe('API client', () => {
+  it('validates preview/execution POST boundaries, exact selectors, configured URL and correspondence', async () => {
+    const confirmationToken = 'a'.repeat(64);
+    const impact = { rootDiagramId: diagramId, mode: 'trash', affectedDiagrams: [summary], confirmationToken };
+    const result = { rootDiagramId: diagramId, mode: 'trash', affectedDiagrams: [summary] };
+    const fetcher = vi.fn().mockResolvedValueOnce(response(impact)).mockResolvedValueOnce(response(result));
+    const client = createApiClient({ baseUrl: 'https://service.test/api', fetch: fetcher });
+    expect(await client.previewDeletion({ selector: { name: 'Payments' }, mode: 'trash' })).toEqual(impact);
+    expect(await client.executeDeletion(diagramId, { mode: 'trash', confirmationToken })).toEqual(result);
+    expect(fetcher.mock.calls.map(([url,init]) => [url,init.method,JSON.parse(init.body)])).toEqual([
+      ['https://service.test/api/diagrams/deletion-preview','POST',{ selector:{ name:'Payments' },mode:'trash' }],
+      [`https://service.test/api/diagrams/${diagramId}/deletion`,'POST',{ mode:'trash',confirmationToken }],
+    ]);
+    for (const body of [{ ...impact, mode: 'permanent' }, { ...impact, rootDiagramId: '00000000-0000-4000-8000-000000000099' }, { ...impact, extra: 1 }]) {
+      const bad = createApiClient({ fetch: vi.fn().mockResolvedValue(response(body)) });
+      await expect(bad.previewDeletion({ selector:{ id:diagramId },mode:'trash' })).rejects.toThrow(/invalid|match/i);
+    }
+  });
+  it('retains definite HTTP remedies/candidates and treats response loss or invalid success as uncertain without retries', async () => {
+    const input = { mode:'trash' as const,confirmationToken:'a'.repeat(64) };
+    const detail = { message:'Ambiguous',code:'DELETE_NAME_AMBIGUOUS',remedy:'Use --id',candidates:[summary] };
+    const rejected = createApiClient({ fetch: vi.fn().mockResolvedValue(response(detail,409)) });
+    await expect(rejected.executeDeletion(diagramId,input)).rejects.toMatchObject({ detail, message:expect.stringContaining('Use --id') });
+    for (const fetcher of [vi.fn().mockRejectedValue(new Error('lost response')),vi.fn().mockResolvedValue(response({})),vi.fn().mockResolvedValue(response({rootDiagramId:diagramId,mode:'permanent',affectedDiagrams:[summary]})),vi.fn().mockResolvedValue(new Response('not json'))]) {
+      const client = createApiClient({ fetch:fetcher });
+      await expect(client.executeDeletion(diagramId,input)).rejects.toThrow(/uncertain.*Verify.*before retrying/i);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    }
+  });
   it.each(['application', 'datastore'])('retains the saved child own name, scope and %s subtype on GET and flat listing', async containerType => {
     const child = populatedChildFixture(); child.name = 'Runtime'; child.components[0].containerType = containerType;
     const summary = { id: child.id, name: child.name, kind: child.kind, scope: child.scope, status: child.status, createdAt: child.createdAt, updatedAt: child.updatedAt };

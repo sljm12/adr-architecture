@@ -1,5 +1,32 @@
 # Validation Guide: CLI Diagram Deletion
 
+## Writer and revision coverage (T001)
+
+| Public writer | Coordination / repository operation | Revision coverage |
+|---|---|---|
+| Context create | DiagramService.create / create | Initialize zero |
+| Container/Component create | ContainerContextService.createOrOpen / DiagramService.createOrOpenComponentDiagram, GraphTransaction / create | Initialize zero; subtree membership guards creation |
+| Diagram/component/relationship/group/metadata save | DiagramService.save, GraphTransaction / replace | Increment owning diagram |
+| Component/relationship removal | DiagramService.removeComponent/removeRelationship, GraphTransaction / removeComponent/removeRelationship | Increment on successful removal only |
+| Trash/restore | DiagramService.trash/restore, GraphTransaction / trash/restore | Increment each changed member |
+| ADR create/update/component links/relationship links/delete | AdrService.graphWrite, GraphTransaction / AdrRepository | Increment owning diagram after success, same transaction |
+
+Affected implementations: `backend/src/persistence/{diagram-repository,adr-repository,graph-transaction,schema}.ts`; services `diagram-service.ts`, `adr-service.ts`, `container-context.ts`, `component-context.ts`; API `recovery-routes.ts`, `errors.ts`; CLI `main.ts`, `api-client.ts`, new `delete-command.ts`; shared validation exports. Repository test doubles use subclasses or bound proxies (`backend/tests/html-export-source-fixtures.ts`), so new methods inherit/delegate. Direct fixture ADR writes are not public writers. Memory rollback must restore registration indexes as well as records.
+
+Migration runners updated: `backend/tests/persistence/component-test-database.ts`, `container-diagrams.test.ts`, `container-editing.test.ts`, `container-recovery.test.ts`, and `html-export-source.test.ts`. Deliberate pre-0007 fixtures retain their component-migration boundary; the additive counter is present whenever updated repositories run. The 0008 migration test seeds raw pre-counter rows. Shared-database tests require all runtime migrations applied by their test harness. No public/import/export document accepts the internal counter. Existing ignore files cover Node/build/coverage/environment and Docker outputs; repository is private, so no publishing ignore file is needed.
+
+## Phase 1–3 implementation evidence (2026-10-12)
+
+- Branch: `012-cli-delete-diagrams-phase-1-3`; T001–T020 deliver recoverable Trash only. Permanent execution remains unavailable pending Phase 4.
+- T003/T004 and T011–T013 tests were written first and failed on the missing schemas/revision APIs/endpoints/CLI flow, then passed after implementation. Actual readline yes/EOF/Ctrl+C tests prove no execution on cancellation.
+- Actual PostgreSQL 17.4 tests ran against newly created UUID-named disposable databases, with migration 0001–0008 and isolated schemas. Migration preservation/default/non-negative/large counters passed. Writer coverage includes all diagram/ADR writes, same-clock edit/revert, failed link/write rollback and failure during revision increment. Trash/restore retains all artifacts/ADRs/links and earlier batch provenance; injected mid-batch failure rolls back documents, provenance and revisions.
+- A broader PostgreSQL run passed 59 revision/graph/Container recovery/editing/export tests. New migration plus existing Component migration passed 5 tests; new Trash persistence passed all 4 tests (both memory and PostgreSQL, no database skips).
+- Production `npm run build` passed (existing frontend bundle-size warning). Backend, frontend and CLI suites completed separately (190, 211 and 55 tests respectively at that checkpoint; database-disabled skips are not database evidence).
+- The first full-suite attempts were stopped by a 50-second process limit while the existing two-minute aggregate HTML scale test was still running; these are not recorded as passes.
+- Final full suite: 125 files passed, 12 database-gated files skipped; **665 tests passed, 64 skipped**, exit 0, 53.63 seconds. The aggregate scale test completed in 51.66 seconds. Skips are not substituted for the real PostgreSQL evidence above. Subsequent strict-summary and reserved-mode checks use the focused Phase 1–3 suite.
+- Final focused Phase 1–3 checks: **59 passed, 3 database-gated skips**; final real PostgreSQL persistence suite: **20 files / 105 tests passed, zero skips**, exit 0, 30.00 seconds, including every new database case. Final production build and `git diff --check` passed. Existing pg concurrent-query deprecation and frontend bundle-size warnings remain.
+- Phase 4–6 permanent purge, dedicated deletion race/scale proofs, first-time-author trials and Playwright validation remain outside this increment; their task markers stay unchecked. Apply migration 0008 before starting updated runtime against an existing database.
+
 Planned commands require implementation first. Use disposable data; permanent deletion is irreversible.
 
 ## Setup

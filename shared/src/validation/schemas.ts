@@ -231,6 +231,40 @@ export const diagramSummarySchema = z.object({id:uuidSchema, name:z.string().tri
   if (value.kind === 'component' ? !value.scope || !('containerId' in value.scope) : value.scope !== null && 'containerId' in value.scope) ctx.addIssue({ code: 'custom', path: ['scope'], message: 'Summary scope must match its diagram level' });
 });
 export const diagramSummaryListSchema = z.array(diagramSummarySchema);
+export const deletionModeSchema = z.enum(['trash', 'permanent']);
+export const deletionSelectorSchema = z.union([
+  z.object({ id: uuidSchema }).strict(),
+  z.object({ name: z.string().refine(name => /\S/.test(name), 'Name must not be blank') }).strict(),
+]);
+export const deletionPreviewSchema = z.object({ selector: deletionSelectorSchema, mode: deletionModeSchema }).strict();
+export const deletionConfirmationSchema = z.object({ mode: deletionModeSchema, confirmationToken: z.string().regex(/^[0-9a-f]{64}$/) }).strict();
+// Deletion boundaries preserve literal saved names and reject silently stripped fields.
+const deletionSummarySchema = diagramSummarySchema.innerType().extend({ name: z.string().refine(name => /\S/.test(name)) }).strict().superRefine((value, ctx) => {
+  if (value.kind === 'general' ? value.scope !== null : !value.scope || (value.kind === 'component') !== ('containerId' in value.scope)) ctx.addIssue({ code: 'custom', path: ['scope'], message: 'Summary scope must match its diagram level' });
+});
+const deletionResultObject = z.object({ rootDiagramId: uuidSchema, mode: deletionModeSchema, affectedDiagrams: z.array(deletionSummarySchema).min(1) }).strict();
+function orderedDeletionSummaries(value: z.infer<typeof deletionResultObject>, ctx: z.RefinementCtx) {
+  const seen = new Map<string, { depth: number; kind: string }>(); let lastDepth = 0; let lastId = '';
+  for (const [index, diagram] of value.affectedDiagrams.entries()) {
+    const parent = diagram.scope ? seen.get(diagram.scope.parentDiagramId) : undefined;
+    const depth = index === 0 ? 0 : parent === undefined ? -1 : parent.depth + 1;
+    const wrongLevel = index > 0 && (diagram.kind === 'container' ? parent?.kind !== 'general' : diagram.kind === 'component' ? parent?.kind !== 'container' : true);
+    if (seen.has(diagram.id) || (index === 0 && diagram.id !== value.rootDiagramId) || wrongLevel || depth < lastDepth || depth > 2 || (index > 0 && depth === lastDepth && diagram.id.localeCompare(lastId) <= 0)) ctx.addIssue({ code: 'custom', path: ['affectedDiagrams', index], message: 'Summaries must be unique, root first, then valid parent-before-child levels and UUID ordered at each depth' });
+    seen.set(diagram.id, { depth, kind: diagram.kind }); lastDepth = depth; lastId = diagram.id;
+  }
+}
+export const deletionResultSchema = deletionResultObject.superRefine(orderedDeletionSummaries);
+export const deletionImpactSchema = deletionResultObject.extend({ confirmationToken: deletionConfirmationSchema.shape.confirmationToken }).strict().superRefine(orderedDeletionSummaries);
+export const deletionErrorSchema = z.object({
+  message: z.string().min(1), code: z.enum(['DELETE_INVALID_REQUEST', 'DELETE_NOT_FOUND', 'DELETE_NAME_AMBIGUOUS', 'DELETE_IMPACT_CHANGED', 'DIAGRAM_REFERENCE_BROKEN', 'DIAGRAM_DEPENDENCY', 'DELETE_FAILED']), remedy: z.string().min(1),
+  candidates: z.array(deletionSummarySchema).optional(),
+  blockers: z.array(z.object({ diagramId: uuidSchema, artifactId: uuidSchema, reason: z.string(), nextAction: z.string() }).strict()).optional(),
+}).strict();
+export type DeletionPreview = z.infer<typeof deletionPreviewSchema>;
+export type DeletionConfirmation = z.infer<typeof deletionConfirmationSchema>;
+export type DeletionImpact = z.infer<typeof deletionImpactSchema>;
+export type DeletionResult = z.infer<typeof deletionResultSchema>;
+export type DeletionError = z.infer<typeof deletionErrorSchema>;
 export const containerAvailabilitySchema = z.object({ parentDiagramId:uuidSchema, softwareSystemId:uuidSchema, availability:z.enum(['none','active','trashed']), diagram:diagramSummarySchema.nullable() }).strict();
 const uniqueDiagramIds = z.array(uuidSchema).min(1).refine(ids => new Set(ids).size === ids.length, 'Diagram IDs must be unique');
 export const trashConfirmationSchema = z.object({ confirmedDiagramIds: uniqueDiagramIds }).strict();

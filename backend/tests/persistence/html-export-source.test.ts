@@ -79,7 +79,7 @@ describe.skipIf(!postgresEnabled)('PostgreSQL HTML source consistency and zero w
     admin = new Pool({ connectionString: process.env.DATABASE_URL });
     await admin.query(`CREATE SCHEMA ${namespace}`);
     pool = new Pool({ connectionString: process.env.DATABASE_URL, options: `-c search_path=${namespace}` });
-    for (const migration of ['0001_initial.sql', '0002_adrs.sql', '0003_system_groups.sql', '0004_component_dimensions.sql', '0005_c4_container_diagrams.sql', '0006_container_component_types.sql']) await pool.query(await readFile(new URL(`../../drizzle/${migration}`, import.meta.url), 'utf8'));
+    for (const migration of ['0001_initial.sql', '0002_adrs.sql', '0003_system_groups.sql', '0004_component_dimensions.sql', '0005_c4_container_diagrams.sql', '0006_container_component_types.sql', '0007_c4_component_diagrams.sql', '0008_diagram_deletion_revision.sql']) await pool.query(await readFile(new URL(`../../drizzle/${migration}`, import.meta.url), 'utf8'));
     const db = drizzle(pool, { schema, logger: { logQuery(query, params) { queries.push(query); if (query.includes('for update')) lockedIds.push(String(params[0])); } } });
     diagrams = new PostgresDiagramRepository(db); adrs = new PostgresAdrRepository(db);
   }, 30_000);

@@ -2,11 +2,14 @@ import {
   architectureDecisionRecordListSchema,
   diagramDocumentSchema,
   diagramSummaryListSchema,
+  deletionPreviewSchema, deletionConfirmationSchema, deletionImpactSchema, deletionResultSchema, deletionErrorSchema, uuidSchema,
+  type DeletionPreview, type DeletionConfirmation, type DeletionError,
 } from '../../shared/src/validation/schemas.js';
 
 type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
 export class ApiClientError extends Error {
+  detail?: DeletionError;
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = 'ApiClientError';
@@ -63,7 +66,37 @@ export function createApiClient(options: { baseUrl?: string; fetch?: FetchLike }
     throw new ApiClientError(`ADR Diagram service returned an invalid response from ${url}: ${fields}`);
   }
 
+  const uncertain = () => new ApiClientError('Deletion outcome is uncertain. Verify the saved active/Trash state in the application before retrying; this command will not retry automatically.');
+  async function postDeletion(path: string, payload: unknown, executing: boolean): Promise<unknown> {
+    let response: Response;
+    try { response = await fetcher(`${baseUrl}${path}`, { method: 'POST', headers: { accept: 'application/json', 'content-type': 'application/json' }, body: JSON.stringify(payload) }); }
+    catch { throw executing ? uncertain() : new ApiClientError(`Could not reach ADR Diagram service at ${baseUrl}. Check service availability and request a new preview.`); }
+    let body: unknown;
+    try { body = await response.json(); } catch { body = undefined; }
+    if (!response.ok) {
+      const detail = deletionErrorSchema.safeParse(body);
+      const error = new ApiClientError(detail.success ? `HTTP ${response.status}: ${detail.data.message} ${detail.data.remedy}` : `ADR Diagram service rejected deletion with HTTP ${response.status}. Check the service and request a fresh preview.`);
+      if (detail.success) error.detail = detail.data;
+      throw error;
+    }
+    if (body === undefined) throw executing ? uncertain() : new ApiClientError('ADR Diagram service returned an invalid preview. Request a new preview.');
+    return body;
+  }
+
   return {
+    async previewDeletion(input: DeletionPreview) {
+      const request = deletionPreviewSchema.parse(input);
+      const impact = parse(await postDeletion('/diagrams/deletion-preview', request, false), deletionImpactSchema, `${baseUrl}/diagrams/deletion-preview`);
+      if (impact.mode !== request.mode || ('id' in request.selector ? impact.rootDiagramId !== request.selector.id : impact.affectedDiagrams[0].name !== request.selector.name)) throw new ApiClientError('Deletion preview identity or mode does not match the request. Request a new preview.');
+      return impact;
+    },
+    async executeDeletion(id: string, input: DeletionConfirmation) {
+      uuidSchema.parse(id); const confirmation = deletionConfirmationSchema.parse(input);
+      const body = await postDeletion(`/diagrams/${encodeURIComponent(id)}/deletion`, confirmation, true);
+      const result = deletionResultSchema.safeParse(body);
+      if (!result.success || result.data.rootDiagramId !== id || result.data.mode !== confirmation.mode) throw uncertain();
+      return result.data;
+    },
     async listDiagrams() {
       const path = '/diagrams';
       return parse(await getJson(path), diagramSummaryListSchema, `${baseUrl}${path}`);

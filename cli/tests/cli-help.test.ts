@@ -24,6 +24,8 @@ const client = () => ({
   listDiagrams: vi.fn().mockResolvedValue([summary]),
   getDiagram: vi.fn().mockResolvedValue(exportDiagramFixture()),
   listFullAdrs: vi.fn().mockResolvedValue(exportAdrsFixture()),
+  previewDeletion: vi.fn(),
+  executeDeletion: vi.fn(),
 });
 
 describe('CLI help and process contract', () => {

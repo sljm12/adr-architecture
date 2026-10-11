@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, doublePrecision, timestamp, pgEnum, primaryKey, index, uniqueIndex, unique, check, foreignKey, ForeignKeyBuilder, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, doublePrecision, timestamp, bigint, pgEnum, primaryKey, index, uniqueIndex, unique, check, foreignKey, ForeignKeyBuilder, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 export const diagramStatus=pgEnum('diagram_status',['active','trashed']); export const relationshipDirection=pgEnum('relationship_direction',['directed','undirected']);
 export const diagrams=pgTable('diagrams',{
@@ -8,6 +8,7 @@ export const diagrams=pgTable('diagrams',{
   ownerComponentId:uuid('owner_component_id'),
   scopeX:doublePrecision('scope_x'),scopeY:doublePrecision('scope_y'),scopeWidth:doublePrecision('scope_width'),scopeHeight:doublePrecision('scope_height'),
   trashBatchId:uuid('trash_batch_id'),trashRootDiagramId:uuid('trash_root_diagram_id'),
+  deletionRevision:bigint('deletion_revision',{mode:'bigint'}).notNull().default(0n),
 }, table => ({
   ownerUnique:uniqueIndex('diagrams_owner_component_unique').on(table.ownerComponentId).where(sql`${table.ownerComponentId} IS NOT NULL`),
   parentIdx:index('diagrams_parent_diagram_idx').on(table.parentDiagramId),
@@ -16,6 +17,7 @@ export const diagrams=pgTable('diagrams',{
   trashRootFk:foreignKey({ name:'diagrams_trash_root_diagram_id_fkey', columns:[table.trashRootDiagramId], foreignColumns:[table.id] }).onDelete('restrict'),
   ownerParentFk:new ForeignKeyBuilder((): { name:string; columns:AnyPgColumn[]; foreignColumns:AnyPgColumn[] } => ({ name:'diagrams_container_owner_parent_fk', columns:[table.ownerComponentId,table.parentDiagramId], foreignColumns:[components.id,components.diagramId] })).onDelete('restrict'),
   kindCheck:check('diagrams_kind_check',sql`${table.kind} IN ('general','container','component')`),
+  deletionRevisionCheck:check('diagrams_deletion_revision_check',sql`${table.deletionRevision} >= 0`),
   scopeCheck:check('diagrams_container_scope_check',sql`(${table.kind} = 'general' AND ${table.parentDiagramId} IS NULL AND ${table.ownerComponentId} IS NULL AND ${table.scopeX} IS NULL AND ${table.scopeY} IS NULL AND ${table.scopeWidth} IS NULL AND ${table.scopeHeight} IS NULL) OR (${table.kind} IN ('container','component') AND ${table.parentDiagramId} IS NOT NULL AND ${table.parentDiagramId} <> ${table.id} AND ${table.ownerComponentId} IS NOT NULL AND ${table.scopeX} IS NOT NULL AND ${table.scopeY} IS NOT NULL AND ${table.scopeWidth} IS NOT NULL AND ${table.scopeHeight} IS NOT NULL AND ${table.scopeX} > '-Infinity'::double precision AND ${table.scopeX} < 'Infinity'::double precision AND ${table.scopeY} > '-Infinity'::double precision AND ${table.scopeY} < 'Infinity'::double precision AND ${table.scopeWidth} > 0 AND ${table.scopeWidth} < 'Infinity'::double precision AND ${table.scopeHeight} > 0 AND ${table.scopeHeight} < 'Infinity'::double precision)`),
 }));
 export const components=pgTable('components',{

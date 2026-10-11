@@ -4,12 +4,15 @@ import { createApiClient } from './api-client.js';
 import { listDiagramsCommand } from './diagrams-command.js';
 import { formatError } from './output.js';
 import { exportDiagramCommand } from './export-command.js';
+import { deleteDiagramCommand } from './delete-command.js';
+import { deletionPreviewSchema } from '../../shared/src/validation/schemas.js';
 
 const helpText = `ADR Diagram CLI
 
 Usage:
   npm run cli -- diagrams list [--name <text>] [--format table|json]
   npm run cli -- diagrams export <diagram-id> --output <path.zip>
+  npm run cli -- diagrams delete (--id <uuid> | --name <exact-name>) (--trash | --permanent) [--yes]
   npm run cli -- --help
 
 Commands:
@@ -19,6 +22,12 @@ Commands:
                   Export the saved diagram and its complete ADR set by stable UUID to a ZIP.
                   The destination must end in .zip, its parent must exist, and existing files
                   are never overwritten.
+  diagrams delete Select one UUID or exact, case/whitespace-sensitive saved name. Duplicate
+                  names require --id. Preview includes the root and recursively owned children.
+                  --trash is recoverable; --permanent is reserved and currently unavailable.
+                  Type yes interactively or use --yes for scripts. Cancellation changes nothing.
+                  Changed saved contents require a fresh preview. Verify active/Trash state in
+                  the application before retrying an uncertain execution outcome.
 
 Configuration:
   ADR_DIAGRAM_API_URL  Service root URL (default: http://localhost:3000).
@@ -32,6 +41,8 @@ Common errors:
 export interface CliIo {
   stdout: (text: string) => void;
   stderr: (text: string) => void;
+  isTTY?: boolean;
+  confirm?: () => Promise<string | null>;
 }
 
 export class UsageError extends Error {
@@ -64,11 +75,16 @@ async function runCliCommand(argv: string[], io: CliIo, client?: ReturnType<type
       args: argv,
       strict: true,
       allowPositionals: true,
+      tokens: true,
       options: {
         help: { type: 'boolean', short: 'h' },
         name: { type: 'string' },
         format: { type: 'string' },
         output: { type: 'string' },
+        id: { type: 'string' },
+        trash: { type: 'boolean' },
+        permanent: { type: 'boolean' },
+        yes: { type: 'boolean' },
       },
     });
   } catch (error) {
@@ -79,9 +95,21 @@ async function runCliCommand(argv: string[], io: CliIo, client?: ReturnType<type
     io.stdout(helpText);
     return 0;
   }
-  if (positionals[0] !== 'diagrams' || positionals.length < 2) throw usage('Expected a diagrams list or export command.');
+  if (positionals[0] !== 'diagrams' || positionals.length < 2) throw usage('Expected a diagrams list, export or delete command.');
 
   const command = positionals[1];
+  if (command === 'delete') {
+    if (positionals.length !== 2) throw usage('Delete requires one explicit --id or --name selector; positional roots are not accepted.');
+    const seen = new Set<string>();
+    for (const token of parsed.tokens ?? []) if (token.kind === 'option') { if (seen.has(token.name)) throw usage(`Repeated --${token.name} is not allowed for delete.`); seen.add(token.name); }
+    if (values.format !== undefined || values.output !== undefined) throw usage('--format and --output are not valid for delete.');
+    if ((values.id !== undefined) === (values.name !== undefined)) throw usage('Delete requires exactly one --id or --name.');
+    if (Boolean(values.trash) === Boolean(values.permanent)) throw usage('Delete requires exactly one --trash or --permanent mode.');
+    const request = deletionPreviewSchema.safeParse({ selector: values.id !== undefined ? { id: values.id } : { name: values.name }, mode: values.trash ? 'trash' : 'permanent' });
+    if (!request.success) throw usage('Delete requires a valid UUID or non-blank literal name.');
+    return deleteDiagramCommand(client ?? createApiClient(), request.data, Boolean(values.yes), io);
+  }
+  if (values.id !== undefined || values.trash !== undefined || values.permanent !== undefined || values.yes !== undefined) throw usage('--id, --trash, --permanent and --yes are only valid for delete.');
   if (command === 'list') {
     if (positionals.length !== 2) throw usage('The list command does not accept positional arguments.');
     if (values.output !== undefined) throw usage('--output is only valid for export.');

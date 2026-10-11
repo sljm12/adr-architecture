@@ -1,0 +1,100 @@
+{
+  "sourceSha256": "2e09f53ce2433cd5f76c80b25847cda4fc5faa1750f34e0af3fe0193da905a08",
+  "components": {
+    "schemas": {
+      "DiagramSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "status",
+          "createdAt",
+          "updatedAt",
+          "kind",
+          "scope"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "trashed"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "general",
+              "container"
+            ]
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope"
+          }
+        }
+      },
+      "ContainerScope": {
+        "type": "object",
+        "required": [
+          "parentDiagramId",
+          "softwareSystemId",
+          "parentDiagramName",
+          "softwareSystemName",
+          "softwareSystemDescription"
+        ],
+        "properties": {
+          "parentDiagramId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "softwareSystemId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parentDiagramName": {
+            "type": "string"
+          },
+          "softwareSystemName": {
+            "type": "string"
+          },
+          "softwareSystemDescription": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "Scope": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ContainerScope"
+          },
+          {
+            "$ref": "#/components/schemas/NullValue"
+          }
+        ]
+      },
+      "NullValue": {
+        "type": "object",
+        "nullable": true,
+        "enum": [
+          null
+        ]
+      }
+    }
+  }
+}

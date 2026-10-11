@@ -7,9 +7,22 @@ import { ContainerContextService, resolveContainerScope, findPostgresError } fro
 import { ComponentContextService } from './component-context';
 import { GraphTransaction } from '../persistence/graph-transaction';
 import { ApiConflictError } from '../api/errors';
-import type { DiagramSummary, RestoreConfirmation, RestoreImpact, TrashImpact } from '../../../shared/src/index';
+import type { RestoreConfirmation, RestoreImpact, TrashImpact } from '../../../shared/src/index';
+import { createHash } from 'node:crypto';
+import { deletionPreviewSchema, deletionConfirmationSchema, deletionImpactSchema, deletionResultSchema, uuidSchema, type DeletionPreview, type DeletionConfirmation, type DeletionImpact, type DeletionResult } from '../../../shared/src/index';
+import { DeletionRequestError } from '../api/errors';
+import type { GraphTransactionContext } from '../persistence/graph-transaction';
 
-const summary = (d: DiagramDocument): DiagramSummary => ({ id: d.id, name: d.name, status: d.status, kind: d.kind ?? 'general', scope: d.scope ?? null, createdAt: d.createdAt, updatedAt: d.updatedAt });
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') return `{${Object.entries(value).filter(([,v]) => v !== undefined).sort(([a],[b]) => a.localeCompare(b)).map(([key,v]) => `${JSON.stringify(key)}:${canonicalJson(v)}`).join(',')}}`;
+  return JSON.stringify(value);
+}
+const byIdentity = <T extends { id: string }>(items: T[]) => [...items].sort((a,b) => a.id.localeCompare(b.id));
+const deletionMissing = () => new DeletionRequestError(404, { code: 'DELETE_NOT_FOUND', message: 'No eligible diagram matches this exact selector.', remedy: 'Check the complete saved name or use its UUID; Trash requires an active root.' });
+const deletionChanged = () => new DeletionRequestError(409, { code: 'DELETE_IMPACT_CHANGED', message: 'The saved deletion impact changed after preview.', remedy: 'Run a new invocation to review a fresh preview and confirm again.' });
+
+const summary = (d: DiagramDocument) => ({ id: d.id, name: d.name, status: d.status, kind: d.kind ?? 'general', scope: d.scope ?? null, createdAt: d.createdAt, updatedAt: d.updatedAt });
 const sameIds = (a: string[], b: string[]) => a.length === b.length && new Set(a).size === a.length && [...a].sort().every((id, index) => id === [...b].sort()[index]);
 const occurrenceBlocker = (child: DiagramDocument, occurrence: DiagramDocument['components'][number]): DiagramDependencyBlocker => ({ diagramId: child.id, name: child.name, status: child.status, componentId: occurrence.id, sourceComponentId: occurrence.sourceComponentId ?? undefined, reason: 'This immediate source is used by a supporting participant occurrence.', nextAction: `${child.status === 'trashed' ? 'Restore this child (and confirm ancestor recovery first if needed), then open it' : 'Open this child'} and explicitly remove occurrence ${occurrence.id} after resolving its relationship and ADR links. Keep its immediate source and canonical source intact until every dependent occurrence is removed.` });
 
@@ -125,6 +138,71 @@ export class DiagramService {
   }
   listSummaries(status: 'active' | 'trashed' = 'active') { return this.containerContext.summaries(status); }
 
+  async previewDeletion(input: DeletionPreview): Promise<DeletionImpact> {
+    const request = deletionPreviewSchema.parse(input);
+    const candidates = (await this.repository.listAll()).filter(document =>
+      (request.mode === 'permanent' || document.status === 'active') && ('id' in request.selector ? document.id === request.selector.id : document.name === request.selector.name));
+    if (!candidates.length) throw deletionMissing();
+    if (candidates.length > 1) throw new DeletionRequestError(409, { code: 'DELETE_NAME_AMBIGUOUS', message: 'More than one diagram has this exact saved name.', remedy: 'Select one candidate with --id <uuid>.', candidates: byIdentity(candidates).map(summary) });
+    const id = candidates[0].id;
+    return this.graph.run(id, [], async context => {
+      const current = await context.diagrams.get(id);
+      if (!current || (request.mode === 'trash' && current.status !== 'active')) throw deletionMissing();
+      if ('name' in request.selector && current.name !== request.selector.name) throw deletionChanged();
+      return this.deletionSnapshot(id, request.mode, context);
+    });
+  }
+
+  private async deletionSnapshot(id: string, mode: DeletionConfirmation['mode'], { diagrams, adrs }: GraphTransactionContext): Promise<DeletionImpact> {
+    const root = await diagrams.get(id);
+    if (!root) throw deletionMissing();
+    if (mode === 'trash' && root.status !== 'active') throw deletionChanged();
+    const membership = [(await diagrams.getGraphMembership(id))!, ...(await diagrams.findDescendants(id))];
+    const ancestors = await diagrams.findAncestors(id);
+    // Recovery reads validate source/owner identity even when an ancestor is in Trash.
+    const recoveryReads = new Proxy(diagrams, { get(target, key) {
+      if (key === 'get') return async (keyId: string) => { const d = await target.get(keyId); return d && { ...d, status: 'active', trashedAt: null }; };
+      const value = Reflect.get(target, key); return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    const documents: DiagramDocument[] = [];
+    for (const member of membership) {
+      let document = await diagrams.get(member.id);
+      if (!document || member.ownerComponentId !== getDiagramOwnerId(document) || member.parentDiagramId !== (document.scope?.parentDiagramId ?? null)) throw new ApiConflictError('The saved hierarchy has a missing parent or owner.', 'DIAGRAM_REFERENCE_BROKEN');
+      if (document.kind === 'component') document = await this.componentContext.hydrateAndValidateDocument(document, recoveryReads);
+      else if (document.kind === 'container') document = await this.containerContext.hydrateAndValidateDocument(document, recoveryReads);
+      else assertApiInvariants(document);
+      if (mode === 'permanent' || document.status === 'active') documents.push(document);
+    }
+    const affectedDiagrams = documents.map(summary);
+    const savedState = async (document: DiagramDocument) => ({
+      document: { ...document, components: byIdentity(document.components), relationships: byIdentity(document.relationships), groups: byIdentity(document.groups).map(g => ({ ...g, memberComponentIds: [...g.memberComponentIds].sort() })) },
+      revision: await diagrams.getDeletionRevision(document.id), provenance: await diagrams.getTrashProvenance(document.id),
+      adrs: byIdentity(await adrs?.listFull(document.id) ?? []).map(adr => ({ ...adr, componentIds: [...adr.componentIds].sort(), relationshipIds: [...adr.relationshipIds].sort() })),
+    });
+    const requiredAncestors = [];
+    for (const ancestor of ancestors) { const document = await diagrams.get(ancestor.id); if (!document) throw new ApiConflictError('Required ancestor is unavailable.', 'DIAGRAM_REFERENCE_BROKEN'); requiredAncestors.push(await savedState(document)); }
+    const snapshot = { version: 1, rootDiagramId: id, mode, affectedDiagrams,
+      membership: await Promise.all(membership.map(async member => ({ ...member, provenance: await diagrams.getTrashProvenance(member.id), revision: await diagrams.getDeletionRevision(member.id) }))),
+      affected: await Promise.all(documents.map(savedState)), requiredAncestors,
+    };
+    const confirmationToken = createHash('sha256').update(canonicalJson(snapshot)).digest('hex');
+    return deletionImpactSchema.parse({ rootDiagramId: id, mode, affectedDiagrams, confirmationToken });
+  }
+
+  async executeDeletion(id: string, input: DeletionConfirmation): Promise<DeletionResult> {
+    uuidSchema.parse(id); const confirmation = deletionConfirmationSchema.parse(input);
+    // US2 supplies physical purge; do not allow permanent consent to invoke Trash.
+    if (confirmation.mode === 'permanent') throw new DeletionRequestError(409, { code: 'DELETE_FAILED', message: 'Permanent deletion is not available in this release.', remedy: 'Use recoverable --trash or wait for permanent deletion support.' });
+    if (!await this.repository.get(id)) throw deletionMissing();
+    return this.graph.run(id, [], async context => {
+      const impact = await this.deletionSnapshot(id, confirmation.mode, context);
+      if (impact.confirmationToken !== confirmation.confirmationToken) throw deletionChanged();
+      const provenance = { trashBatchId: crypto.randomUUID(), trashRootDiagramId: id };
+      for (const document of impact.affectedDiagrams) if (!await context.diagrams.trash(document.id, provenance)) throw deletionChanged();
+      return deletionResultSchema.parse({ rootDiagramId: id, mode: confirmation.mode, affectedDiagrams: impact.affectedDiagrams });
+    });
+  }
+
   create(name: string): MaybePromise<DiagramDocument> {
     const input = diagramCreateSchema.parse({ name });
     const now = new Date().toISOString();
@@ -153,7 +231,7 @@ export class DiagramService {
   }
 
   async save(id: string, input: unknown): Promise<DiagramDocument> {
-    if (input && typeof input === 'object' && ('trashBatchId' in input || 'trashRootDiagramId' in input)) throw new ApiValidationError({ status:'Server-managed recovery provenance cannot be changed through a document save.' });
+    if (input && typeof input === 'object' && ('trashBatchId' in input || 'trashRootDiagramId' in input || 'deletionRevision' in input || 'deletion_revision' in input)) throw new ApiValidationError({ status:'Server-managed recovery provenance and revisions cannot be changed through a document save.' });
     const document = diagramDocumentSchema.parse(input) as DiagramDocument;
     if (document.id !== id) throw new ApiValidationError({ id: 'Path and document IDs must match. Save to this document’s original UUID.' });
     const initial = await this.repository.get(id);

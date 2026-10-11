@@ -22,7 +22,7 @@ export class GraphTransaction {
           : transaction !== undefined ? this.adrs?.withTransaction?.(transaction) : this.adrs;
         try { return await action({ diagrams, adrs, rootDiagramId }); }
         catch (error) {
-          if (adrSnapshot !== undefined) this.adrs?.restoreGraphSnapshot?.(adrSnapshot, [rootDiagramId, ...(await diagrams.findDescendants(rootDiagramId)).map(member => member.id)]);
+          if (adrSnapshot !== undefined) this.adrs?.restoreGraphSnapshot?.(adrSnapshot, [...ids, ...(diagrams.transactionDiagramIds?.(rootDiagramId) ?? [])]);
           throw error;
         }
     });

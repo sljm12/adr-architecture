@@ -1,4 +1,4 @@
-import { asc, eq, inArray } from 'drizzle-orm';
+import { asc, eq, inArray, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { z } from 'zod';
 import type { DiagramDocument, ComponentScope, DiagramKind } from '../../../shared/src/index';
@@ -12,6 +12,9 @@ export interface ChildMembership { id: string; status: 'active' | 'trashed'; par
 export interface GraphMembership extends ChildMembership { kind: DiagramKind }
 
 export interface DiagramRepositoryLike {
+  getDeletionRevision(id: string): MaybePromise<string | undefined>;
+  incrementDeletionRevision(id: string): MaybePromise<void>;
+  transactionDiagramIds?(rootId: string): string[];
   listAll(): MaybePromise<DiagramDocument[]>;
   list(): MaybePromise<DiagramDocument[]>;
   listTrash(): MaybePromise<DiagramDocument[]>;
@@ -43,6 +46,12 @@ export type RemoveRelationshipResult =
   | { conflict: true };
 
 const clone = (document: DiagramDocument) => structuredClone(document);
+/** Raw bounded discovery works even after the graph root has been removed. */
+function memoryGraphIds(documents: Iterable<DiagramDocument>, seeds: Set<string>): string[] {
+  const ids = new Set(seeds); const all = [...documents];
+  for (let depth = 0; depth < 3; depth++) for (const document of all) if (document.scope && ids.has(document.scope.parentDiagramId)) ids.add(document.id);
+  return [...ids];
+}
 const groupsOf = (document: DiagramDocument) => document.groups ?? [];
 const normalizedGroups = (document: DiagramDocument) => groupsOf(document).map(group => ({
   ...group,
@@ -94,8 +103,18 @@ function componentScope(parentId: string, owner: Pick<DiagramDocument['component
 /** Isolated repository used by tests; production injects PostgresDiagramRepository. */
 export class DiagramRepository implements DiagramRepositoryLike {
   private documents = new Map<string, DiagramDocument>();
+  private revisions = new Map<string, bigint>();
   private provenance = new Map<string, TrashProvenance>();
   private transactionTails = new Map<string, Promise<void>>();
+  private transactionMembers = new Map<string, Set<string>>();
+  transactionDiagramIds(rootId: string) { return [...(this.transactionMembers.get(rootId) ?? [])]; }
+
+  getDeletionRevision(id: string) { return this.revisions.get(id)?.toString(); }
+  incrementDeletionRevision(id: string) {
+    const revision = this.revisions.get(id);
+    if (revision === undefined || !this.documents.has(id)) throw new Error('Diagram revision not found');
+    this.revisions.set(id, revision + 1n);
+  }
 
   listAll() { return [...this.documents.values()].map(d => this.resolve(d)); }
 
@@ -128,16 +147,19 @@ export class DiagramRepository implements DiagramRepositoryLike {
       for (const id of _childDiagramIds) if (!ids.has(id) && this.documents.has(id)) return brokenGraph('Affected diagram belongs to a different Context root.');
       const snapshot = new Map([...this.documents].filter(([id]) => ids.has(id)).map(([id, document]) => [id, clone(document)]));
       const provenanceSnapshot = new Map([...this.provenance].filter(([id]) => ids.has(id)).map(([id, value]) => [id, { ...value }]));
+      const revisionSnapshot = new Map([...this.revisions].filter(([id]) => ids.has(id)));
+      this.transactionMembers.set(root.id, ids);
       try { return await action(this, this); }
       catch (error) {
-        const currentIds = new Set([root.id, ...(await this.findDescendants(root.id)).map(member => member.id), ...ids]);
-        for (const id of currentIds) { this.documents.delete(id); this.provenance.delete(id); }
+        const currentIds = new Set([...ids, ...memoryGraphIds(this.documents.values(), ids)]);
+        for (const id of currentIds) { this.documents.delete(id); this.provenance.delete(id); this.revisions.delete(id); }
         for (const [id, document] of snapshot) this.documents.set(id, document);
         for (const [id, value] of provenanceSnapshot) this.provenance.set(id, value);
+        for (const [id, value] of revisionSnapshot) this.revisions.set(id, value);
         throw error;
       }
     }
-    finally { release(); if (this.transactionTails.get(root.id) === tail) this.transactionTails.delete(root.id); }
+    finally { this.transactionMembers.delete(root.id); release(); if (this.transactionTails.get(root.id) === tail) this.transactionTails.delete(root.id); }
   }
   findComponent(id: string) { for (const document of this.documents.values()) { const component = document.components.find(item => item.id === id); if (component) return { id: component.id, diagramId: component.diagramId, name: component.name, description:component.description, type:component.type, role:component.role ?? 'element', sourceComponentId:component.sourceComponentId ?? null }; } return undefined; }
   findRelationship(id: string) { for (const document of this.documents.values()) { const relationship = document.relationships.find(item => item.id === id); if (relationship) return { id: relationship.id, diagramId: relationship.diagramId }; } return undefined; }
@@ -147,6 +169,8 @@ export class DiagramRepository implements DiagramRepositoryLike {
     if (document.scope && this.findContainerForOwner(getDiagramOwnerId(document)!)) throw new Error('diagrams_owner_component_unique');
     const normalized = { ...document, groups: normalizedGroups(document) };
     this.documents.set(document.id, clone(normalized));
+    this.revisions.set(document.id, 0n);
+    for (const members of this.transactionMembers.values()) if (document.scope && members.has(document.scope.parentDiagramId)) members.add(document.id);
     return this.resolve(normalized);
   }
   replace(document: DiagramDocument) {
@@ -173,6 +197,7 @@ export class DiagramRepository implements DiagramRepositoryLike {
       }),
     };
     this.documents.set(document.id, clone(updated));
+    this.incrementDeletionRevision(document.id);
     return this.resolve(updated);
   }
 
@@ -185,6 +210,7 @@ export class DiagramRepository implements DiagramRepositoryLike {
     const now = new Date().toISOString();
     const updated = { ...document, updatedAt: now, components: document.components.filter(c => c.id !== componentId) };
     this.documents.set(diagramId, clone(updated));
+    this.incrementDeletionRevision(diagramId);
     return { document: this.resolve(updated), relationshipCount: 0 };
   }
 
@@ -194,6 +220,7 @@ export class DiagramRepository implements DiagramRepositoryLike {
     const now = new Date().toISOString();
     const updated = { ...document, updatedAt: now, relationships: document.relationships.filter(relationship => relationship.id !== relationshipId) };
     this.documents.set(diagramId, clone(updated));
+    this.incrementDeletionRevision(diagramId);
     return { document: this.resolve(updated) };
   }
 
@@ -205,6 +232,7 @@ export class DiagramRepository implements DiagramRepositoryLike {
     const updated = { ...document, status: 'trashed' as const, trashedAt: now, updatedAt: now };
     this.documents.set(id, clone(updated));
     this.provenance.set(id, { ...provenance });
+    this.incrementDeletionRevision(id);
     return this.resolve(updated);
   }
 
@@ -214,6 +242,7 @@ export class DiagramRepository implements DiagramRepositoryLike {
     const updated = { ...document, status: 'active' as const, trashedAt: null, updatedAt: new Date().toISOString() };
     this.documents.set(id, clone(updated));
     this.provenance.delete(id);
+    this.incrementDeletionRevision(id);
     return this.resolve(updated);
   }
 
@@ -396,6 +425,15 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
 
   async get(id: string): Promise<DiagramDocument | undefined> { return this.load(id); }
 
+  async getDeletionRevision(id: string): Promise<string | undefined> {
+    const [row] = await this.db.select({ revision: schema.diagrams.deletionRevision }).from(schema.diagrams).where(eq(schema.diagrams.id, id));
+    return row?.revision.toString();
+  }
+  async incrementDeletionRevision(id: string): Promise<void> {
+    const rows = await this.db.update(schema.diagrams).set({ deletionRevision: sql`${schema.diagrams.deletionRevision} + 1` }).where(eq(schema.diagrams.id, id)).returning({ id: schema.diagrams.id });
+    if (!rows.length) throw new Error('Diagram revision not found');
+  }
+
   async findContainerForOwner(ownerComponentId: string): Promise<DiagramDocument | undefined> {
     const [diagram] = await this.db.select().from(schema.diagrams).where(eq(schema.diagrams.ownerComponentId, ownerComponentId)).limit(1);
     return diagram ? this.load(diagram.id) : undefined;
@@ -471,6 +509,7 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
     const replace = async (tx: any) => {
       await tx.update(schema.diagrams).set({
         name: document.name.trim(), updatedAt: now, kind: document.kind ?? 'general',
+        deletionRevision: sql`${schema.diagrams.deletionRevision} + 1`,
         parentDiagramId: document.scope?.parentDiagramId ?? null, ownerComponentId: getDiagramOwnerId(document),
         scopeX: document.boundary?.position.x ?? null, scopeY: document.boundary?.position.y ?? null,
         scopeWidth: document.boundary?.size.width ?? null, scopeHeight: document.boundary?.size.height ?? null,
@@ -490,7 +529,7 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
     const now = new Date();
     const remove = async (tx: any) => {
       await tx.delete(schema.components).where(eq(schema.components.id, componentId));
-      await tx.update(schema.diagrams).set({ updatedAt: now }).where(eq(schema.diagrams.id, diagramId));
+      await tx.update(schema.diagrams).set({ updatedAt: now, deletionRevision: sql`${schema.diagrams.deletionRevision} + 1` }).where(eq(schema.diagrams.id, diagramId));
     };
     if (this.inTransaction) await remove(this.db); else await this.db.transaction(remove);
     return { document: (await this.get(diagramId))!, relationshipCount: 0 };
@@ -502,7 +541,7 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
     const now = new Date();
     const remove = async (tx: any) => {
       await tx.delete(schema.relationships).where(eq(schema.relationships.id, relationshipId));
-      await tx.update(schema.diagrams).set({ updatedAt: now }).where(eq(schema.diagrams.id, diagramId));
+      await tx.update(schema.diagrams).set({ updatedAt: now, deletionRevision: sql`${schema.diagrams.deletionRevision} + 1` }).where(eq(schema.diagrams.id, diagramId));
     };
     if (this.inTransaction) await remove(this.db); else await this.db.transaction(remove);
     return { document: (await this.get(diagramId))! };
@@ -516,14 +555,14 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
     const existing = await this.get(id);
     if (!existing || existing.status === 'trashed') return undefined;
     const now = new Date();
-    await this.db.update(schema.diagrams).set({ status: 'trashed', trashedAt: now, updatedAt: now, ...provenance }).where(eq(schema.diagrams.id, id));
+    await this.db.update(schema.diagrams).set({ status: 'trashed', trashedAt: now, updatedAt: now, ...provenance, deletionRevision: sql`${schema.diagrams.deletionRevision} + 1` }).where(eq(schema.diagrams.id, id));
     return (await this.get(id))!;
   }
 
   async restore(id: string): Promise<DiagramDocument | undefined> {
     const existing = await this.get(id);
     if (!existing || existing.status !== 'trashed') return undefined;
-    await this.db.update(schema.diagrams).set({ status: 'active', trashedAt: null, updatedAt: new Date(), trashBatchId: null, trashRootDiagramId: null }).where(eq(schema.diagrams.id, id));
+    await this.db.update(schema.diagrams).set({ status: 'active', trashedAt: null, updatedAt: new Date(), trashBatchId: null, trashRootDiagramId: null, deletionRevision: sql`${schema.diagrams.deletionRevision} + 1` }).where(eq(schema.diagrams.id, id));
     return (await this.get(id))!;
   }
 

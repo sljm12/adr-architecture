@@ -109,7 +109,9 @@ export class AdrService {
       await this.assertActiveAncestors(diagramId, context.diagrams);
       if (diagram.kind === 'container') await new ContainerContextService(context.diagrams).hydrateAndValidateDocument(diagram, context.diagrams);
       if (diagram.kind === 'component') await new ComponentContextService(context.diagrams).hydrateAndValidateDocument(diagram, context.diagrams);
-      return action(adrs, context.diagrams, diagram);
+      const result = await action(adrs, context.diagrams, diagram);
+      await context.diagrams.incrementDeletionRevision(diagramId);
+      return result;
     });
   }
 
