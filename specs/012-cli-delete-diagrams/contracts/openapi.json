@@ -1,0 +1,349 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "ADR Diagram Confirmed Deletion API",
+    "version": "1.0.0",
+    "description": "Additive contract. Existing list, DELETE-to-Trash and restore contracts remain unchanged. Tokens bind both modes to saved contents/revisions; never automatically refresh a stale execution."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000"
+    }
+  ],
+  "paths": {
+    "/diagrams/deletion-preview": {
+      "post": {
+        "operationId": "previewDiagramDeletion",
+        "summary": "Resolve one exact selector and preview the saved subtree",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Consistent preview; no saved data changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionImpact"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "404": {
+            "$ref": "#/components/responses/Missing"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failed"
+          }
+        }
+      }
+    },
+    "/diagrams/{diagramId}/deletion": {
+      "post": {
+        "operationId": "executeDiagramDeletion",
+        "summary": "Atomically execute the confirmed preview against its resolved UUID",
+        "parameters": [
+          {
+            "name": "diagramId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Confirmation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Committed deletion; returned summaries describe pre-deletion state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "404": {
+            "$ref": "#/components/responses/Missing"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/Failed"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Mode": {
+        "type": "string",
+        "enum": [
+          "trash",
+          "permanent"
+        ]
+      },
+      "Selector": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S",
+                "description": "Literal complete saved summary name; compare exact case and whitespace without trimming."
+              }
+            }
+          }
+        ]
+      },
+      "PreviewRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "selector",
+          "mode"
+        ],
+        "properties": {
+          "selector": {
+            "$ref": "#/components/schemas/Selector"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/Mode"
+          }
+        }
+      },
+      "Token": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "Opaque state precondition covering revisions, contents, membership/provenance and required ancestor dependencies; not a credential."
+      },
+      "Confirmation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "confirmationToken"
+        ],
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/Mode"
+          },
+          "confirmationToken": {
+            "$ref": "#/components/schemas/Token"
+          }
+        }
+      },
+      "DiagramSummary": {
+        "$ref": "../../010-c4-component-diagrams/contracts/openapi.json#/components/schemas/DiagramSummary"
+      },
+      "DeletionResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "rootDiagramId",
+          "mode",
+          "affectedDiagrams"
+        ],
+        "properties": {
+          "rootDiagramId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/Mode"
+          },
+          "affectedDiagrams": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/DiagramSummary"
+            }
+          }
+        }
+      },
+      "DeletionImpact": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "rootDiagramId",
+          "mode",
+          "affectedDiagrams",
+          "confirmationToken"
+        ],
+        "properties": {
+          "rootDiagramId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/Mode"
+          },
+          "affectedDiagrams": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/DiagramSummary"
+            }
+          },
+          "confirmationToken": {
+            "$ref": "#/components/schemas/Token"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "message",
+          "code",
+          "remedy"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "DELETE_INVALID_REQUEST",
+              "DELETE_NOT_FOUND",
+              "DELETE_NAME_AMBIGUOUS",
+              "DELETE_IMPACT_CHANGED",
+              "DIAGRAM_REFERENCE_BROKEN",
+              "DIAGRAM_DEPENDENCY",
+              "DELETE_FAILED"
+            ]
+          },
+          "remedy": {
+            "type": "string"
+          },
+          "candidates": {
+            "type": "array",
+            "description": "Ambiguous exact-name candidates.",
+            "items": {
+              "$ref": "#/components/schemas/DiagramSummary"
+            }
+          },
+          "blockers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "diagramId",
+                "artifactId",
+                "reason",
+                "nextAction"
+              ],
+              "properties": {
+                "diagramId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "artifactId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "nextAction": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Invalid": {
+        "description": "Invalid selector, UUID, mode, token, missing or unknown fields; no mutation",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Missing": {
+        "description": "No eligible exact match or resolved root no longer exists; no mutation",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Ambiguous name, changed impact/content, ineligible state, invalid hierarchy or external dependency; no deletion changes",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Failed": {
+        "description": "Unexpected failure; transaction rolled back; no internal error details exposed",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  }
+}
