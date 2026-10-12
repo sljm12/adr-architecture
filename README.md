@@ -54,6 +54,7 @@ psql "$DATABASE_URL" -f backend/drizzle/0004_component_dimensions.sql
 psql "$DATABASE_URL" -f backend/drizzle/0005_c4_container_diagrams.sql
 psql "$DATABASE_URL" -f backend/drizzle/0006_container_component_types.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/drizzle/0007_c4_component_diagrams.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/drizzle/0008_diagram_deletion_revision.sql
 ```
 
 Migration `0003_system_groups.sql` adds `system_groups` and normalized
@@ -71,6 +72,11 @@ writes missing a subtype fail validation.
 Migration 0007 widens the existing diagram/scope/role constraints for Component documents and
 requires valid child boundary values. It adds no tables, columns or backfill. Apply it after
 0001–0006; retain applied migrations and apply only pending migrations on existing deployments.
+
+Apply migration `0008_diagram_deletion_revision.sql` after 0007 and **before starting the updated
+API runtime**. It adds an internal saved-state revision counter with a zero default, preserving
+existing artifacts and identities. The counter detects edits made after a deletion preview,
+including ADR-only edits and edits subsequently reverted; it is not an editable document field.
 
 ## Tests
 
@@ -156,6 +162,47 @@ Application/Datastore subtypes, responsibilities, technologies, protocols and lo
 Component width and height are stored with the diagram and default to 180 by 72 when an older
 document is read. Apply `backend/drizzle/0004_component_dimensions.sql` before running against an
 existing PostgreSQL database so saved resizes are retained.
+
+## Command line diagram deletion
+
+Use exactly one explicit selector and one explicit mode. Name matching compares the complete saved
+name, including case and whitespace; it differs from the list command's substring filter. Container
+and Component names follow their saved owners. A UUID-shaped name is still a name with `--name`.
+
+```text
+npm run cli -- diagrams delete --name "Payments" --trash
+npm run cli -- diagrams delete --id 00000000-0000-4000-8000-000000000001 --trash
+npm run cli -- diagrams delete --id 00000000-0000-4000-8000-000000000001 --permanent
+npm run cli -- diagrams delete --name "Disposable example" --trash --yes
+```
+
+Each invocation previews the root and affected descendants with names, UUIDs and statuses. Trash
+moves the active subtree and its contained artifacts/ADRs to recoverable Trash; independently
+trashed descendants retain their previous recovery batches. Restore through the existing browser
+recovery workflow. **Permanent deletion is irreversible**: it removes the entire selected subtree,
+including previously trashed descendants, components, relationships, groups, ADRs and links.
+Selecting a child preserves its ancestors, siblings and outside owner. Outside dependencies block
+deletion and identify what must be resolved first.
+
+Review the preview and type `yes` (case-insensitive, surrounding whitespace allowed). Refusal, EOF
+or interruption cancels without executing deletion. Scripts and redirected input require explicit
+`--yes`, which still prints the preview. Choosing a mode alone does not grant consent. Committed
+success exits `0`; cancellation, unavailable service, stale confirmation and other failures exit
+`1`; invalid selectors/options or missing/conflicting modes exit `2`. Diagnostics use stderr.
+
+Duplicate exact names refuse selection and list candidate UUIDs and statuses; rerun with `--id`.
+Trash searches active diagrams; permanent mode searches active diagrams and Trash. No exact match
+requires checking the saved name or UUID. Deletion operates only on saved data: unsaved browser
+edits are not captured. Save work you want retained first. A later stale browser save fails and
+retains the local draft rather than recreating the deleted UUID.
+
+Saved edits between preview and execution invalidate consent. Review a fresh preview in a new
+invocation; the CLI never refreshes consent or retries deletion automatically. If the execution
+response is lost or invalid, the operation may already have committed. Verify the root UUID and
+descendants in the application's active collection and Trash before another invocation; use
+`diagrams list` to check active saved entries. Absence from the active list alone does not prove
+permanent removal. See the [deletion validation guide](specs/012-cli-delete-diagrams/quickstart.md)
+for database, performance and workflow evidence.
 
 ## C4 system groups
 

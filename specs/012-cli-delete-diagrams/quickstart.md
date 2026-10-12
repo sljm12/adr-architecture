@@ -51,7 +51,114 @@ Migration runners updated: `backend/tests/persistence/component-test-database.ts
 - Final full unit suite: **127 files passed / 761 tests passed / 108 database-gated tests skipped**, exit 0, 58.74 seconds. The first broad run encountered the configured offline localhost:5432 database in a legacy suite that gates on `DATABASE_URL` alone; rerunning with that variable empty resolved the environment issue. Skips are separate from the actual PostgreSQL evidence above. Production build, final CLI rebuild and `git diff --check` passed. Existing pg concurrent-query deprecation and frontend bundle-size warnings remain.
 - No `.specify/extensions.yml` exists; pre/post hooks were skipped. Phase 6 tasks T034–T037 remain unchecked: operational README updates, dedicated deletion scale measurements, the complete Phase 6 validation run and first-time-author trials are outside this increment.
 
+## Phase 6 scale and operational evidence (2026-10-13)
+
+- T034 adds README examples for both selectors/modes, saved-only scope, migration 0008 before runtime,
+  consent/cancellation/exit statuses, duplicate resolution and response-loss verification. Existing
+  list/export/recovery configuration and guidance remain available. No runtime changes or dependencies
+  are required for this phase; existing Git/Docker ignore rules cover generated test/build outputs.
+- T035 adds `backend/tests/persistence/diagram-deletion-scale.test.ts`, using the existing deletion
+  fixture and UUID-isolated migrated PostgreSQL schema helper. The selected four-diagram, three-level
+  subtree contains exactly **1,000 components, 1,000 relationships and 100 linked ADRs**, within
+  **100 saved diagrams**. Both modes use two warmups and 20 measured preview/committed-execution
+  samples. Restoration/reseeding and assertions occur outside the timing intervals. Preview includes
+  exact-name resolution and graph locking; execution includes token revalidation, mutation and commit.
+  p95 uses the nearest-rank 19th sorted observation of 20; preview and execution each assert <2,000 ms.
+- Standalone scale run: **1 test passed, zero skips**, 30.75 seconds. Environment: Windows x64,
+  Node **22.17.1**, Intel Core **i7-13700H**, local **PostgreSQL 17.10** (MSVC 19.44, 64-bit),
+  localhost **55412**, disposable `spec012-phase4-postgres-17` cluster/database, migrations 0001–0008.
+  This is an in-process service measurement over local TCP PostgreSQL, excluding CLI input and HTTP
+  transport. It establishes the local plan budget, not production/network latency or SC-005 usability.
+
+| Mode | Preview p95 | Committed execution p95 | Separate budget |
+|---|---:|---:|---:|
+| Trash | 107.19 ms | 129.09 ms | <2,000 ms each: PASS |
+| Permanent | 113.37 ms | 197.31 ms | <2,000 ms each: PASS |
+
+- The same test grows the saved collection to 105 diagrams and resolves a late exact-name target;
+  at 106 diagrams it refuses a duplicate root name with candidate diagnostics. Fixture size is not
+  a search limit. The first run failed only on this new test's incorrect expected error field/code;
+  correction to the existing `detail` / `DELETE_NAME_AMBIGUOUS` contract required no runtime change.
+- Final scale-only check after adding an explicit assertion that the late target occurs beyond the
+  first 100 saved entries: **1 passed, zero skips**, exit 0, 31.34 s (`spec012-phase6-scale-final.log`).
+  Trash preview/execution p95 **104.96/126.72 ms**, permanent **111.03/237.41 ms**; all budgets pass.
+- Raw samples and environment are emitted as `Spec 012 PostgreSQL deletion scale:` in test output;
+  local transcript: `spec012-phase6-scale.log` (ignored generated output). To repeat:
+
+```powershell
+$env:DATABASE_URL = '<dedicated disposable PostgreSQL database URL>'
+$env:RUN_POSTGRES_TESTS = '1'
+npm test -- backend/tests/persistence/diagram-deletion-scale.test.ts
+```
+
+## Phase 6 regression results (T036, 2026-10-13)
+
+| Check | Result | Local generated transcript |
+|---|---|---|
+| Focused stories, CLI/schema/API and complete persistence suite with actual PostgreSQL | **33 files / 317 tests passed, zero skips**, exit 0, 51.13 s | `spec012-phase6-focused.log` |
+| Full `npm test`, database gating disabled for this separate run | **127 files passed / 761 tests passed / 109 database-gated skips**, exit 0, 63.91 s | `spec012-phase6-full.log` |
+| Full `npm run build` (shared/backend/frontend/CLI) | **PASS**, exit 0 | `spec012-phase6-build.log` |
+| Recovery/save/list/export Playwright regressions | **22 passed, zero skips**, exit 0, 58.1 s | `spec012-phase6-browser.log` |
+| `git diff --check` | **PASS** | Terminal output |
+
+The database run used `RUN_POSTGRES_TESTS=1` and the dedicated disposable local PostgreSQL cluster
+described above, using its `spec012` role/database and isolated schemas; existing public-table
+regressions used that cluster's previously migrated public tables. No application database or
+connection configuration changed. The full unit suite's database skips are **not** database passes;
+the separate complete persistence run supplies actual migration, rollback, purge and race evidence.
+The scale test passed again during the combined run despite concurrent unit/build load: Trash
+preview/execution p95 **207.60/242.79 ms**, permanent **209.71/416.69 ms**.
+
+Reproducible focused run (with the dedicated database URL and `RUN_POSTGRES_TESTS=1` configured):
+
+```powershell
+npm test -- cli/tests shared/tests/diagram-deletion-validation.test.ts backend/tests/contract/diagram-deletion.test.ts backend/tests/contract/diagram-deletion-stale.test.ts backend/tests/persistence
+```
+
+Playwright used the existing `playwright.component.config.ts` headless Chromium harness and frontend
+server, with seven files: `component-diagram-persistence`, `component-diagram-recovery`,
+`create-edit-reopen`, `saved-diagrams`, `diagram-list-management`, `recovery`, and `mermaid-export`.
+The two real HTTP/PostgreSQL workflows ran without skips, proving a permanently removed UUID cannot
+be recreated by an open browser's stale save and proving ADR/save/reopen/exact recovery compatibility.
+Memory browser cases cover both deletion modes and saving the retained draft after Trash restoration.
+Listing/filtering/duplicate identities, draft guards, component/relationship recovery and Mermaid
+success/error feedback also pass. This targeted run does not establish every browser engine or the
+entire E2E suite.
+
+Existing pg concurrent-query deprecation, frontend bundle-size and terminal color warnings remain;
+none caused failures. The sandbox shell helper could not start, so commands ran outside it after
+approval; the prerequisite script used a process-only execution-policy bypass. Existing app servers
+were retained; the initially stopped disposable PostgreSQL cluster was stopped again after checks.
+No `.specify/extensions.yml` exists; pre/post implementation hooks are skipped.
+No blocking automated evidence remains for phase 6; **SC-005 remains unverified** as recorded below.
+
 Use disposable data; permanent deletion is irreversible.
+
+## Phase 6 success-criterion review (T037, 2026-10-13)
+
+SC-001–SC-004 pass for the recorded automated validation cases; this is bounded evidence from the
+tested workflows, not a claim about every possible input. The focused run below has no failures or
+database skips. Existing story assertions check complete before/after state and unrelated data,
+not just successful status codes.
+
+| Criterion | Recorded workflow evidence | Outcome |
+|---|---|---|
+| SC-001: intended target or safe refusal | CLI deletion (42 cases), API client (13), help (4), HTTP deletion (19), stale/exact-name tests (46), plus late target/duplicate scale checks; literal case/whitespace/Unicode/UUID-shaped names, UUID parity and eligible duplicate statuses | All tested targeting cases pass; no unintended selection |
+| SC-002: recoverable identity/content retention | Trash persistence (4 cases, memory and PostgreSQL), graph/revision rollback, and existing three-level recovery/browser regressions; full document/ADR/link equality and earlier batch provenance | All tested Trash/restoration assertions pass |
+| SC-003: complete scoped purge | Purge persistence (28 cases, including 14 actual PostgreSQL cases), raw normalized-table absence, mixed-status subtree/child scope, replacements, owner-slot reuse and unrelated preservation | All tested removal/preservation assertions pass |
+| SC-004: safe non-success | Strict boundaries (10 cases), CLI cancellation/EOF/interruption/non-TTY/usage/HTTP response loss; 46 stale cases, 30 actual PostgreSQL barrier races, dependency/rollback tests and stale-browser draft retention | All tested rejection/atomicity assertions pass; uncertainty never claims rollback or retries |
+| SC-005: ≥90% of first-time authors finish within two minutes using help only | **0 participants available; completion times N/A; completion percentage N/A** | **UNVERIFIED**; automated help tests and service timings are not participant evidence |
+
+Pending SC-005 protocol: recruit at least 10 representative first-time architecture authors. Use
+fresh disposable hierarchies per participant, including duplicate/near names and mixed active/Trash
+descendants. Assign a named intended root and mode; permit built-in CLI help only, without coaching
+or separate instructions. Start the timer when the task is shown, stop after committed intended
+deletion, and record participant identifier, selector/mode/consent correctness, elapsed seconds,
+wrong selections, cancellation/failure and assistance. Report correct unassisted completions within
+120 seconds divided by all participants; at least 9 of 10 must succeed. Participation scheduling
+and execution remain pending with the project maintainer. No author trials were fabricated or
+messages sent to recruit participants. T037's allowed explicit-unverified outcome is used; passing
+the full product usability gate still requires those trials.
 
 ## Setup
 
