@@ -22,10 +22,21 @@ describe('CLI confirmed Trash',()=>{
   });
   it.each(['no','y','',null])('cancels %j without execution',async answer=>{const s=setup(answer);expect(await runCli(['diagrams','delete','--id',id,'--trash'],s.io,s.client)).toBe(1);expect(s.fetcher).toHaveBeenCalledTimes(1);expect(s.stderr.mock.calls.flat().join('')).toContain('cancel');});
   it('cancels interrupted confirmation',async()=>{const s=setup();s.confirm.mockRejectedValue(new Error('Interrupted'));expect(await runCli(['diagrams','delete','--id',id,'--trash'],s.io,s.client)).toBe(1);expect(s.fetcher).toHaveBeenCalledTimes(1);});
-  it('safely refuses reserved permanent mode without prompting or executing',async()=>{
+  it.each([['--id',id],['--name',summary.name]])('confirms irreversible permanent scope using %j',async(selector,value)=>{
+    const s=setup(); const child={...summary,id:'00000000-0000-4000-8000-000000000002',status:'trashed',kind:'container',scope:{parentDiagramId:id,softwareSystemId:'00000000-0000-4000-8000-000000000003',parentDiagramName:summary.name,softwareSystemName:'Child',softwareSystemDescription:null}};
+    const impact={...preview,mode:'permanent',affectedDiagrams:[summary,child]};
+    s.fetcher.mockReset().mockResolvedValueOnce(new Response(JSON.stringify(impact))).mockResolvedValueOnce(new Response(JSON.stringify({rootDiagramId:id,mode:'permanent',affectedDiagrams:impact.affectedDiagrams})));
+    expect(await runCli(['diagrams','delete',selector,value,'--permanent','--yes'],s.io,s.client)).toBe(0);
+    expect(s.fetcher).toHaveBeenCalledTimes(2);expect(s.confirm).not.toHaveBeenCalled();
+    const output=s.stdout.mock.calls.flat().join('');expect(output).toContain('irreversible');expect(output).toContain('previously trashed');expect(output).toContain('[trashed]');expect(output).toContain('Permanently deleted');expect(output).not.toContain(preview.confirmationToken);
+  });
+  it.each(['blocked','uncertain'])('never claims permanent success when execution is %s',async outcome=>{
     const s=setup();s.fetcher.mockReset().mockResolvedValueOnce(new Response(JSON.stringify({...preview,mode:'permanent'})));
+    if(outcome==='blocked')s.fetcher.mockResolvedValueOnce(new Response(JSON.stringify({code:'DIAGRAM_DEPENDENCY',message:'Outside dependency',remedy:'Resolve the reference.',blockers:[{diagramId:id,artifactId:id,reason:'ADR replacement',nextAction:'Repair ADR.'}]}),{status:409}));
+    else s.fetcher.mockRejectedValueOnce(new Error('Response lost'));
     expect(await runCli(['diagrams','delete','--id',id,'--permanent','--yes'],s.io,s.client)).toBe(1);
-    expect(s.fetcher).toHaveBeenCalledTimes(1);expect(s.confirm).not.toHaveBeenCalled();expect(s.stderr.mock.calls.flat().join('')).toContain('unavailable');
+    expect(s.fetcher).toHaveBeenCalledTimes(2);expect(s.stdout.mock.calls.flat().join('')).not.toContain('Permanently deleted');
+    expect(s.stderr.mock.calls.flat().join('')).toContain(outcome==='blocked'?'Repair ADR':'Verify');
   });
   it('refuses non-TTY input and accepts explicit --yes without prompting',async()=>{
     const s=setup('yes',false);expect(await runCli(['diagrams','delete','--id',id,'--trash'],s.io,s.client)).toBe(1);expect(s.confirm).not.toHaveBeenCalled();expect(s.fetcher).toHaveBeenCalledTimes(1);

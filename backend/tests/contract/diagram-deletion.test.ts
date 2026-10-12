@@ -67,7 +67,7 @@ describe('confirmed Trash HTTP contract', () => {
     expect(preview.json().rootDiagramId).toBe(document.id);
     expect(preview.json().affectedDiagrams.map((d:any)=>d.id)).toEqual(selected==='parent'?[ids.parent,ids.child]:[ids.child]);
   });
-  it('rejects invalid, missing, ambiguous, stale and unsupported permanent execution without mutation', async () => {
+  it('rejects invalid, missing, ambiguous, stale and mismatched-mode execution without mutation', async () => {
     const { app, repository, adrs, ids }=await setup(); const service=new DiagramService(repository,adrs);
     const preview=await service.previewDeletion({ selector:{ id:ids.context },mode:'trash' });
     const cases = [
@@ -109,6 +109,62 @@ describe('confirmed Trash HTTP contract', () => {
       const service=new DiagramService(scopedRepository(repository,()=>override),adrs);
       await expect(service.previewDeletion({selector:{id:ids.context},mode:'trash'})).rejects.toThrow();
       expect((await repository.get(ids.context))!.status).toBe('active');
+    }
+  });
+});
+
+describe('confirmed permanent HTTP contract',()=>{
+  it.each(['active','trashed'] as const)('previews both selectors and commits all-status descendants from a %s root',async status=>{
+    const {app,repository,adrs,ids}=await setup();const service=new DiagramService(repository,adrs);
+    if(status==='trashed'){const impact=await service.trashImpact(ids.context);await service.trash(ids.context,impact.affectedDiagramIds);}
+    const root=(await repository.get(ids.context))!;
+    const preview=await app.inject({method:'POST',url:'/diagrams/deletion-preview',payload:{selector:{name:root.name},mode:'permanent'}});
+    expect(preview.statusCode).toBe(200);validate('DeletionImpact',preview.json());
+    const impact=deletionImpactSchema.parse(preview.json());expect(impact.affectedDiagrams).toHaveLength(4);expect(impact.affectedDiagrams.some(d=>d.id===ids.datastoreChild&&d.status==='trashed')).toBe(true);
+    const byId=await app.inject({method:'POST',url:'/diagrams/deletion-preview',payload:{selector:{id:ids.context},mode:'permanent'}});expect(byId.json()).toEqual(impact);
+    const response=await app.inject({method:'POST',url:`/diagrams/${ids.context}/deletion`,payload:{mode:'permanent',confirmationToken:impact.confirmationToken}});
+    expect(response.statusCode).toBe(200);validate('DeletionResult',response.json());expect(response.json().affectedDiagrams).toEqual(impact.affectedDiagrams);
+    expect((await repository.listAll()).map(d=>d.id)).toEqual([ids.unrelated]);
+  });
+  it.each(['parent','child','datastoreChild'] as const)('selects only the %s subtree',async selected=>{
+    const {app,repository,ids,before}=await setup();
+    const preview=await app.inject({method:'POST',url:'/diagrams/deletion-preview',payload:{selector:{id:ids[selected]},mode:'permanent'}});expect(preview.statusCode).toBe(200);validate('DeletionImpact',preview.json());
+    const affected=preview.json().affectedDiagrams.map((d:any)=>d.id);
+    const result=await app.inject({method:'POST',url:`/diagrams/${ids[selected]}/deletion`,payload:{mode:'permanent',confirmationToken:preview.json().confirmationToken}});expect(result.statusCode).toBe(200);validate('DeletionResult',result.json());
+    for(const d of before.documents.filter(d=>!affected.includes(d.id)))expect(await repository.get(d.id)).toEqual(d);
+  });
+  it.each(['source','endpoint','group','trash-root','component-link','relationship-link','replacement'])('reports outside %s dependencies from preview and execution without detachment',async kind=>{
+    const {app,repository,adrs,ids,before}=await setup();const service=new DiagramService(repository,adrs);
+    const impact=await service.previewDeletion({selector:{id:ids.context},mode:'permanent'});
+    const outside=(await repository.get(ids.unrelated))!;const inside=(await repository.get(ids.child))!;let artifactId=ids.unrelated as string;
+    if(kind==='trash-root')await repository.trash(ids.unrelated,{trashBatchId:crypto.randomUUID(),trashRootDiagramId:ids.context});
+    else if(kind.endsWith('link')||kind==='replacement'){
+      const adr=await adrs.create(ids.unrelated,{title:'Outside',context:'Context',decision:'Decision',consequences:'Consequences',status:'draft',replacementAdrId:kind==='replacement'?before.adrs[0].id:null});artifactId=adr.id;
+      if(kind==='component-link')await adrs.replaceLinks(adr.id,[ids.internal]);if(kind==='relationship-link')await adrs.replaceRelationshipLinks(adr.id,[ids.relationship]);
+    }else{
+      artifactId=crypto.randomUUID();
+      if(kind==='source')outside.components=[{...inside.components[0],id:artifactId,diagramId:outside.id,sourceComponentId:ids.internal}];
+      if(kind==='endpoint')outside.relationships=[{...inside.relationships[0],id:artifactId,diagramId:outside.id}];
+      if(kind==='group')outside.groups=[{...before.documents.find(d=>d.id===ids.context)!.groups[0],id:artifactId,diagramId:outside.id,memberComponentIds:[ids.internal]}];
+      (repository as any).documents.set(outside.id,outside);
+    }
+    const state=await repository.listAll();
+    for(const request of [
+      {url:'/diagrams/deletion-preview',payload:{selector:{id:ids.context},mode:'permanent'}},
+      {url:`/diagrams/${ids.context}/deletion`,payload:{mode:'permanent',confirmationToken:impact.confirmationToken}},
+    ]){
+      const response=await app.inject({method:'POST',...request});expect(response.statusCode).toBe(409);validate('Error',response.json());expect(response.json().code).toBe('DIAGRAM_DEPENDENCY');
+      expect(response.json().blockers).toEqual(expect.arrayContaining([expect.objectContaining({diagramId:ids.unrelated,artifactId,reason:expect.any(String),nextAction:expect.any(String)})]));
+    }
+    const sorted=(documents:typeof state)=>[...documents].sort((a,b)=>a.id.localeCompare(b.id));
+    expect(sorted(await repository.listAll())).toEqual(sorted(state));expect(await adrs.listFull(ids.child)).toEqual(before.adrs);
+  });
+  it('rejects wrong-level and missing-owner hierarchies in permanent mode',async()=>{
+    const {app,repository,ids,before}=await setup();const child=before.documents.find(d=>d.id===ids.child)!;
+    for(const scope of [{...child.scope,parentDiagramId:ids.context},{...child.scope,containerId:crypto.randomUUID()}]){
+      (repository as any).documents.set(child.id,{...child,scope});
+      const response=await app.inject({method:'POST',url:'/diagrams/deletion-preview',payload:{selector:{id:ids.context},mode:'permanent'}});
+      expect(response.statusCode).toBe(409);validate('Error',response.json());expect(response.json().code).toBe('DIAGRAM_REFERENCE_BROKEN');
     }
   });
 });

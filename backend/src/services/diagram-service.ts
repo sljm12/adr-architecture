@@ -174,6 +174,12 @@ export class DiagramService {
       if (mode === 'permanent' || document.status === 'active') documents.push(document);
     }
     const affectedDiagrams = documents.map(summary);
+    if (mode === 'permanent') {
+      const scope = { diagramIds: documents.map(d => d.id), componentIds: documents.flatMap(d => d.components.map(c => c.id)), relationshipIds: documents.flatMap(d => d.relationships.map(r => r.id)) };
+      const blockers = [...await diagrams.deletionBlockers(scope), ...(await adrs?.deletionBlockers(scope) ?? [])]
+        .sort((a,b) => a.diagramId.localeCompare(b.diagramId) || a.artifactId.localeCompare(b.artifactId) || a.reason.localeCompare(b.reason));
+      if (blockers.length) throw new DeletionRequestError(409, { code: 'DIAGRAM_DEPENDENCY', message: 'Permanent deletion would break references outside the selected subtree.', remedy: 'Resolve the listed dependencies, then request a new preview and confirmation.', blockers });
+    }
     const savedState = async (document: DiagramDocument) => ({
       document: { ...document, components: byIdentity(document.components), relationships: byIdentity(document.relationships), groups: byIdentity(document.groups).map(g => ({ ...g, memberComponentIds: [...g.memberComponentIds].sort() })) },
       revision: await diagrams.getDeletionRevision(document.id), provenance: await diagrams.getTrashProvenance(document.id),
@@ -191,16 +197,23 @@ export class DiagramService {
 
   async executeDeletion(id: string, input: DeletionConfirmation): Promise<DeletionResult> {
     uuidSchema.parse(id); const confirmation = deletionConfirmationSchema.parse(input);
-    // US2 supplies physical purge; do not allow permanent consent to invoke Trash.
-    if (confirmation.mode === 'permanent') throw new DeletionRequestError(409, { code: 'DELETE_FAILED', message: 'Permanent deletion is not available in this release.', remedy: 'Use recoverable --trash or wait for permanent deletion support.' });
     if (!await this.repository.get(id)) throw deletionMissing();
-    return this.graph.run(id, [], async context => {
+    try { return await this.graph.run(id, [], async context => {
       const impact = await this.deletionSnapshot(id, confirmation.mode, context);
       if (impact.confirmationToken !== confirmation.confirmationToken) throw deletionChanged();
-      const provenance = { trashBatchId: crypto.randomUUID(), trashRootDiagramId: id };
-      for (const document of impact.affectedDiagrams) if (!await context.diagrams.trash(document.id, provenance)) throw deletionChanged();
+      if (confirmation.mode === 'permanent') {
+        const diagramIds = impact.affectedDiagrams.map(d => d.id).reverse();
+        await context.adrs?.purgeOwned(diagramIds);
+        await context.diagrams.purge(diagramIds);
+      } else {
+        const provenance = { trashBatchId: crypto.randomUUID(), trashRootDiagramId: id };
+        for (const document of impact.affectedDiagrams) if (!await context.diagrams.trash(document.id, provenance)) throw deletionChanged();
+      }
       return deletionResultSchema.parse({ rootDiagramId: id, mode: confirmation.mode, affectedDiagrams: impact.affectedDiagrams });
-    });
+    }); } catch (error) {
+      if (findPostgresError(error).code === '23503') throw new DeletionRequestError(409, { code: 'DIAGRAM_DEPENDENCY', message: 'A saved database reference prevents deletion; all changes were rolled back.', remedy: 'Repair the outside artifact references, then request a new preview and confirmation.' });
+      throw error;
+    }
   }
 
   create(name: string): MaybePromise<DiagramDocument> {

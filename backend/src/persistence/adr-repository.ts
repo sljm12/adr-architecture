@@ -3,11 +3,13 @@ import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { AdrDependencyBlocker, AdrSummary, ArchitectureDecisionRecord, AdrWritePayload, ComponentAdrCount, ComponentAdrSummary, ComponentReference, RelationshipAdrSummary, RelationshipReference } from '../../../shared/src/index';
 import { architectureDecisionRecordSchema, adrComponentsWriteSchema, adrRelationshipsWriteSchema, adrWriteSchema, assertAdrInvariants } from '../../../shared/src/index';
 import * as schema from './schema';
-import type { MaybePromise } from './diagram-repository';
+import { deletionBlocker, type MaybePromise, type DeletionScope, type DeletionBlocker } from './diagram-repository';
 
 export type AdrDeleteResult = { deleted: true } | { deleted: false; blockers: AdrDependencyBlocker[] };
 
 export interface AdrRepositoryLike {
+  deletionBlockers(scope: DeletionScope): MaybePromise<DeletionBlocker[]>;
+  purgeOwned(diagramIds: string[]): MaybePromise<void>;
   list(diagramId: string): MaybePromise<AdrSummary[]>;
   listFull(diagramId: string): MaybePromise<ArchitectureDecisionRecord[]>;
   get(id: string): MaybePromise<ArchitectureDecisionRecord | undefined>;
@@ -27,6 +29,17 @@ export interface AdrRepositoryLike {
 }
 
 const clone = <T>(value: T): T => structuredClone(value);
+function adrDeletionBlockers(scope: DeletionScope, records: Pick<ArchitectureDecisionRecord, 'id' | 'diagramId' | 'componentIds' | 'relationshipIds' | 'replacementAdrId'>[]): DeletionBlocker[] {
+  const diagrams = new Set(scope.diagramIds), components = new Set(scope.componentIds), relationships = new Set(scope.relationshipIds);
+  const owned = new Set(records.filter(a => diagrams.has(a.diagramId)).map(a => a.id));
+  const blockers: DeletionBlocker[] = [];
+  for (const a of records) if (!diagrams.has(a.diagramId)) {
+    if (a.componentIds.some(id => components.has(id))) blockers.push(deletionBlocker(a.diagramId, a.id, 'An ADR component link would be broken.'));
+    if (a.relationshipIds.some(id => relationships.has(id))) blockers.push(deletionBlocker(a.diagramId, a.id, 'An ADR relationship link would be broken.'));
+    if (a.replacementAdrId && owned.has(a.replacementAdrId)) blockers.push(deletionBlocker(a.diagramId, a.id, `Replacement ADR ${a.replacementAdrId} would be removed.`));
+  }
+  return blockers;
+}
 const cleanPayload = (payload: AdrWritePayload): AdrWritePayload => adrWriteSchema.parse(payload);
 const summaryOf = (adr: ArchitectureDecisionRecord): AdrSummary => ({ id: adr.id, title: adr.title, status: adr.status, updatedAt: adr.updatedAt, componentCount: adr.componentIds.length, relationshipCount: adr.relationshipIds.length });
 const componentSummaryOf = (adr: ArchitectureDecisionRecord): ComponentAdrSummary => ({ id: adr.id, title: adr.title, status: adr.status, updatedAt: adr.updatedAt });
@@ -39,6 +52,15 @@ export class AdrRepository implements AdrRepositoryLike {
   private readonly diagrams = new Set<string>();
   private readonly components = new Map<string, { id: string; diagramId: string; name: string }>();
   private readonly relationships = new Map<string, { id: string; diagramId: string }>();
+
+  deletionBlockers(scope: DeletionScope) { return adrDeletionBlockers(scope, [...this.records.values()]); }
+  purgeOwned(diagramIds: string[]) {
+    const ids = new Set(diagramIds);
+    for (const [id, adr] of this.records) if (ids.has(adr.diagramId)) this.records.delete(id);
+    for (const [id, component] of this.components) if (ids.has(component.diagramId)) this.components.delete(id);
+    for (const [id, relationship] of this.relationships) if (ids.has(relationship.diagramId)) this.relationships.delete(id);
+    for (const id of ids) this.diagrams.delete(id);
+  }
 
   registerDiagram(id: string): void { this.diagrams.add(id); }
   registerComponent(component: { id: string; diagramId: string; name: string }): void { this.diagrams.add(component.diagramId); this.components.set(component.id, { id: component.id, diagramId: component.diagramId, name: component.name }); }
@@ -96,6 +118,26 @@ const mapAdr = (row: typeof schema.adrs.$inferSelect, componentIds: string[], re
 
 export class PostgresAdrRepository implements AdrRepositoryLike {
   constructor(private readonly db: PostgresExecutor, private readonly inTransaction = false) {}
+  async deletionBlockers(scope: DeletionScope): Promise<DeletionBlocker[]> {
+    const rows = await this.db.select().from(schema.adrs);
+    const componentLinks = await this.db.select().from(schema.adrComponentLinks);
+    const relationshipLinks = await this.db.select().from(schema.adrRelationshipLinks);
+    const componentIds = new Map<string, string[]>(), relationshipIds = new Map<string, string[]>();
+    for (const link of componentLinks) { const ids = componentIds.get(link.adrId) ?? []; ids.push(link.componentId); componentIds.set(link.adrId, ids); }
+    for (const link of relationshipLinks) { const ids = relationshipIds.get(link.adrId) ?? []; ids.push(link.relationshipId); relationshipIds.set(link.adrId, ids); }
+    return adrDeletionBlockers(scope, rows.map(a => ({ ...a, componentIds: componentIds.get(a.id) ?? [], relationshipIds: relationshipIds.get(a.id) ?? [] })));
+  }
+  async purgeOwned(diagramIds: string[]): Promise<void> {
+    if (!this.inTransaction) throw new Error('Purge requires a graph transaction');
+    if (!diagramIds.length) return;
+    const rows = await this.db.select({ id: schema.adrs.id }).from(schema.adrs).where(inArray(schema.adrs.diagramId, diagramIds));
+    if (rows.length) {
+      const ids = rows.map(a => a.id);
+      await this.db.delete(schema.adrComponentLinks).where(inArray(schema.adrComponentLinks.adrId, ids));
+      await this.db.delete(schema.adrRelationshipLinks).where(inArray(schema.adrRelationshipLinks.adrId, ids));
+      await this.db.delete(schema.adrs).where(inArray(schema.adrs.id, ids));
+    }
+  }
   withTransaction(transaction: unknown) { return new PostgresAdrRepository(transaction as PostgresTransaction, true); }
   async list(diagramId: string): Promise<AdrSummary[]> { const rows = await this.db.select().from(schema.adrs).where(eq(schema.adrs.diagramId, diagramId)).orderBy(asc(schema.adrs.updatedAt), asc(schema.adrs.id)); return Promise.all(rows.map(async row => summaryOf(await this.loadRow(row)))); }
   async listFull(diagramId: string): Promise<ArchitectureDecisionRecord[]> {

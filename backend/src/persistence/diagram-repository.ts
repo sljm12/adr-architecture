@@ -1,7 +1,7 @@
 import { asc, eq, inArray, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { z } from 'zod';
-import type { DiagramDocument, ComponentScope, DiagramKind } from '../../../shared/src/index';
+import type { DiagramDocument, ComponentScope, DiagramKind, DeletionError } from '../../../shared/src/index';
 import { assertDiagramInvariants, diagramDocumentSchema, getDiagramName, getDiagramOwnerId, getComponentScope } from '../../../shared/src/index';
 import { ApiConflictError } from '../api/errors';
 import * as schema from './schema';
@@ -10,8 +10,14 @@ export type MaybePromise<T> = T | Promise<T>;
 export interface TrashProvenance { trashBatchId: string | null; trashRootDiagramId: string | null }
 export interface ChildMembership { id: string; status: 'active' | 'trashed'; parentDiagramId: string | null; ownerComponentId: string | null; createdAt: string; updatedAt: string }
 export interface GraphMembership extends ChildMembership { kind: DiagramKind }
+export interface DeletionScope { diagramIds: string[]; componentIds: string[]; relationshipIds: string[] }
+export type DeletionBlocker = NonNullable<DeletionError['blockers']>[number];
+export const deletionBlocker = (diagramId: string, artifactId: string, reason: string): DeletionBlocker => ({ diagramId, artifactId, reason, nextAction: `Resolve this reference in diagram ${diagramId}, artifact ${artifactId}, then request a new deletion preview.` });
 
 export interface DiagramRepositoryLike {
+  deletionBlockers(scope: DeletionScope): MaybePromise<DeletionBlocker[]>;
+  /** Transaction-scoped removal; IDs must be validated and ordered deepest-first. */
+  purge(diagramIds: string[]): MaybePromise<void>;
   getDeletionRevision(id: string): MaybePromise<string | undefined>;
   incrementDeletionRevision(id: string): MaybePromise<void>;
   transactionDiagramIds?(rootId: string): string[];
@@ -46,6 +52,25 @@ export type RemoveRelationshipResult =
   | { conflict: true };
 
 const clone = (document: DiagramDocument) => structuredClone(document);
+function diagramDeletionBlockers(scope: DeletionScope,
+  diagrams: { id: string; parentDiagramId: string | null; ownerComponentId: string | null; trashRootDiagramId: string | null }[],
+  components: { id: string; diagramId: string; sourceComponentId?: string | null }[],
+  relationships: { id: string; diagramId: string; sourceComponentId: string; targetComponentId: string }[],
+  groups: { id: string; diagramId: string }[], members: { groupId: string; componentId: string }[],
+): DeletionBlocker[] {
+  const ids = new Set(scope.diagramIds), componentIds = new Set(scope.componentIds);
+  const blockers: DeletionBlocker[] = [];
+  for (const d of diagrams) if (!ids.has(d.id)) {
+    if (d.parentDiagramId && ids.has(d.parentDiagramId)) blockers.push(deletionBlocker(d.id, d.id, `Parent diagram ${d.parentDiagramId} would be removed.`));
+    if (d.ownerComponentId && componentIds.has(d.ownerComponentId)) blockers.push(deletionBlocker(d.id, d.id, `Owner component ${d.ownerComponentId} would be removed.`));
+    if (d.trashRootDiagramId && ids.has(d.trashRootDiagramId)) blockers.push(deletionBlocker(d.id, d.id, `Trash root ${d.trashRootDiagramId} would be removed.`));
+  }
+  for (const c of components) if (!ids.has(c.diagramId) && c.sourceComponentId && componentIds.has(c.sourceComponentId)) blockers.push(deletionBlocker(c.diagramId, c.id, `Source component ${c.sourceComponentId} would be removed.`));
+  for (const r of relationships) if (!ids.has(r.diagramId) && (componentIds.has(r.sourceComponentId) || componentIds.has(r.targetComponentId))) blockers.push(deletionBlocker(r.diagramId, r.id, 'A relationship endpoint would be removed.'));
+  const groupsById = new Map(groups.map(g => [g.id, g]));
+  for (const m of members) { const g = groupsById.get(m.groupId); if (g && !ids.has(g.diagramId) && componentIds.has(m.componentId)) blockers.push(deletionBlocker(g.diagramId, g.id, `Group member ${m.componentId} would be removed.`)); }
+  return blockers;
+}
 /** Raw bounded discovery works even after the graph root has been removed. */
 function memoryGraphIds(documents: Iterable<DiagramDocument>, seeds: Set<string>): string[] {
   const ids = new Set(seeds); const all = [...documents];
@@ -108,6 +133,18 @@ export class DiagramRepository implements DiagramRepositoryLike {
   private transactionTails = new Map<string, Promise<void>>();
   private transactionMembers = new Map<string, Set<string>>();
   transactionDiagramIds(rootId: string) { return [...(this.transactionMembers.get(rootId) ?? [])]; }
+
+  deletionBlockers(scope: DeletionScope) {
+    const documents = [...this.documents.values()];
+    return diagramDeletionBlockers(scope,
+      documents.map(d => ({ id: d.id, parentDiagramId: d.scope?.parentDiagramId ?? null, ownerComponentId: getDiagramOwnerId(d), trashRootDiagramId: this.getTrashProvenance(d.id).trashRootDiagramId })),
+      documents.flatMap(d => d.components), documents.flatMap(d => d.relationships), documents.flatMap(d => d.groups),
+      documents.flatMap(d => d.groups.flatMap(g => g.memberComponentIds.map(componentId => ({ groupId: g.id, componentId })))),
+    );
+  }
+  purge(diagramIds: string[]) {
+    for (const id of diagramIds) { this.documents.delete(id); this.provenance.delete(id); this.revisions.delete(id); }
+  }
 
   getDeletionRevision(id: string) { return this.revisions.get(id)?.toString(); }
   incrementDeletionRevision(id: string) {
@@ -371,6 +408,28 @@ function mapDocument(
 /** PostgreSQL/Drizzle repository used by the API server. */
 export class PostgresDiagramRepository implements DiagramRepositoryLike {
   constructor(private readonly db: PostgresExecutor, private readonly inTransaction = false) {}
+
+  async deletionBlockers(scope: DeletionScope): Promise<DeletionBlocker[]> {
+    const diagrams = await this.db.select({ id: schema.diagrams.id, parentDiagramId: schema.diagrams.parentDiagramId, ownerComponentId: schema.diagrams.ownerComponentId, trashRootDiagramId: schema.diagrams.trashRootDiagramId }).from(schema.diagrams);
+    const components = await this.db.select({ id: schema.components.id, diagramId: schema.components.diagramId, sourceComponentId: schema.components.sourceComponentId }).from(schema.components);
+    const relationships = await this.db.select({ id: schema.relationships.id, diagramId: schema.relationships.diagramId, sourceComponentId: schema.relationships.sourceComponentId, targetComponentId: schema.relationships.targetComponentId }).from(schema.relationships);
+    const groups = await this.db.select({ id: schema.systemGroups.id, diagramId: schema.systemGroups.diagramId }).from(schema.systemGroups);
+    const members = await this.db.select({ groupId: schema.systemGroupMembers.groupId, componentId: schema.systemGroupMembers.componentId }).from(schema.systemGroupMembers);
+    return diagramDeletionBlockers(scope, diagrams, components, relationships, groups, members);
+  }
+  async purge(diagramIds: string[]): Promise<void> {
+    if (!this.inTransaction) throw new Error('Purge requires a graph transaction');
+    if (!diagramIds.length) return;
+    await this.db.update(schema.diagrams).set({ trashRootDiagramId: null, trashBatchId: null }).where(inArray(schema.diagrams.id, diagramIds));
+    const groups = await this.db.select({ id: schema.systemGroups.id }).from(schema.systemGroups).where(inArray(schema.systemGroups.diagramId, diagramIds));
+    if (groups.length) await this.db.delete(schema.systemGroupMembers).where(inArray(schema.systemGroupMembers.groupId, groups.map(g => g.id)));
+    await this.db.delete(schema.systemGroups).where(inArray(schema.systemGroups.diagramId, diagramIds));
+    await this.db.delete(schema.relationships).where(inArray(schema.relationships.diagramId, diagramIds));
+    for (const id of diagramIds) {
+      await this.db.delete(schema.components).where(eq(schema.components.diagramId, id));
+      await this.db.delete(schema.diagrams).where(eq(schema.diagrams.id, id));
+    }
+  }
 
   async list(): Promise<DiagramDocument[]> {
     return (await this.listAll()).filter(document => document.status === 'active');

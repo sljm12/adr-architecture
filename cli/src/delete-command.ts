@@ -21,8 +21,9 @@ export async function deleteDiagramCommand(client: ApiClient, request: DeletionP
     const preview = await client.previewDeletion(request);
     const rows = preview.affectedDiagrams.map(d => `${terminalText(d.name)} (${d.id}) [${d.status}]`).join('\n');
     io.stdout(`Mode: ${preview.mode}\nRoot: ${terminalText(preview.affectedDiagrams[0].name)} (${preview.rootDiagramId})\nAffected saved diagrams:\n${rows}\nContained components, relationships, groups, ADRs and links are included.\n`);
-    if (preview.mode === 'permanent') throw new Error('Permanent deletion is unavailable in this release. Use recoverable --trash or wait for permanent deletion support. No deletion request was sent.');
-    io.stdout('Trash is recoverable through the application; earlier Trash batches are preserved.\n');
+    io.stdout(preview.mode === 'permanent'
+      ? 'Permanent deletion is irreversible. All contained artifacts, ADRs and links, including previously trashed descendants, will be removed and cannot be restored through Trash.\n'
+      : 'Trash is recoverable through the application; earlier Trash batches are preserved.\n');
     if (!yes) {
       if (!(io.isTTY ?? process.stdin.isTTY)) throw new Error('Interactive confirmation is unavailable. Rerun with --yes only after reviewing the intended saved deletion scope.');
       let answer: string | null;
@@ -30,7 +31,7 @@ export async function deleteDiagramCommand(client: ApiClient, request: DeletionP
       if (answer?.trim().toLowerCase() !== 'yes') throw new Error('Deletion cancelled. No deletion request was sent.');
     }
     const result = await client.executeDeletion(preview.rootDiagramId, { mode: preview.mode, confirmationToken: preview.confirmationToken });
-    io.stdout(`Moved to Trash: ${terminalText(result.affectedDiagrams[0].name)} (${result.rootDiagramId})\n${result.affectedDiagrams.map(d => `${terminalText(d.name)} (${d.id})`).join('\n')}\n`);
+    io.stdout(`${result.mode === 'permanent' ? 'Permanently deleted' : 'Moved to Trash'}: ${terminalText(result.affectedDiagrams[0].name)} (${result.rootDiagramId})\n${result.affectedDiagrams.map(d => `${terminalText(d.name)} (${d.id})`).join('\n')}\n`);
     return 0;
   } catch (error) {
     io.stderr(`${terminalText(error instanceof Error ? error.message : String(error))}\n`);
