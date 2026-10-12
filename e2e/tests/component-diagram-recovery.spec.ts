@@ -2,6 +2,35 @@ import { test, expect } from '@playwright/test';
 import { buildApp } from '../../backend/src/api/app';
 import { componentRecoveryFixture } from '../../backend/tests/component-recovery-fixture';
 import { componentFixtureIds as ids } from '../../shared/tests/component-fixtures';
+import { DiagramService } from '../../backend/src/services/diagram-service';
+
+for (const mode of ['trash', 'permanent'] as const) test(`keeps the local draft when ${mode} deletion rejects an open diagram's stale save`, async ({ page }) => {
+  const repository = componentRecoveryFixture(), app = buildApp(repository), service = new DiagramService(repository);
+  await page.route(/\/api\/(?:diagrams|adrs)(?:\/|$|\?)/, async route => {
+    const request = route.request(), path = new URL(request.url()).pathname.replace(/^\/api/, '');
+    const response = await app.inject({ method: request.method() as any, url: path, ...(request.postData() ? { payload: JSON.parse(request.postData()!) } : {}) });
+    await route.fulfill({ status: response.statusCode, contentType: 'application/json', body: response.body });
+  });
+  try {
+    await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${ids.child}"]`).click();
+    await page.getByRole('button', { name: 'Add component', exact: true }).first().click();
+    await page.getByLabel('Component name', { exact: true }).fill('Retained unsaved handler');
+    await page.getByLabel('Responsibilities', { exact: true }).fill('Retained local responsibilities');
+    await page.getByLabel('Technology', { exact: true }).fill('TypeScript');
+    await page.getByRole('button', { name: 'Add component', exact: true }).last().click();
+    const preview = await service.previewDeletion({ selector: { id: ids.child }, mode });
+    await service.executeDeletion(ids.child, { mode, confirmationToken: preview.confirmationToken });
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.locator('.save-status')).toContainText('Save failed');
+    await expect(page.locator('.react-flow__node').filter({ hasText: 'Retained unsaved handler' })).toBeVisible();
+    expect(repository.get(ids.child)?.status).toBe(mode === 'trash' ? 'trashed' : undefined);
+    if (mode === 'trash') {
+      await service.restore(ids.child);
+      await page.getByRole('button', { name: 'Save', exact: true }).click(); await expect(page.locator('.save-status')).toContainText('Saved');
+      expect(repository.get(ids.child)!.components.some(c => c.name === 'Retained unsaved handler')).toBe(true);
+    }
+  } finally { await app.close(); }
+});
 
 test('confirms exact three-level batches, cancels with focus, guards drafts and retries a committed restore load', async ({ page }) => {
   const repository = componentRecoveryFixture(), app = buildApp(repository);

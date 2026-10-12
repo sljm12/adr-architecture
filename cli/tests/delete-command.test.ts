@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { runCli } from '../src/main';
 import { createApiClient } from '../src/api-client';
 import { spawn } from 'node:child_process';
+import { buildApp } from '../../backend/src/api/app';
+import { diagramDeletionFixture } from '../../backend/tests/component-recovery-fixture';
+import { DiagramService } from '../../backend/src/services/diagram-service';
 
 const id='00000000-0000-4000-8000-000000000001';
 const summary={id,name:'Payments\u001b[31m',kind:'general',scope:null,status:'active',createdAt:'2026-01-01T00:00:00Z',updatedAt:'2026-01-01T00:00:00Z'};
@@ -12,6 +15,54 @@ function setup(answer:string|null='yes',interactive=true) {
   return {stdout,stderr,confirm,fetcher,io:{stdout,stderr,confirm,isTTY:interactive},client:createApiClient({fetch:fetcher})};
 }
 describe('CLI confirmed Trash',()=>{
+  it.each([' Payments ', 'payments', 'Payments.*?', '支払い é', id])('forwards literal name %j', async name => {
+    const s = setup(); s.fetcher.mockReset().mockResolvedValueOnce(new Response(JSON.stringify({ ...preview, affectedDiagrams: [{ ...summary, name }] }))).mockResolvedValueOnce(new Response(JSON.stringify({ rootDiagramId: id, mode: 'trash', affectedDiagrams: [{ ...summary, name }] })));
+    expect(await runCli(['diagrams', 'delete', '--name', name, '--trash', '--yes'], s.io, s.client)).toBe(0);
+    expect(JSON.parse(s.fetcher.mock.calls[0][1].body).selector).toEqual({ name }); expect(s.stderr).not.toHaveBeenCalled();
+  });
+  it('prints duplicate UUIDs/statuses and a terminal-safe remedy only on stderr', async () => {
+    const s = setup(); const candidates = [summary, { ...summary, id: '00000000-0000-4000-8000-000000000002', status: 'trashed' }];
+    s.fetcher.mockReset().mockResolvedValue(new Response(JSON.stringify({ code: 'DELETE_NAME_AMBIGUOUS', message: 'Duplicate name', remedy: 'Select --id.', candidates }), { status: 409 }));
+    expect(await runCli(['diagrams', 'delete', '--name', summary.name, '--permanent', '--yes'], s.io, s.client)).toBe(1);
+    const errors = s.stderr.mock.calls.flat().join(''); for (const candidate of candidates) { expect(errors).toContain(candidate.id); expect(errors).toContain(`[${candidate.status}]`); }
+    expect(errors).toContain('--id'); expect(errors).not.toContain('\u001b'); expect(s.stdout).not.toHaveBeenCalled(); expect(s.fetcher).toHaveBeenCalledTimes(1);
+  });
+  it('escapes terminal controls in invalid option diagnostics', async () => {
+    const s = setup(); expect(await runCli(['diagrams', 'delete', '--id', id, '--trash', '--bad\u001b[31m'], s.io, s.client)).toBe(2);
+    expect(s.stderr.mock.calls.flat().join('')).not.toContain('\u001b'); expect(s.fetcher).not.toHaveBeenCalled();
+  });
+  it.each([['--name', 'Payments', '--name', 'Payments', '--trash'], ['--id', id, '--permanent', '--permanent'], ['--id', id, '--trash', '--yes', '--yes'], ['--id', id, '--trash', '--unknown'], ['--id', id, '--trash', 'extra']])('refuses additional invalid usage %j before requests', async (...args) => {
+    const s = setup(); expect(await runCli(['diagrams', 'delete', ...args], s.io, s.client)).toBe(2); expect(s.stdout).not.toHaveBeenCalled(); expect(s.stderr).toHaveBeenCalled(); expect(s.fetcher).not.toHaveBeenCalled();
+  });
+  it.each(['trash', 'permanent'] as const)('rejects stale %s consent across real HTTP in prompts and scripts without retry', async mode => {
+    for (const scripted of [false, true]) {
+      const { repository, adrs, ids } = await diagramDeletionFixture(); const service = new DiagramService(repository, adrs), app = buildApp(repository, adrs);
+      const stdout = vi.fn(), stderr = vi.fn(); let requests = 0;
+      const edit = async () => { const d = (await repository.get(ids.child))!; d.components[0].description = 'Concurrent saved edit'; await service.save(d.id, d); };
+      try {
+        const baseUrl = await app.listen({ host: '127.0.0.1', port: 0 });
+        const client = createApiClient({ baseUrl, fetch: async (url, init) => {
+          requests++; const response = await fetch(url, init);
+          // HTTP barrier: the preview has committed, but execution has not started.
+          if (scripted && requests === 1) await edit();
+          return response;
+        } });
+        expect(await runCli(['diagrams', 'delete', '--id', ids.context, `--${mode}`, ...(scripted ? ['--yes'] : [])], { stdout, stderr, isTTY: true, confirm: async () => { await edit(); return 'yes'; } }, client)).toBe(1);
+        expect(requests).toBe(2); expect(stderr.mock.calls.flat().join('')).toContain('fresh preview'); expect(stdout.mock.calls.flat().join('')).not.toMatch(/Moved to Trash:|Permanently deleted:/);
+        expect((await repository.get(ids.child))!.components[0].description).toBe('Concurrent saved edit'); expect((await repository.get(ids.context))!.status).toBe('active');
+      } finally { await app.close(); }
+    }
+  });
+  it.each(['trash', 'permanent'] as const)('reports response loss after a committed %s without retrying', async mode => {
+    const { repository, adrs, ids } = await diagramDeletionFixture(); const app = buildApp(repository, adrs); const stdout = vi.fn(), stderr = vi.fn(); let requests = 0;
+    try {
+      const baseUrl = await app.listen({ host: '127.0.0.1', port: 0 });
+      const client = createApiClient({ baseUrl, fetch: async (url, init) => { requests++; const response = await fetch(url, init); if (requests === 2) { expect(response.status).toBe(200); await response.text(); throw new Error('Response lost after commit'); } return response; } });
+      expect(await runCli(['diagrams', 'delete', '--id', ids.context, `--${mode}`, '--yes'], { stdout, stderr }, client)).toBe(1);
+      expect(requests).toBe(2); expect(stderr.mock.calls.flat().join('')).toMatch(/uncertain.*Verify.*before retrying/); expect(stdout.mock.calls.flat().join('')).not.toMatch(/Moved to Trash:|Permanently deleted:/);
+      expect((await repository.get(ids.context))?.status).toBe(mode === 'trash' ? 'trashed' : undefined);
+    } finally { await app.close(); }
+  });
   it.each(['yes',' YES '])('prints impact, accepts %j, and executes exactly once by resolved UUID',async answer=>{
     const s=setup(answer);s.fetcher.mockReset().mockResolvedValueOnce(new Response(JSON.stringify({...preview,affectedDiagrams:[{...summary,name:' Literal name '}]}))).mockResolvedValueOnce(new Response(JSON.stringify({rootDiagramId:id,mode:'trash',affectedDiagrams:[summary]})));expect(await runCli(['diagrams','delete','--name',' Literal name ','--trash'],s.io,s.client)).toBe(0);
     expect(JSON.parse(s.fetcher.mock.calls[0][1].body)).toEqual({selector:{name:' Literal name '},mode:'trash'});

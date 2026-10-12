@@ -3,6 +3,32 @@ import { buildApp } from '../../backend/src/api/app';
 import { componentTestDatabase, postgresEnabled } from '../../backend/tests/persistence/component-test-database';
 import { componentContextFixture, componentParentFixture, emptyComponentFixture, componentFixtureIds as ids } from '../../shared/tests/component-fixtures';
 import type { ArchitectureDecisionRecord, DiagramDocument } from '../../shared/src/index';
+import { DiagramService } from '../../backend/src/services/diagram-service';
+
+test('real HTTP/PostgreSQL: permanent deletion blocks an open stale save and retains its draft', async ({ page }) => {
+  test.skip(!postgresEnabled, 'Requires RUN_POSTGRES_TESTS=1 and a dedicated DATABASE_URL');
+  const database = await componentTestDatabase(), app = buildApp(database.diagrams, database.adrs);
+  try {
+    for (const d of [componentContextFixture(), componentParentFixture(), emptyComponentFixture()]) await database.diagrams.create(d as DiagramDocument);
+    const address = await app.listen({ port: 0, host: '127.0.0.1' });
+    await page.route(/\/api\/(?:diagrams|adrs)(?:\/|$|\?)/, async route => {
+      const url = new URL(route.request().url()); const response = await route.fetch({ url: `${address}${url.pathname.replace(/^\/api/, '')}${url.search}` }); await route.fulfill({ response });
+    });
+    await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${ids.child}"]`).click();
+    await page.getByRole('button', { name: 'Add component', exact: true }).first().click();
+    await page.getByLabel('Component name', { exact: true }).fill('Retained PostgreSQL draft');
+    await page.getByLabel('Responsibilities', { exact: true }).fill('Unsaved responsibilities');
+    await page.getByLabel('Technology', { exact: true }).fill('TypeScript');
+    await page.getByRole('button', { name: 'Add component', exact: true }).last().click();
+    const service = new DiagramService(database.diagrams, database.adrs), preview = await service.previewDeletion({ selector: { id: ids.child }, mode: 'permanent' });
+    await service.executeDeletion(ids.child, { mode: 'permanent', confirmationToken: preview.confirmationToken });
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.locator('.save-status')).toContainText('Save failed');
+    await expect(page.locator('.react-flow__node').filter({ hasText: 'Retained PostgreSQL draft' })).toBeVisible();
+    expect(await database.diagrams.get(ids.child)).toBeUndefined();
+    expect((await database.pool.query('SELECT id FROM diagrams WHERE id=$1', [ids.child])).rows).toEqual([]);
+  } finally { await app.close(); await database.close(); }
+});
 
 test('real HTTP/PostgreSQL: authors and reopens local ADR content, blocks immediate source removal and stages exact recovery', async ({ page }) => {
   test.skip(!postgresEnabled, 'Requires RUN_POSTGRES_TESTS=1 and a dedicated DATABASE_URL');

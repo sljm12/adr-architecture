@@ -11,6 +11,22 @@ function response(body: unknown, status = 200): Response {
 }
 
 describe('API client', () => {
+  it.each(['preview', 'execute'] as const)('rejects malformed and mismatched %s responses without retry', async operation => {
+    const impact = { rootDiagramId: diagramId, mode: 'trash', affectedDiagrams: [summary], confirmationToken: 'a'.repeat(64) };
+    const result = { rootDiagramId: diagramId, mode: 'trash', affectedDiagrams: [summary] };
+    const body = operation === 'preview' ? impact : result;
+    for (const invalid of [{ ...body, affectedDiagrams: [] }, { ...body, affectedDiagrams: [summary, summary] }, { ...body, rootDiagramId: '00000000-0000-4000-8000-000000000099' }, { ...body, mode: 'permanent' }, { ...body, extra: 'private ADR content' }, { ...body, affectedDiagrams: [{ ...summary, id: 'bad' }] }]) {
+      const fetcher = vi.fn().mockResolvedValue(response(invalid)), client = createApiClient({ fetch: fetcher });
+      await expect(operation === 'preview' ? client.previewDeletion({ selector: { id: diagramId }, mode: 'trash' }) : client.executeDeletion(diagramId, { mode: 'trash', confirmationToken: impact.confirmationToken })).rejects.toThrow(operation === 'preview' ? /invalid|match/ : /uncertain.*Verify/);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    }
+  });
+  it('refuses a preview whose name differs literally and gives service availability advice', async () => {
+    const client = createApiClient({ fetch: vi.fn().mockResolvedValue(response({ rootDiagramId: diagramId, mode: 'trash', affectedDiagrams: [summary], confirmationToken: 'a'.repeat(64) })) });
+    await expect(client.previewDeletion({ selector: { name: ' Payments ' }, mode: 'trash' })).rejects.toThrow(/match/);
+    const offline = createApiClient({ fetch: vi.fn().mockRejectedValue(new Error('offline')) });
+    await expect(offline.previewDeletion({ selector: { id: diagramId }, mode: 'trash' })).rejects.toThrow(/Check service availability/);
+  });
   it('validates preview/execution POST boundaries, exact selectors, configured URL and correspondence', async () => {
     const confirmationToken = 'a'.repeat(64);
     const impact = { rootDiagramId: diagramId, mode: 'trash', affectedDiagrams: [summary], confirmationToken };

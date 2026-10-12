@@ -4,7 +4,7 @@ import { createApiClient } from './api-client.js';
 import { listDiagramsCommand } from './diagrams-command.js';
 import { formatError } from './output.js';
 import { exportDiagramCommand } from './export-command.js';
-import { deleteDiagramCommand } from './delete-command.js';
+import { deleteDiagramCommand, terminalText } from './delete-command.js';
 import { deletionPreviewSchema } from '../../shared/src/validation/schemas.js';
 
 const helpText = `ADR Diagram CLI
@@ -24,8 +24,11 @@ Commands:
                   are never overwritten.
   diagrams delete Select one UUID or exact, case/whitespace-sensitive saved name. Duplicate
                   names require --id. Preview includes the root and recursively owned children.
-                  --trash is recoverable; --permanent is reserved and currently unavailable.
+                  --trash moves active descendants to recoverable Trash. --permanent is
+                  irreversible and removes all descendants, including previously trashed ones,
+                  and their contained artifacts, ADRs and links. Neither mode is the default.
                   Type yes interactively or use --yes for scripts. Cancellation changes nothing.
+                  Only saved state is included; save browser edits you want retained first.
                   Changed saved contents require a fresh preview. Verify active/Trash state in
                   the application before retrying an uncertain execution outcome.
 
@@ -33,6 +36,9 @@ Configuration:
   ADR_DIAGRAM_API_URL  Service root URL (default: http://localhost:3000).
 
 Common errors:
+  No exact match: check the complete saved name, including case and whitespace, or use --id.
+  Duplicate names: choose a reported UUID. Trash requires an active root; permanent also
+  searches Trash. Resolve outside dependencies or broken hierarchy references before retrying.
   Check that the service is running and ADR_DIAGRAM_API_URL is correct. Confirm the diagram ID,
   package validity, and that the output directory exists and is writable. Diagnostics go to
   standard error; exit status 1 indicates an operation failure and 2 indicates invalid usage.
@@ -63,7 +69,7 @@ export async function runCli(argv: string[], io: CliIo = {
   try {
     return await runCliCommand(argv, io, client);
   } catch (error) {
-    io.stderr(`${formatError(error)}\n`);
+    io.stderr(`${formatError(error).split('\n').map(terminalText).join('\n')}\n`);
     return error instanceof UsageError ? 2 : 1;
   }
 }

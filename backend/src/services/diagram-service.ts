@@ -211,6 +211,7 @@ export class DiagramService {
       }
       return deletionResultSchema.parse({ rootDiagramId: id, mode: confirmation.mode, affectedDiagrams: impact.affectedDiagrams });
     }); } catch (error) {
+      if (error instanceof ApiConflictError && error.code === 'DIAGRAM_REFERENCE_BROKEN' && !await this.repository.getGraphMembership(id)) throw deletionMissing();
       if (findPostgresError(error).code === '23503') throw new DeletionRequestError(409, { code: 'DIAGRAM_DEPENDENCY', message: 'A saved database reference prevents deletion; all changes were rolled back.', remedy: 'Repair the outside artifact references, then request a new preview and confirmation.' });
       throw error;
     }
