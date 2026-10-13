@@ -2,8 +2,16 @@ import type { FastifyInstance } from 'fastify';
 import type { DiagramRepositoryLike } from '../persistence/diagram-repository';
 import { ComponentDependencyConflictError, DiagramConflictError, DiagramNotFoundError, DiagramService } from '../services/diagram-service';
 import { sendError, sendDeletionError } from './errors';
-import { restoreConfirmationSchema, trashConfirmationSchema, deletionPreviewSchema, deletionConfirmationSchema, uuidSchema } from '../../../shared/src/index';
+import { restoreConfirmationSchema, trashConfirmationSchema, deletionPreviewSchema, deletionConfirmationSchema, collectionPreviewSchema, collectionConfirmationSchema, uuidSchema } from '../../../shared/src/index';
 export function registerRecoveryRoutes(app: FastifyInstance, repository: DiagramRepositoryLike, service: DiagramService) {
+  app.post('/diagrams/deletion-set-preview', async (request, reply) => {
+    try { return await service.previewCollectionDeletion(collectionPreviewSchema.parse(request.body)); }
+    catch (error) { return sendDeletionError(reply, error); }
+  });
+  app.post('/diagrams/deletion-set', async (request, reply) => {
+    try { return await service.executeCollectionDeletion(collectionConfirmationSchema.parse(request.body)); }
+    catch (error) { return sendDeletionError(reply, error); }
+  });
   app.post('/diagrams/deletion-preview', async (request, reply) => {
     try { return await service.previewDeletion(deletionPreviewSchema.parse(request.body)); }
     catch (error) { return sendDeletionError(reply, error); }

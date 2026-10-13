@@ -91,6 +91,7 @@ async function runCliCommand(argv: string[], io: CliIo, client?: ReturnType<type
         trash: { type: 'boolean' },
         permanent: { type: 'boolean' },
         yes: { type: 'boolean' },
+        'all-matches': { type: 'boolean' },
       },
     });
   } catch (error) {
@@ -104,6 +105,15 @@ async function runCliCommand(argv: string[], io: CliIo, client?: ReturnType<type
   if (positionals[0] !== 'diagrams' || positionals.length < 2) throw usage('Expected a diagrams list, export or delete command.');
 
   const command = positionals[1];
+  if (command === 'clear-trash') {
+    if (positionals.length !== 2) throw usage('Clear-trash does not accept positional arguments.');
+    const seen = new Set<string>();
+    for (const token of parsed.tokens ?? []) if (token.kind === 'option') {
+      if (token.name !== 'yes' || seen.has(token.name)) throw usage('Clear-trash accepts only one optional --yes flag.');
+      seen.add(token.name);
+    }
+    return deleteDiagramCommand(client ?? createApiClient(), { target: { kind: 'clear-trash' } }, Boolean(values.yes), io);
+  }
   if (command === 'delete') {
     if (positionals.length !== 2) throw usage('Delete requires one explicit --id or --name selector; positional roots are not accepted.');
     const seen = new Set<string>();
@@ -111,10 +121,12 @@ async function runCliCommand(argv: string[], io: CliIo, client?: ReturnType<type
     if (values.format !== undefined || values.output !== undefined) throw usage('--format and --output are not valid for delete.');
     if ((values.id !== undefined) === (values.name !== undefined)) throw usage('Delete requires exactly one --id or --name.');
     if (Boolean(values.trash) === Boolean(values.permanent)) throw usage('Delete requires exactly one --trash or --permanent mode.');
+    if (values['all-matches'] && values.name === undefined) throw usage('--all-matches requires --name and cannot be used with --id.');
     const request = deletionPreviewSchema.safeParse({ selector: values.id !== undefined ? { id: values.id } : { name: values.name }, mode: values.trash ? 'trash' : 'permanent' });
     if (!request.success) throw usage('Delete requires a valid UUID or non-blank literal name.');
-    return deleteDiagramCommand(client ?? createApiClient(), request.data, Boolean(values.yes), io);
+    return deleteDiagramCommand(client ?? createApiClient(), values['all-matches'] && 'name' in request.data.selector ? { target: { kind: 'all-matches', name: request.data.selector.name, mode: request.data.mode } } : request.data, Boolean(values.yes), io);
   }
+  if (values['all-matches'] !== undefined) throw usage('--all-matches is only valid for delete with --name.');
   if (values.id !== undefined || values.trash !== undefined || values.permanent !== undefined || values.yes !== undefined) throw usage('--id, --trash, --permanent and --yes are only valid for delete.');
   if (command === 'list') {
     if (positionals.length !== 2) throw usage('The list command does not accept positional arguments.');

@@ -353,3 +353,58 @@ database foundation evidence. Browser E2E and first-time-author trials were not 
 backend/shared foundation update. SC-005 remains unverified, and collection command/race/scale
 acceptance evidence belongs to the remaining phases. Short collection transactions deliberately
 delay supported writers; preview/execution must remain separate from user confirmation.
+
+## Phase 9–10 implementation evidence (T046–T060, 2026-10-13)
+
+Implemented name-only `diagrams delete --all-matches` for both modes and
+`diagrams clear-trash [--yes]` through the additive collection preview/execute routes.
+The existing collection snapshot and transaction supply exact resolved-name membership,
+unique depth-ordered impact, full saved-state confirmation, complete-union dependencies,
+and one rollback boundary. Nested selected roots share their outermost selected Trash batch;
+disjoint subtrees remain independently recoverable and earlier batches retain provenance.
+Clear Trash purges only reviewed trashed IDs, protects active ancestors/owners, refuses active
+descendants or outside references, and returns count-zero success without CLI input/execution.
+The client sends the reviewed target/root IDs/token once and validates committed summaries
+against the preview before claiming success. Transport loss or mismatched execution results
+remain uncertain and require saved-state verification. No migration or dependency was added.
+
+| Check | Result |
+|---|---|
+| All CLI tests, new HTTP suites, collection schemas, both new persistence suites with PostgreSQL enabled | 14 files / 193 tests passed, zero skips, exit 0, 13.13 s |
+| Final new persistence suites including additional mid-collection Trash rollback | 2 files / 24 tests passed, zero skips, exit 0, 8.31 s |
+| Existing single-root HTTP/stale tests plus collection transactions, revisions, Trash/purge persistence with PostgreSQL enabled | 6 files / 124 tests passed, zero skips, exit 0, 12.22 s |
+| Full `npm test -- --maxWorkers=2` | 135 files passed / 14 database-gated files skipped; 877 tests passed / 132 database-gated tests skipped, exit 0, 76.95 s |
+| Full `npm run build` | Shared, backend, frontend and CLI production builds passed, exit 0 |
+| `git diff --check` | Passed |
+
+Focused enabled-database commands (set a dedicated disposable `DATABASE_URL` and
+`RUN_POSTGRES_TESTS=1` in the test process):
+
+```powershell
+npm test -- --maxWorkers=2 cli/tests backend/tests/contract/diagram-deletion-all-matches.test.ts backend/tests/contract/diagram-deletion-clear-trash.test.ts backend/tests/persistence/diagram-deletion-all-matches.test.ts backend/tests/persistence/diagram-deletion-clear-trash.test.ts shared/tests/diagram-deletion-collection-validation.test.ts
+npm test -- --maxWorkers=2 backend/tests/persistence/diagram-deletion-all-matches.test.ts backend/tests/persistence/diagram-deletion-clear-trash.test.ts
+npm test -- --maxWorkers=2 backend/tests/persistence/diagram-deletion-collection-transactions.test.ts backend/tests/persistence/diagram-deletion-revisions.test.ts backend/tests/persistence/diagram-deletion-trash.test.ts backend/tests/persistence/diagram-deletion-purge.test.ts backend/tests/contract/diagram-deletion.test.ts backend/tests/contract/diagram-deletion-stale.test.ts
+```
+
+Reused the dedicated local PostgreSQL 17.10 cluster on port 55412 and `spec012_phase78`
+database with UUID-isolated test schemas and existing migrations 0001–0008. No application
+connection configuration changed. The previously stopped cluster was started as a hidden
+process for validation and returned to its stopped state afterward. Commands used the
+approved shell outside the sandbox because its default helper could not start; prerequisites
+used a process-only PowerShell execution-policy override. Existing pg concurrent-query
+deprecation and frontend bundle-size warnings remain. No pre/post extension hooks exist.
+
+New all-matches CLI tests first failed on the absent option; clear-Trash CLI/HTTP/persistence
+tests first failed on the absent command/dispatch. All-matches HTTP/persistence implementation
+landed during parallel test drafting, so a missing-implementation red run is not claimed for
+those suites. Tests cover real listening HTTP, strict schemas/OpenAPI, literal selectors,
+consent/cancellation/EOF/interruption/non-TTY, stale membership/content, tampering, response
+loss/mismatch, raw owned-row removal and complete rollback after partial/final removal.
+The final Trash failure test additionally proves rollback after both disjoint roots change.
+
+This run completes only requested Phases 9–10. Phase 11 help/ambiguity refinements and Phase 12
+action-specific PostgreSQL races, collection performance/writer-delay measurements, README
+updates and browser regressions remain unchecked. Foundation lock tests and HTTP stale barriers
+are not substitutes for those remaining action-specific race checks. Browser E2E was not rerun;
+SC-005 first-time-author trials remain unverified. Database-gated skips above are not passes;
+the separate enabled PostgreSQL runs supply the recorded database evidence.

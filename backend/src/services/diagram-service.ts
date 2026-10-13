@@ -13,7 +13,7 @@ import { deletionPreviewSchema, deletionConfirmationSchema, deletionImpactSchema
 import { DeletionRequestError } from '../api/errors';
 import type { GraphTransactionContext } from '../persistence/graph-transaction';
 import type { CollectionTransactionContext } from '../persistence/graph-transaction';
-import { collectionImpactSchema, type CollectionTarget, type CollectionImpact } from '../../../shared/src/index';
+import { collectionImpactSchema, collectionPreviewSchema, collectionConfirmationSchema, collectionResultSchema, type CollectionTarget, type CollectionImpact, type CollectionPreview, type CollectionConfirmation, type CollectionResult } from '../../../shared/src/index';
 import type { GraphMembership } from '../persistence/diagram-repository';
 
 function canonicalJson(value: unknown): string {
@@ -213,7 +213,7 @@ export class DiagramService {
     return deletionImpactSchema.parse({ rootDiagramId: id, mode, affectedDiagrams, confirmationToken });
   }
 
-  /** Foundation only: callers must discover/review inside runCollection, never across prompts. */
+  /** Discover and hash inside runCollection; no transaction spans user confirmation. */
   private async collectionSnapshot(target: CollectionTarget, context: CollectionTransactionContext): Promise<CollectionImpact> {
     const { diagrams } = context;
     const mode = target.kind === 'all-matches' ? target.mode : 'permanent';
@@ -244,6 +244,44 @@ export class DiagramService {
       affected: await Promise.all(affected.map(d => this.deletionSavedState(d, context))), requiredAncestors,
     };
     return collectionImpactSchema.parse({ target, mode, rootDiagramIds, affectedDiagrams, affectedCount: affected.length, confirmationToken: snapshotToken(snapshot) });
+  }
+
+  async previewCollectionDeletion(input: CollectionPreview): Promise<CollectionImpact> {
+    const request = collectionPreviewSchema.parse(input);
+    return this.graph.runCollection(context => this.collectionSnapshot(request.target, context));
+  }
+
+  async executeCollectionDeletion(input: CollectionConfirmation): Promise<CollectionResult> {
+    const confirmation = collectionConfirmationSchema.parse(input);
+    try { return await this.graph.runCollection(async context => {
+      let impact: CollectionImpact;
+      try { impact = await this.collectionSnapshot(confirmation.target, context); }
+      catch (error) {
+        if (error instanceof DeletionRequestError && error.detail.code === 'DELETE_NOT_FOUND') throw deletionChanged();
+        throw error;
+      }
+      if (!sameIds(confirmation.rootDiagramIds, impact.rootDiagramIds) || confirmation.confirmationToken !== impact.confirmationToken) throw deletionChanged();
+      if (impact.mode === 'permanent') {
+        const ids = [...impact.affectedDiagrams].sort((a, b) => deletionDepth(b) - deletionDepth(a) || a.id.localeCompare(b.id)).map(d => d.id);
+        await context.adrs?.purgeOwned(ids);
+        await context.diagrams.purge(ids);
+      } else {
+        const selected = new Set(impact.rootDiagramIds);
+        const batches = new Map<string, { trashBatchId: string; trashRootDiagramId: string }>();
+        for (const document of impact.affectedDiagrams) {
+          const ancestors = await context.diagrams.findAncestors(document.id);
+          const root = [...ancestors].reverse().find(a => selected.has(a.id))?.id ?? document.id;
+          let provenance = batches.get(root);
+          if (!provenance) { provenance = { trashBatchId: crypto.randomUUID(), trashRootDiagramId: root }; batches.set(root, provenance); }
+          if (!await context.diagrams.trash(document.id, provenance)) throw deletionChanged();
+        }
+      }
+      const { confirmationToken: _token, ...result } = impact;
+      return collectionResultSchema.parse(result);
+    }); } catch (error) {
+      if (findPostgresError(error).code === '23503') throw new DeletionRequestError(409, { code: 'DIAGRAM_DEPENDENCY', message: 'A saved database reference prevents deletion; all changes were rolled back.', remedy: 'Repair the outside artifact references, then request a new preview and confirmation.' });
+      throw error;
+    }
   }
 
   async executeDeletion(id: string, input: DeletionConfirmation): Promise<DeletionResult> {

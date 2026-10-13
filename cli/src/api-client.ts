@@ -4,6 +4,8 @@ import {
   diagramSummaryListSchema,
   deletionPreviewSchema, deletionConfirmationSchema, deletionImpactSchema, deletionResultSchema, deletionErrorSchema, uuidSchema,
   type DeletionPreview, type DeletionConfirmation, type DeletionError,
+  collectionPreviewSchema, collectionConfirmationSchema, collectionImpactSchema, collectionResultSchema,
+  type CollectionPreview, type CollectionImpact,
 } from '../../shared/src/validation/schemas.js';
 
 type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
@@ -84,6 +86,22 @@ export function createApiClient(options: { baseUrl?: string; fetch?: FetchLike }
   }
 
   return {
+    async previewCollectionDeletion(input: CollectionPreview) {
+      const request = collectionPreviewSchema.parse(input);
+      const target = request.target;
+      const impact = parse(await postDeletion('/diagrams/deletion-set-preview', request, false), collectionImpactSchema, `${baseUrl}/diagrams/deletion-set-preview`);
+      if (JSON.stringify(impact.target) !== JSON.stringify(target) || (target.kind === 'all-matches' && impact.rootDiagramIds.some(id => impact.affectedDiagrams.find(d => d.id === id)?.name !== target.name))) throw new ApiClientError('Deletion preview identity or mode does not match the request. Request a new preview.');
+      return impact;
+    },
+    async executeCollectionDeletion(preview: CollectionImpact) {
+      const reviewed = collectionImpactSchema.parse(preview);
+      const confirmation = collectionConfirmationSchema.parse({ target: reviewed.target, rootDiagramIds: reviewed.rootDiagramIds, confirmationToken: reviewed.confirmationToken });
+      const body = await postDeletion('/diagrams/deletion-set', confirmation, true);
+      const result = collectionResultSchema.safeParse(body);
+      const { confirmationToken: _token, ...expected } = reviewed;
+      if (!result.success || JSON.stringify(result.data) !== JSON.stringify(expected)) throw uncertain();
+      return result.data;
+    },
     async previewDeletion(input: DeletionPreview) {
       const request = deletionPreviewSchema.parse(input);
       const impact = parse(await postDeletion('/diagrams/deletion-preview', request, false), deletionImpactSchema, `${baseUrl}/diagrams/deletion-preview`);
