@@ -25,7 +25,7 @@ describe('Component memory graph transactions', () => {
     expect(diagrams.get(ids.child)).toEqual(before); expect(adrs.list(ids.child)).toEqual([]);
     expect(diagrams.getTrashProvenance(ids.child)).toEqual({ trashBatchId: null, trashRootDiagramId: null });
   });
-  it('keeps unrelated-root diagram and ADR changes when a failing root rolls back', async () => {
+  it('queues unrelated-root diagram and ADR changes and preserves them after rollback', async () => {
     const diagrams = new DiagramRepository(); const adrs = new AdrRepository();
     diagrams.create(componentContextFixture()); diagrams.create(componentParentFixture()); diagrams.create(populatedComponentFixture() as DiagramDocument);
     const other = { ...componentContextFixture(), id: ids.unlinkedAdr, components: [], relationships: [] };
@@ -36,13 +36,17 @@ describe('Component memory graph transactions', () => {
       await context.diagrams.trash(ids.child); entered(); await gate; throw new Error('rollback only this root');
     });
     const rejection = expect(first).rejects.toThrow('rollback only this root');
+    let queued: Promise<unknown> | undefined;
     try {
       await started;
-      await new GraphTransaction(diagrams, adrs).run(other.id, [], async context => {
+      let enteredOther = false;
+      queued = new GraphTransaction(diagrams, adrs).run(other.id, [], async context => {
+        enteredOther = true;
         await context.diagrams.replace({ ...other, name: 'Independent edit' });
         await context.adrs!.create(other.id, { title: 'Independent decision', context: 'Context', decision: 'Decision', consequences: 'Consequences', status: 'draft' });
       });
-    } finally { release(); await rejection; }
+      await Promise.resolve(); expect(enteredOther).toBe(false);
+    } finally { release(); await rejection; await queued; }
     expect(diagrams.get(other.id)?.name).toBe('Independent edit'); expect(adrs.list(other.id)).toHaveLength(1); expect(diagrams.get(ids.child)?.status).toBe('active');
   });
 });

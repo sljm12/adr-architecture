@@ -12,6 +12,9 @@ import { createHash } from 'node:crypto';
 import { deletionPreviewSchema, deletionConfirmationSchema, deletionImpactSchema, deletionResultSchema, uuidSchema, type DeletionPreview, type DeletionConfirmation, type DeletionImpact, type DeletionResult } from '../../../shared/src/index';
 import { DeletionRequestError } from '../api/errors';
 import type { GraphTransactionContext } from '../persistence/graph-transaction';
+import type { CollectionTransactionContext } from '../persistence/graph-transaction';
+import { collectionImpactSchema, type CollectionTarget, type CollectionImpact } from '../../../shared/src/index';
+import type { GraphMembership } from '../persistence/diagram-repository';
 
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
@@ -19,6 +22,9 @@ function canonicalJson(value: unknown): string {
   return JSON.stringify(value);
 }
 const byIdentity = <T extends { id: string }>(items: T[]) => [...items].sort((a,b) => a.id.localeCompare(b.id));
+const deletionDepth = (d: { kind?: string }) => d.kind === 'component' ? 2 : d.kind === 'container' ? 1 : 0;
+const byDeletionDepth = <T extends { id: string; kind?: string }>(items: T[]) => [...items].sort((a, b) => deletionDepth(a) - deletionDepth(b) || a.id.localeCompare(b.id));
+const snapshotToken = (snapshot: unknown) => createHash('sha256').update(canonicalJson(snapshot)).digest('hex');
 const deletionMissing = () => new DeletionRequestError(404, { code: 'DELETE_NOT_FOUND', message: 'No eligible diagram matches this exact selector.', remedy: 'Check the complete saved name or use its UUID; Trash requires an active root.' });
 const deletionChanged = () => new DeletionRequestError(409, { code: 'DELETE_IMPACT_CHANGED', message: 'The saved deletion impact changed after preview.', remedy: 'Run a new invocation to review a fresh preview and confirm again.' });
 
@@ -153,7 +159,7 @@ export class DiagramService {
     });
   }
 
-  private async deletionSnapshot(id: string, mode: DeletionConfirmation['mode'], { diagrams, adrs }: GraphTransactionContext): Promise<DeletionImpact> {
+  private async gatherDeletion(id: string, mode: DeletionConfirmation['mode'], { diagrams }: CollectionTransactionContext) {
     const root = await diagrams.get(id);
     if (!root) throw deletionMissing();
     if (mode === 'trash' && root.status !== 'active') throw deletionChanged();
@@ -173,26 +179,71 @@ export class DiagramService {
       else assertApiInvariants(document);
       if (mode === 'permanent' || document.status === 'active') documents.push(document);
     }
-    const affectedDiagrams = documents.map(summary);
-    if (mode === 'permanent') {
+    return { documents, membership, ancestors };
+  }
+
+  private async assertDeletionUnion(documents: DiagramDocument[], { diagrams, adrs }: CollectionTransactionContext): Promise<void> {
       const scope = { diagramIds: documents.map(d => d.id), componentIds: documents.flatMap(d => d.components.map(c => c.id)), relationshipIds: documents.flatMap(d => d.relationships.map(r => r.id)) };
       const blockers = [...await diagrams.deletionBlockers(scope), ...(await adrs?.deletionBlockers(scope) ?? [])]
         .sort((a,b) => a.diagramId.localeCompare(b.diagramId) || a.artifactId.localeCompare(b.artifactId) || a.reason.localeCompare(b.reason));
-      if (blockers.length) throw new DeletionRequestError(409, { code: 'DIAGRAM_DEPENDENCY', message: 'Permanent deletion would break references outside the selected subtree.', remedy: 'Resolve the listed dependencies, then request a new preview and confirmation.', blockers });
-    }
-    const savedState = async (document: DiagramDocument) => ({
+      if (blockers.length) throw new DeletionRequestError(409, { code: 'DIAGRAM_DEPENDENCY', message: 'Permanent deletion would break references outside the selected scope.', remedy: 'Resolve the listed dependencies, then request a new preview and confirmation.', blockers });
+  }
+
+  private async deletionSavedState(document: DiagramDocument, { diagrams, adrs }: CollectionTransactionContext) {
+    return {
       document: { ...document, components: byIdentity(document.components), relationships: byIdentity(document.relationships), groups: byIdentity(document.groups).map(g => ({ ...g, memberComponentIds: [...g.memberComponentIds].sort() })) },
       revision: await diagrams.getDeletionRevision(document.id), provenance: await diagrams.getTrashProvenance(document.id),
       adrs: byIdentity(await adrs?.listFull(document.id) ?? []).map(adr => ({ ...adr, componentIds: [...adr.componentIds].sort(), relationshipIds: [...adr.relationshipIds].sort() })),
-    });
+    };
+  }
+
+  private async deletionSnapshot(id: string, mode: DeletionConfirmation['mode'], context: GraphTransactionContext): Promise<DeletionImpact> {
+    const { diagrams } = context;
+    const { documents, membership, ancestors } = await this.gatherDeletion(id, mode, context);
+    const affectedDiagrams = documents.map(summary);
+    if (mode === 'permanent') await this.assertDeletionUnion(documents, context);
+    const savedState = (document: DiagramDocument) => this.deletionSavedState(document, context);
     const requiredAncestors = [];
     for (const ancestor of ancestors) { const document = await diagrams.get(ancestor.id); if (!document) throw new ApiConflictError('Required ancestor is unavailable.', 'DIAGRAM_REFERENCE_BROKEN'); requiredAncestors.push(await savedState(document)); }
     const snapshot = { version: 1, rootDiagramId: id, mode, affectedDiagrams,
       membership: await Promise.all(membership.map(async member => ({ ...member, provenance: await diagrams.getTrashProvenance(member.id), revision: await diagrams.getDeletionRevision(member.id) }))),
       affected: await Promise.all(documents.map(savedState)), requiredAncestors,
     };
-    const confirmationToken = createHash('sha256').update(canonicalJson(snapshot)).digest('hex');
+    const confirmationToken = snapshotToken(snapshot);
     return deletionImpactSchema.parse({ rootDiagramId: id, mode, affectedDiagrams, confirmationToken });
+  }
+
+  /** Foundation only: callers must discover/review inside runCollection, never across prompts. */
+  private async collectionSnapshot(target: CollectionTarget, context: CollectionTransactionContext): Promise<CollectionImpact> {
+    const { diagrams } = context;
+    const mode = target.kind === 'all-matches' ? target.mode : 'permanent';
+    const eligible = byIdentity((await diagrams.listAll()).filter(d => target.kind === 'clear-trash' ? d.status === 'trashed' : d.name === target.name && (mode === 'permanent' || d.status === 'active')));
+    if (target.kind === 'all-matches' && !eligible.length) throw deletionMissing();
+    const rootDiagramIds = target.kind === 'all-matches' ? eligible.map(d => d.id) : [];
+    const selected = new Set(eligible.map(d => d.id));
+    const documents = new Map<string, DiagramDocument>();
+    const membership = new Map<string, GraphMembership>();
+    const ancestors = new Map<string, GraphMembership>();
+    for (const root of eligible) {
+      const gathered = await this.gatherDeletion(root.id, mode, context);
+      for (const d of gathered.documents) if (target.kind === 'all-matches' || selected.has(d.id)) documents.set(d.id, d);
+      for (const member of gathered.membership) membership.set(member.id, member);
+      for (const ancestor of gathered.ancestors) ancestors.set(ancestor.id, ancestor);
+    }
+    const affected = byDeletionDepth([...documents.values()]);
+    if (mode === 'permanent') await this.assertDeletionUnion(affected, context);
+    const requiredAncestors = [];
+    for (const ancestor of byIdentity([...ancestors.values()])) {
+      const document = await diagrams.get(ancestor.id);
+      if (!document) throw new ApiConflictError('Required ancestor is unavailable.', 'DIAGRAM_REFERENCE_BROKEN');
+      requiredAncestors.push(await this.deletionSavedState(document, context));
+    }
+    const affectedDiagrams = affected.map(summary);
+    const snapshot = { version: 2, target, mode, rootDiagramIds, eligibleMembership: eligible.map(d => d.id), affectedDiagrams,
+      membership: await Promise.all(byIdentity([...membership.values()]).map(async member => ({ ...member, provenance: await diagrams.getTrashProvenance(member.id), revision: await diagrams.getDeletionRevision(member.id) }))),
+      affected: await Promise.all(affected.map(d => this.deletionSavedState(d, context))), requiredAncestors,
+    };
+    return collectionImpactSchema.parse({ target, mode, rootDiagramIds, affectedDiagrams, affectedCount: affected.length, confirmationToken: snapshotToken(snapshot) });
   }
 
   async executeDeletion(id: string, input: DeletionConfirmation): Promise<DeletionResult> {

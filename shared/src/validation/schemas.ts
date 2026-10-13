@@ -265,6 +265,43 @@ export type DeletionConfirmation = z.infer<typeof deletionConfirmationSchema>;
 export type DeletionImpact = z.infer<typeof deletionImpactSchema>;
 export type DeletionResult = z.infer<typeof deletionResultSchema>;
 export type DeletionError = z.infer<typeof deletionErrorSchema>;
+export const collectionTargetSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('all-matches'), name: z.string().refine(name => /\S/.test(name), 'Name must not be blank'), mode: deletionModeSchema }).strict(),
+  z.object({ kind: z.literal('clear-trash') }).strict(),
+]);
+export const collectionPreviewSchema = z.object({ target: collectionTargetSchema }).strict();
+const collectionRootIdsSchema = z.array(uuidSchema).refine(ids => ids.every((id, index) => index === 0 || ids[index - 1].localeCompare(id) < 0), 'Root IDs must be unique and UUID sorted');
+function collectionRoots(value: { target: z.infer<typeof collectionTargetSchema>; rootDiagramIds: string[] }, ctx: z.RefinementCtx) {
+  if (value.target.kind === 'all-matches' ? !value.rootDiagramIds.length : value.rootDiagramIds.length !== 0) ctx.addIssue({ code: 'custom', path: ['rootDiagramIds'], message: 'All-matches requires reviewed roots; clear-trash requires an empty root set' });
+}
+export const collectionConfirmationSchema = z.object({ target: collectionTargetSchema, rootDiagramIds: collectionRootIdsSchema, confirmationToken: deletionConfirmationSchema.shape.confirmationToken }).strict().superRefine(collectionRoots);
+const collectionResultObject = z.object({ target: collectionTargetSchema, mode: deletionModeSchema, rootDiagramIds: collectionRootIdsSchema, affectedDiagrams: z.array(deletionSummarySchema), affectedCount: z.number().int().nonnegative() }).strict();
+function collectionSummaries(value: z.infer<typeof collectionResultObject>, ctx: z.RefinementCtx) {
+  collectionRoots(value, ctx);
+  const issue = (path: (string | number)[], message: string) => ctx.addIssue({ code: 'custom', path, message });
+  if (value.mode !== (value.target.kind === 'all-matches' ? value.target.mode : 'permanent')) issue(['mode'], 'Mode must match the target');
+  if (value.affectedCount !== value.affectedDiagrams.length) issue(['affectedCount'], 'Count must equal unique affected summaries');
+  const byId = new Map(value.affectedDiagrams.map(d => [d.id, d]));
+  if (value.target.kind === 'all-matches') {
+    const name = value.target.name;
+    if (!value.affectedDiagrams.length || value.rootDiagramIds.some(id => byId.get(id)?.name !== name) || value.affectedDiagrams.some(d => d.name === name && !value.rootDiagramIds.includes(d.id))) issue(['affectedDiagrams'], 'Every eligible matching root must occur in both the reviewed roots and affected set');
+  }
+  const seen = new Set<string>(); let lastDepth = -1; let lastId = '';
+  for (const [index, diagram] of value.affectedDiagrams.entries()) {
+    const depth = diagram.kind === 'general' ? 0 : diagram.kind === 'container' ? 1 : 2;
+    const parent = diagram.scope ? byId.get(diagram.scope.parentDiagramId) : undefined;
+    if (seen.has(diagram.id) || depth < lastDepth || (depth === lastDepth && diagram.id.localeCompare(lastId) <= 0) || (parent && (diagram.kind === 'container' ? parent.kind !== 'general' : diagram.kind === 'component' ? parent.kind !== 'container' : true))) issue(['affectedDiagrams', index], 'Summaries must be unique and ordered by valid absolute hierarchy depth then UUID');
+    if ((value.target.kind === 'clear-trash' && diagram.status !== 'trashed') || (value.target.kind === 'all-matches' && value.mode === 'trash' && diagram.status !== 'active')) issue(['affectedDiagrams', index, 'status'], 'Summary status is ineligible for this target');
+    seen.add(diagram.id); lastDepth = depth; lastId = diagram.id;
+  }
+}
+export const collectionResultSchema = collectionResultObject.superRefine(collectionSummaries);
+export const collectionImpactSchema = collectionResultObject.extend({ confirmationToken: deletionConfirmationSchema.shape.confirmationToken }).strict().superRefine(collectionSummaries);
+export type CollectionTarget = z.infer<typeof collectionTargetSchema>;
+export type CollectionPreview = z.infer<typeof collectionPreviewSchema>;
+export type CollectionConfirmation = z.infer<typeof collectionConfirmationSchema>;
+export type CollectionImpact = z.infer<typeof collectionImpactSchema>;
+export type CollectionResult = z.infer<typeof collectionResultSchema>;
 export const containerAvailabilitySchema = z.object({ parentDiagramId:uuidSchema, softwareSystemId:uuidSchema, availability:z.enum(['none','active','trashed']), diagram:diagramSummarySchema.nullable() }).strict();
 const uniqueDiagramIds = z.array(uuidSchema).min(1).refine(ids => new Set(ids).size === ids.length, 'Diagram IDs must be unique');
 export const trashConfirmationSchema = z.object({ confirmedDiagramIds: uniqueDiagramIds }).strict();

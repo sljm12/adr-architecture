@@ -1,4 +1,5 @@
 import { asc, eq, inArray, sql } from 'drizzle-orm';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { z } from 'zod';
 import type { DiagramDocument, ComponentScope, DiagramKind, DeletionError } from '../../../shared/src/index';
@@ -33,6 +34,7 @@ export interface DiagramRepositoryLike {
   findAncestors(id: string): MaybePromise<GraphMembership[]>;
   findDescendants(id: string): MaybePromise<GraphMembership[]>;
   withGraphTransaction<T>(parentDiagramId: string, childDiagramIds: string[], action: (repository: DiagramRepositoryLike, transaction?: unknown) => MaybePromise<T>): Promise<T>;
+  withCollectionTransaction<T>(action: (repository: DiagramRepositoryLike, transaction?: unknown) => MaybePromise<T>): Promise<T>;
   findComponent(id: string): MaybePromise<{ id: string; diagramId: string; name: string; description: string | null; type: string | null; role: string; sourceComponentId: string | null } | undefined>;
   findRelationship(id: string): MaybePromise<{ id: string; diagramId: string } | undefined>;
   create(document: DiagramDocument): MaybePromise<DiagramDocument>;
@@ -130,9 +132,36 @@ export class DiagramRepository implements DiagramRepositoryLike {
   private documents = new Map<string, DiagramDocument>();
   private revisions = new Map<string, bigint>();
   private provenance = new Map<string, TrashProvenance>();
-  private transactionTails = new Map<string, Promise<void>>();
+  private writerTail?: Promise<void>;
+  private readonly writerScope = new AsyncLocalStorage<{ active: boolean; collection: boolean }>();
   private transactionMembers = new Map<string, Set<string>>();
   transactionDiagramIds(rootId: string) { return [...(this.transactionMembers.get(rootId) ?? [])]; }
+
+  private async coordinateWrite<T>(action: () => MaybePromise<T>, collection = false): Promise<T> {
+    if (this.writerScope.getStore()?.active) return action();
+    const prior = this.writerTail;
+    let release!: () => void;
+    const tail = new Promise<void>(resolve => { release = resolve; });
+    this.writerTail = tail;
+    await prior;
+    const scope = { active: true, collection };
+    try { return await this.writerScope.run(scope, action); }
+    finally { scope.active = false; release(); if (this.writerTail === tail) this.writerTail = undefined; }
+  }
+
+  async withCollectionTransaction<T>(action: (repository: DiagramRepositoryLike, transaction?: unknown) => MaybePromise<T>): Promise<T> {
+    if (this.writerScope.getStore()?.active) {
+      if (!this.writerScope.getStore()!.collection) throw new Error('Collection coordination must start before graph locks');
+      return action(this, this);
+    }
+    return this.coordinateWrite(async () => {
+      const documents = new Map([...this.documents].map(([id, d]) => [id, clone(d)]));
+      const provenance = new Map([...this.provenance].map(([id, p]) => [id, { ...p }]));
+      const revisions = new Map(this.revisions);
+      try { return await action(this, this); }
+      catch (error) { this.documents = documents; this.provenance = provenance; this.revisions = revisions; throw error; }
+    }, true);
+  }
 
   deletionBlockers(scope: DeletionScope) {
     const documents = [...this.documents.values()];
@@ -172,35 +201,35 @@ export class DiagramRepository implements DiagramRepositoryLike {
       .map(document => this.getGraphMembership(document.id)!);
   }
   async withGraphTransaction<T>(_parentDiagramId: string, _childDiagramIds: string[], action: (repository: DiagramRepositoryLike, transaction?: unknown) => MaybePromise<T>): Promise<T> {
-    const root = await graphRoot(this, _parentDiagramId);
-    const prior = this.transactionTails.get(root.id) ?? Promise.resolve();
-    let release!: () => void;
-    const tail = new Promise<void>(resolve => { release = resolve; });
-    this.transactionTails.set(root.id, tail);
-    await prior;
-    try {
-      if ((await graphRoot(this, _parentDiagramId)).id !== root.id) return brokenGraph('Diagram ancestry changed during coordination.');
-      const ids = new Set([root.id, ...(await this.findDescendants(root.id)).map(member => member.id)]);
-      for (const id of _childDiagramIds) if (!ids.has(id) && this.documents.has(id)) return brokenGraph('Affected diagram belongs to a different Context root.');
-      const snapshot = new Map([...this.documents].filter(([id]) => ids.has(id)).map(([id, document]) => [id, clone(document)]));
-      const provenanceSnapshot = new Map([...this.provenance].filter(([id]) => ids.has(id)).map(([id, value]) => [id, { ...value }]));
-      const revisionSnapshot = new Map([...this.revisions].filter(([id]) => ids.has(id)));
-      this.transactionMembers.set(root.id, ids);
-      try { return await action(this, this); }
-      catch (error) {
-        const currentIds = new Set([...ids, ...memoryGraphIds(this.documents.values(), ids)]);
-        for (const id of currentIds) { this.documents.delete(id); this.provenance.delete(id); this.revisions.delete(id); }
-        for (const [id, document] of snapshot) this.documents.set(id, document);
-        for (const [id, value] of provenanceSnapshot) this.provenance.set(id, value);
-        for (const [id, value] of revisionSnapshot) this.revisions.set(id, value);
-        throw error;
+    if (this.writerScope.getStore()?.active) return action(this, this);
+    return this.coordinateWrite(async () => {
+      const root = await graphRoot(this, _parentDiagramId);
+      try {
+        if ((await graphRoot(this, _parentDiagramId)).id !== root.id) return brokenGraph('Diagram ancestry changed during coordination.');
+        const ids = new Set([root.id, ...(await this.findDescendants(root.id)).map(member => member.id)]);
+        for (const id of _childDiagramIds) if (!ids.has(id) && this.documents.has(id)) return brokenGraph('Affected diagram belongs to a different Context root.');
+        const snapshot = new Map([...this.documents].filter(([id]) => ids.has(id)).map(([id, document]) => [id, clone(document)]));
+        const provenanceSnapshot = new Map([...this.provenance].filter(([id]) => ids.has(id)).map(([id, value]) => [id, { ...value }]));
+        const revisionSnapshot = new Map([...this.revisions].filter(([id]) => ids.has(id)));
+        this.transactionMembers.set(root.id, ids);
+        try { return await action(this, this); }
+        catch (error) {
+          const currentIds = new Set([...ids, ...memoryGraphIds(this.documents.values(), ids)]);
+          for (const id of currentIds) { this.documents.delete(id); this.provenance.delete(id); this.revisions.delete(id); }
+          for (const [id, document] of snapshot) this.documents.set(id, document);
+          for (const [id, value] of provenanceSnapshot) this.provenance.set(id, value);
+          for (const [id, value] of revisionSnapshot) this.revisions.set(id, value);
+          throw error;
+        }
       }
-    }
-    finally { this.transactionMembers.delete(root.id); release(); if (this.transactionTails.get(root.id) === tail) this.transactionTails.delete(root.id); }
+      finally { this.transactionMembers.delete(root.id); }
+    });
   }
   findComponent(id: string) { for (const document of this.documents.values()) { const component = document.components.find(item => item.id === id); if (component) return { id: component.id, diagramId: component.diagramId, name: component.name, description:component.description, type:component.type, role:component.role ?? 'element', sourceComponentId:component.sourceComponentId ?? null }; } return undefined; }
   findRelationship(id: string) { for (const document of this.documents.values()) { const relationship = document.relationships.find(item => item.id === id); if (relationship) return { id: relationship.id, diagramId: relationship.diagramId }; } return undefined; }
-  create(input: DiagramDocument) {
+  create(input: DiagramDocument): MaybePromise<DiagramDocument> {
+    // Idle fixture creation remains synchronous; creation during coordination must wait.
+    if (this.writerTail && !this.writerScope.getStore()?.active) return this.coordinateWrite(() => this.create(input));
     const document = diagramDocumentSchema.parse(input) as DiagramDocument;
     assertDiagramInvariants(document);
     if (document.scope && this.findContainerForOwner(getDiagramOwnerId(document)!)) throw new Error('diagrams_owner_component_unique');
@@ -407,7 +436,18 @@ function mapDocument(
 
 /** PostgreSQL/Drizzle repository used by the API server. */
 export class PostgresDiagramRepository implements DiagramRepositoryLike {
-  constructor(private readonly db: PostgresExecutor, private readonly inTransaction = false) {}
+  constructor(private readonly db: PostgresExecutor, private readonly inTransaction = false, private readonly collectionTransaction = false) {}
+
+  async withCollectionTransaction<T>(action: (repository: DiagramRepositoryLike, transaction?: unknown) => MaybePromise<T>): Promise<T> {
+    if (this.inTransaction) {
+      if (!this.collectionTransaction) throw new Error('Collection coordination must start before graph locks');
+      return action(this, this.db);
+    }
+    return this.db.transaction(async (transaction: PostgresTransaction) => {
+      await transaction.execute(sql`LOCK TABLE diagrams IN SHARE ROW EXCLUSIVE MODE`);
+      return action(new PostgresDiagramRepository(transaction, true, true), transaction);
+    });
+  }
 
   async deletionBlockers(scope: DeletionScope): Promise<DeletionBlocker[]> {
     const diagrams = await this.db.select({ id: schema.diagrams.id, parentDiagramId: schema.diagrams.parentDiagramId, ownerComponentId: schema.diagrams.ownerComponentId, trashRootDiagramId: schema.diagrams.trashRootDiagramId }).from(schema.diagrams);
@@ -501,6 +541,8 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
   async withGraphTransaction<T>(parentDiagramId: string, childDiagramIds: string[], action: (repository: DiagramRepositoryLike, transaction?: unknown) => MaybePromise<T>): Promise<T> {
     if (this.inTransaction) return await action(this, this.db);
     return this.db.transaction(async (transaction: PostgresTransaction) => {
+      // Acquire the collection writer barrier before any graph discovery or row lock.
+      await transaction.execute(sql`LOCK TABLE diagrams IN ROW EXCLUSIVE MODE`);
       const scoped = new PostgresDiagramRepository(transaction, true);
       const root = await graphRoot(scoped, parentDiagramId);
       await transaction.select({ id:schema.diagrams.id }).from(schema.diagrams).where(eq(schema.diagrams.id, root.id)).for('update');
@@ -540,6 +582,7 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
     document = validatePersistableDocument(document);
     const now = new Date();
     const insert = async (tx: any) => {
+      if (!this.inTransaction) await tx.execute(sql`LOCK TABLE diagrams IN ROW EXCLUSIVE MODE`);
       await tx.insert(schema.diagrams).values({
         id: document.id, name: document.name.trim(), status: 'active',
         createdAt: dateValue(document.createdAt, 'createdAt'), updatedAt: now, trashedAt: null,

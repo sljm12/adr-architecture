@@ -18,6 +18,8 @@ export function scopedRepository(repository: DiagramRepositoryLike, overrides: (
     get(target, key) {
       if (key === 'withGraphTransaction') return (parent: string, children: string[], action: Parameters<DiagramRepositoryLike['withGraphTransaction']>[2]) =>
         target.withGraphTransaction(parent, children, (transaction, executor) => action(wrap(transaction), executor));
+      if (key === 'withCollectionTransaction') return (action: Parameters<DiagramRepositoryLike['withCollectionTransaction']>[0]) =>
+        target.withCollectionTransaction((transaction, executor) => action(wrap(transaction), executor));
       const value = Reflect.get(overrides(target), key) ?? Reflect.get(target, key);
       return typeof value === 'function' ? value.bind(target) : value;
     },

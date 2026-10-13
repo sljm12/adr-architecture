@@ -252,3 +252,104 @@ Prefix actions with npm run cli --. Scripted stale tests need an HTTP barrier be
 - Measure p95 fixture budget from plan.md; record actual database/network environment. SC-005 needs representative first-time-user validation, not just automated checks.
 
 See [CLI contract](contracts/cli.md) and [data model](data-model.md) for authoritative fields and behavior.
+
+## Phase 7–8 collection foundation audit (T038–T045, 2026-10-13)
+
+This evidence covers the collection foundation only. The all-matches and clear-trash commands,
+HTTP routes and confirmed collection mutations remain in phases 9–10. The private collection
+snapshot helper is exercised under `GraphTransaction.runCollection`; no lock spans CLI input.
+
+| Supported entry points | Coordination and affected callers |
+|---|---|
+| `DiagramService.create` | API `diagram-routes.ts` already awaits MaybePromise creation. PostgreSQL top-level INSERT takes ROW EXCLUSIVE before writing; memory creation waits behind any queued writer. |
+| `DiagramService.save`, component/relationship removal | Existing `graph.run` now takes the table writer barrier before graph discovery and row locks; existing validation and revisions remain intact. |
+| Container/Component create-or-open | `container-context.ts` and `diagram-service.ts` already await transaction-scoped `diagrams.create`; owner-slot and ancestor checks remain inside graph coordination. |
+| Browser Trash/restore and single-root CLI deletion | Existing recovery and deletion graph transactions adopt the same writer barrier; snapshot hashes remain version 1 with the same canonical contents and ordering. |
+| ADR create/update/link/relationship-link/remove | `AdrService.graphWrite` retains one diagram/ADR transaction and the owning revision increment; it inherits table-before-row ordering. |
+| Graph reads, hydration and HTML export capture | Existing coordinated read paths also use the ordinary graph barrier, preserving their coherent snapshots. |
+| Collection discovery and future execution | `withCollectionTransaction` takes SHARE ROW EXCLUSIVE before discovery and supplies one scoped diagram/ADR pair. Nested graph/collection calls reuse that collection transaction; promotion from an ordinary graph transaction is refused before a lock-order inversion. |
+
+The audit searched all DiagramRepositoryLike implementations, service/API callers and test proxies.
+There are two implementations and no independent object-literal repository doubles to rebuild.
+`html-export-source-fixtures.ts::scopedRepository` now wraps collection transactions as well as
+graph transactions. Graph-only instrumentation in `container-diagrams.test.ts`,
+`container-recovery.test.ts`, `html-export-source.test.ts` and `diagram-deletion-concurrency.test.ts`
+continues to instrument ordinary graph calls and forwards other methods with their receivers intact.
+
+Memory uses one repository-wide writer queue with async-context reentry limited to an active
+transaction. Idle `create` stays synchronous to retain `componentRecoveryFixture`, `sourceFixture`,
+legacy synchronous repository tests and E2E fixture setup compatibility. Production creation callers
+already await MaybePromise; the new queued-create test awaits it explicitly. The old independent-root
+memory transaction test now releases the first transaction before awaiting the queued unrelated
+diagram/ADR writer and still checks that rollback preserves its committed changes.
+
+Collection memory rollback restores all documents, provenance and bigint revisions even after the
+last root disappears, plus complete ADR records and registration indexes. It also removes entries
+created within the failed transaction. Queued unrelated creation and ordinary graph/ADR writes
+resume after rollback and survive. PostgreSQL rollback uses one executor for both repositories.
+Direct fixture seeding and administrative SQL remain outside the public writer/revision protocol.
+
+`collectionDeletionFixture` retains the original fixture API and adds two populated disjoint graphs,
+six nested/exact matching roots, near names, independent Trash batches, cross-root internal/external
+ADR references and an active-descendant blocker. Full snapshots include documents, ADR content,
+provenance, revisions and memory registration indexes.
+
+Shared collection schemas are exported through the existing `shared/src/index.ts` wildcard. They
+enforce strict tagged targets, literal names, sorted unique reviewed roots, all matching roots in
+the affected set, unique absolute-depth/UUID ordering, counts, mode/status eligibility and empty
+clear-Trash boundaries. No revision or ADR contents enter public deletion responses. The reusable
+service helpers gather validated hierarchies, inspect dependencies once over the full union and
+hash version-2 target/mode/root/membership/content/revision/provenance/ancestor snapshots. Internal
+cross-root references are permitted; outside references and active descendants block removal.
+
+Setup verification found existing `.gitignore` and `.dockerignore` cover the required project and
+build artifacts. There is no ESLint, Prettier, Terraform or Helm configuration needing additional
+ignore files; the private npm packages are not published. Migration 0008 and every existing migration
+runner are reused unchanged; this update adds no migration or dependency.
+
+### Phase 7–8 validation results
+
+| Check | Final result | Evidence |
+|---|---|---|
+| New schemas and collection coordination/snapshot tests | 4 schema cases and 22 transaction/snapshot cases passed, including 11 actual PostgreSQL cases | Included in the database regression log below |
+| PostgreSQL persistence plus single-root HTTP/schema compatibility | **28 files / 265 tests passed, zero skips**, exit 0, 85.70 s | `spec012-phase78-postgres-regressions.log` |
+| Full `npm test -- --maxWorkers=2` | **129 files / 776 tests passed / 120 database-gated tests skipped**, exit 0, 85.54 s | `spec012-phase78-full-unit.log` |
+| `npm run build` | Shared, backend, frontend and CLI production builds passed, exit 0 | `spec012-phase78-build.log` |
+| `git diff --check` | Passed | Final workspace verification |
+
+Reproduce the database run with a dedicated disposable `DATABASE_URL` and `RUN_POSTGRES_TESTS=1`:
+
+```powershell
+npm test -- --maxWorkers=2 backend/tests/persistence shared/tests/diagram-deletion-collection-validation.test.ts shared/tests/diagram-deletion-validation.test.ts backend/tests/contract/diagram-deletion.test.ts backend/tests/contract/diagram-deletion-stale.test.ts
+```
+
+Environment: Node 22.17.1, Windows, Intel Core i7-13700H, local PostgreSQL 17.10 on port 55412.
+Reused the stopped disposable `spec012-phase4-postgres-17` cluster and its existing `spec012` role;
+created a dedicated `spec012_phase78` test database and UUID-isolated schemas using migrations
+0001–0008. Public tables in this new test database were migrated for legacy persistence tests.
+The cluster's `pg_ctl start` restricted-token error was bypassed by running its existing binary
+as a hidden process; the cluster was returned to its original stopped state after validation.
+No application database configuration changed. The standard shell helper failed at startup, so
+commands ran through the available Node runner. Prerequisites used a process-only PowerShell
+execution-policy bypass. There are no pre/post extension hooks.
+
+Tests first failed for absent collection schemas and `runCollection`. A further test demonstrated
+that promotion from a graph transaction could bypass the collection barrier; both implementations
+now reject that promotion while allowing collection-scoped reentry. Actual PostgreSQL barriers
+observe waiting table locks and verify those waiters have no earlier RowShare graph lock. Coverage
+includes opposite graph orders, top-level creation, save, child-open and ADR writes, full rollback
+after every root disappears, queued writer survival, complete-union dependencies, membership and
+ADR/revision/ancestor hash changes, unrelated-graph stability and active-descendant refusal.
+
+The initial concurrent unbounded-worker checks exposed the legacy independent-memory-writer test's
+now-invalid ordering and CPU-contention startup timeouts. Updated that test to await the queued
+writer after releasing the first transaction; bounded-worker reruns passed without increasing
+timeouts. Existing pg concurrent-query deprecation and frontend chunk-size warnings remain.
+The legacy single-root scale regression passed again (Trash preview/execute p95 132.82/160.95 ms;
+permanent 139.64/303.50 ms); these are not collection-action performance evidence.
+
+Database-gated unit skips are not passes; the separate enabled persistence run provides actual
+database foundation evidence. Browser E2E and first-time-author trials were not rerun for this
+backend/shared foundation update. SC-005 remains unverified, and collection command/race/scale
+acceptance evidence belongs to the remaining phases. Short collection transactions deliberately
+delay supported writers; preview/execution must remain separate from user confirmation.
