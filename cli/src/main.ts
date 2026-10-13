@@ -12,7 +12,8 @@ const helpText = `ADR Diagram CLI
 Usage:
   npm run cli -- diagrams list [--name <text>] [--format table|json]
   npm run cli -- diagrams export <diagram-id> --output <path.zip>
-  npm run cli -- diagrams delete (--id <uuid> | --name <exact-name>) (--trash | --permanent) [--yes]
+  npm run cli -- diagrams delete (--id <uuid> | --name <exact-name>) (--trash | --permanent) [--all-matches] [--yes]
+  npm run cli -- diagrams clear-trash [--yes]
   npm run cli -- --help
 
 Commands:
@@ -22,8 +23,11 @@ Commands:
                   Export the saved diagram and its complete ADR set by stable UUID to a ZIP.
                   The destination must end in .zip, its parent must exist, and existing files
                   are never overwritten.
-  diagrams delete Select one UUID or exact, case/whitespace-sensitive saved name. Duplicate
-                  names require --id. Preview includes the root and recursively owned children.
+  diagrams delete Select one UUID or exact, case/whitespace-sensitive saved name. Without
+                  --all-matches, the name must have one eligible match. Duplicate names require
+                  --id or explicit --all-matches (only with --name). Preview includes every
+                  selected root and recursively owned children; overlapping roots count once
+                  in the unique affected total. Disjoint Trash subtrees recover independently.
                   --trash moves active descendants to recoverable Trash. --permanent is
                   irreversible and removes all descendants, including previously trashed ones,
                   and their contained artifacts, ADRs and links. Neither mode is the default.
@@ -31,14 +35,21 @@ Commands:
                   Only saved state is included; save browser edits you want retained first.
                   Changed saved contents require a fresh preview. Verify active/Trash state in
                   the application before retrying an uncertain execution outcome.
+  diagrams clear-trash
+                  Permanently remove all Trash batches, artifacts, ADRs, links and recovery
+                  data in one irreversible operation. Active data is outside this scope.
+                  Accepts only --yes; no selector, mode, --all-matches or output flags.
+                  Nonempty Trash requires separate yes consent for the reviewed preview.
+                  Trash already empty: exit status 0, count zero, no prompt or execution.
 
 Configuration:
   ADR_DIAGRAM_API_URL  Service root URL (default: http://localhost:3000).
 
 Common errors:
   No exact match: check the complete saved name, including case and whitespace, or use --id.
-  Duplicate names: choose a reported UUID. Trash requires an active root; permanent also
-  searches Trash. Resolve outside dependencies or broken hierarchy references before retrying.
+  Duplicate names: choose a reported UUID or use --name with --all-matches for all eligible roots.
+  Trash searches active roots only; permanent searches active diagrams and Trash.
+  Resolve outside dependencies or broken hierarchy references before retrying.
   Check that the service is running and ADR_DIAGRAM_API_URL is correct. Confirm the diagram ID,
   package validity, and that the output directory exists and is writable. Diagnostics go to
   standard error; exit status 1 indicates an operation failure and 2 indicates invalid usage.
@@ -102,7 +113,7 @@ async function runCliCommand(argv: string[], io: CliIo, client?: ReturnType<type
     io.stdout(helpText);
     return 0;
   }
-  if (positionals[0] !== 'diagrams' || positionals.length < 2) throw usage('Expected a diagrams list, export or delete command.');
+  if (positionals[0] !== 'diagrams' || positionals.length < 2) throw usage('Expected a diagrams list, export, delete or clear-trash command.');
 
   const command = positionals[1];
   if (command === 'clear-trash') {

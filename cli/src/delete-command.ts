@@ -29,6 +29,7 @@ export async function deleteDiagramCommand(client: ApiClient, request: DeletionP
       const matchedRows = preview.affectedDiagrams.filter(d => preview.rootDiagramIds.includes(d.id)).map(d => `${terminalText(d.name)} (${d.id}) [${d.status}]`).join('\n');
       const selection = preview.target.kind === 'clear-trash' ? 'Scope: all Trash batches; active data is outside this scope.' : `Matched roots:\n${matchedRows}`;
       scope = `Action: ${preview.target.kind}\n${selection}\nAffected count: ${preview.affectedCount}`;
+      if (preview.target.kind === 'all-matches') scope += '\nOverlapping roots and descendants are counted once in this unique affected total.';
     } else scope = `Root: ${terminalText(preview.affectedDiagrams[0].name)} (${preview.rootDiagramId})`;
     io.stdout(`Mode: ${preview.mode}\n${scope}\nAffected saved diagrams:\n${rows}\nContained components, relationships, groups, ADRs and links are included.\n`);
     io.stdout(preview.mode === 'permanent'

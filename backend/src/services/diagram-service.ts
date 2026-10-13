@@ -149,7 +149,7 @@ export class DiagramService {
     const candidates = (await this.repository.listAll()).filter(document =>
       (request.mode === 'permanent' || document.status === 'active') && ('id' in request.selector ? document.id === request.selector.id : document.name === request.selector.name));
     if (!candidates.length) throw deletionMissing();
-    if (candidates.length > 1) throw new DeletionRequestError(409, { code: 'DELETE_NAME_AMBIGUOUS', message: 'More than one diagram has this exact saved name.', remedy: 'Select one candidate with --id <uuid>.', candidates: byIdentity(candidates).map(summary) });
+    if (candidates.length > 1) throw new DeletionRequestError(409, { code: 'DELETE_NAME_AMBIGUOUS', message: 'More than one diagram has this exact saved name.', remedy: 'Select one candidate with --id <uuid>, or use --name with --all-matches to select every eligible exact-name match.', candidates: byIdentity(candidates).map(summary) });
     const id = candidates[0].id;
     return this.graph.run(id, [], async context => {
       const current = await context.diagrams.get(id);

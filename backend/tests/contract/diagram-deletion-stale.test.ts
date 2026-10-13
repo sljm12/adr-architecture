@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../../src/api/app';
-import { diagramDeletionFixture } from '../component-recovery-fixture';
+import { diagramDeletionFixture, collectionDeletionFixture } from '../component-recovery-fixture';
 import { DiagramService } from '../../src/services/diagram-service';
 import { AdrService } from '../../src/services/adr-service';
 import { deletionErrorSchema } from '../../../shared/src/index';
@@ -92,5 +92,32 @@ describe('literal saved selectors', () => {
     await repository.replace({ ...(await repository.get(ids.unrelated))!, name }); await service.trash(ids.unrelated);
     expect((await service.previewDeletion({ selector: { name }, mode: 'trash' })).rootDiagramId).toBe(ids.context);
     await expect(service.previewDeletion({ selector: { name }, mode: 'permanent' })).rejects.toMatchObject({ detail: { code: 'DELETE_NAME_AMBIGUOUS', candidates: expect.arrayContaining([expect.objectContaining({ id: ids.context, status: 'active' }), expect.objectContaining({ id: ids.unrelated, status: 'trashed' })]) } });
+    await expect(service.previewDeletion({ selector: { name }, mode: 'permanent' })).rejects.toMatchObject({ detail: { remedy: expect.stringMatching(/--id.*--all-matches/) } });
+  });
+});
+
+describe('single-root and collection consent isolation', () => {
+  it.each(['trash', 'permanent'] as const)('refuses retargeting %s tokens in either direction', async mode => {
+    const f = await collectionDeletionFixture(), app = buildApp(f.repository, f.adrs);
+    const service = new DiagramService(f.repository, f.adrs);
+    try {
+      const single = await service.previewDeletion({ selector: { id: f.first.context }, mode });
+      const collection = await service.previewCollectionDeletion({ target: { kind: 'all-matches', name: f.name, mode } });
+      const clear = await service.previewCollectionDeletion({ target: { kind: 'clear-trash' } });
+      for (const payload of [
+        { target: collection.target, rootDiagramIds: collection.rootDiagramIds, confirmationToken: single.confirmationToken },
+        { target: clear.target, rootDiagramIds: clear.rootDiagramIds, confirmationToken: collection.confirmationToken },
+        { target: collection.target, rootDiagramIds: collection.rootDiagramIds, confirmationToken: clear.confirmationToken },
+      ]) {
+        const response = await app.inject({ method: 'POST', url: '/diagrams/deletion-set', payload });
+        expect(response.statusCode).toBe(409);
+        expect(deletionErrorSchema.parse(response.json())).toMatchObject({ code: 'DELETE_IMPACT_CHANGED', remedy: expect.stringMatching(/fresh preview/) });
+        expect(await f.snapshot()).toEqual(f.before);
+      }
+      const response = await app.inject({ method: 'POST', url: `/diagrams/${single.rootDiagramId}/deletion`, payload: { mode, confirmationToken: collection.confirmationToken } });
+      expect(response.statusCode).toBe(409);
+      expect(deletionErrorSchema.parse(response.json())).toMatchObject({ code: 'DELETE_IMPACT_CHANGED', remedy: expect.stringMatching(/fresh preview/) });
+      expect(await f.snapshot()).toEqual(f.before);
+    } finally { await app.close(); }
   });
 });

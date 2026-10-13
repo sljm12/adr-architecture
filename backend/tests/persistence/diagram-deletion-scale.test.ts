@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { diagramDeletionFixture } from '../component-recovery-fixture';
 import { DiagramService } from '../../src/services/diagram-service';
 import { componentTestDatabase, postgresEnabled } from './component-test-database';
+import { scopedRepository } from '../html-export-source-fixtures';
+import type { CollectionTarget } from '../../../shared/src/index';
 
 describe.skipIf(!postgresEnabled)('PostgreSQL confirmed deletion scale', () => {
   it('measures preview/committed execution p95 and searches beyond 100 diagrams without truncation', async () => {
@@ -66,6 +68,60 @@ describe.skipIf(!postgresEnabled)('PostgreSQL confirmed deletion scale', () => {
         const p95 = (samples: number[]) => [...samples].sort((a, b) => a - b)[Math.ceil(samples.length * .95) - 1];
         observations[mode] = { warmups: 2, samples: 20, previewMs, executeMs, previewP95Ms: p95(previewMs), executeP95Ms: p95(executeMs) };
       }
+      // Keep the 100-diagram/1,000-component/1,000-relationship/100-ADR fixture,
+      // selecting overlapping owner-derived names plus an empty disjoint Context.
+      const parent = subtree.find(d => d.id === fixture.ids.parent)!;
+      root.components.find(c => c.id === fixture.ids.system)!.name = root.name;
+      parent.components.find(c => c.id === fixture.ids.application)!.name = root.name;
+      for (const document of subtree) await database.diagrams.replace(document);
+      const unrelated = (await database.diagrams.listAll()).filter(d => !subtree.some(s => s.id === d.id));
+      const disjoint = { ...unrelated[0], name: root.name };
+      await service.save(disjoint.id, disjoint);
+      const writerDocument = unrelated[1];
+      const p95 = (samples: number[]) => [...samples].sort((a, b) => a - b)[Math.ceil(samples.length * .95) - 1];
+      for (const action of ['all-trash', 'all-permanent', 'clear-trash'] as const) {
+        const previewMs: number[] = [], executeMs: number[] = [], writerDelayMs: number[] = [];
+        for (let sample = -2; sample < 20; sample++) {
+          if (action === 'clear-trash') {
+            for (const id of [root.id, disjoint.id]) {
+              const impact = await service.trashImpact(id); await service.trash(id, impact.affectedDiagramIds);
+            }
+          }
+          const target: CollectionTarget = action === 'clear-trash' ? { kind: 'clear-trash' } : { kind: 'all-matches', name: root.name, mode: action === 'all-trash' ? 'trash' : 'permanent' };
+          const start = performance.now(), preview = await service.previewCollectionDeletion({ target });
+          const previewElapsed = performance.now() - start;
+          expect(preview.affectedCount).toBe(5);
+          expect(new Set(preview.affectedDiagrams.map(d => d.id)).size).toBe(5);
+          if (action !== 'clear-trash') expect(preview.rootDiagramIds).toHaveLength(4);
+          let writer: Promise<unknown> | undefined, writerStart = 0, writerElapsed = 0, writerFinished = false;
+          const repository = scopedRepository(database.diagrams, scoped => ({
+            // Measure a supported unrelated writer queued at the first mutation;
+            // snapshot computation and fixture restoration are outside its delay.
+            purge: async ids => { queueWriter(); return scoped.purge(ids); },
+            trash: async (id, provenance) => { queueWriter(); return scoped.trash(id, provenance); },
+          }));
+          function queueWriter() {
+            if (writer) return;
+            writerStart = performance.now();
+            writer = service.save(writerDocument.id, writerDocument).then(() => { writerElapsed = performance.now() - writerStart; writerFinished = true; });
+          }
+          const executeStart = performance.now();
+          const result = await new DiagramService(repository, database.adrs).executeCollectionDeletion({ target: preview.target, rootDiagramIds: preview.rootDiagramIds, confirmationToken: preview.confirmationToken });
+          const executeElapsed = performance.now() - executeStart;
+          expect(result.affectedDiagrams).toEqual(preview.affectedDiagrams);
+          expect(writer).toBeDefined();
+          await writer; expect(writerFinished).toBe(true);
+          if (sample >= 0) { previewMs.push(previewElapsed); executeMs.push(executeElapsed); writerDelayMs.push(writerElapsed); }
+          if (action === 'all-trash') {
+            for (const id of [root.id, disjoint.id]) {
+              const impact = await service.restoreImpact(id);
+              await service.restore(id, { confirmedDiagramIds: impact.affectedDiagramIds, confirmedTrashBatchId: impact.trashBatchId });
+            }
+          } else { await seedSubtree(); await database.diagrams.create(disjoint); }
+          expect(await database.diagrams.listAll()).toHaveLength(100);
+        }
+        observations[action] = { warmups: 2, samples: 20, previewMs, executeMs, writerDelayMs, previewP95Ms: p95(previewMs), executeP95Ms: p95(executeMs), writerDelayP95Ms: p95(writerDelayMs) };
+      }
       // Exceed the measured collection size and place a duplicate after the original entries.
       const lateId = randomUUID();
       for (let i = 0; i < 5; i++) await database.diagrams.create({ ...empty, id: i === 4 ? lateId : randomUUID(), name: i === 4 ? 'Late exact target' : `Beyond fixture ${i}` });
@@ -85,5 +141,5 @@ describe.skipIf(!postgresEnabled)('PostgreSQL confirmed deletion scale', () => {
         expect(measured.executeP95Ms).toBeLessThan(2000);
       }
     } finally { await database.close(); }
-  }, 180_000);
+  }, 300_000);
 });

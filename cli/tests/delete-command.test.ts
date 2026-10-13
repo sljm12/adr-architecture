@@ -3,7 +3,7 @@ import { runCli } from '../src/main';
 import { createApiClient } from '../src/api-client';
 import { spawn } from 'node:child_process';
 import { buildApp } from '../../backend/src/api/app';
-import { diagramDeletionFixture } from '../../backend/tests/component-recovery-fixture';
+import { diagramDeletionFixture, collectionDeletionFixture } from '../../backend/tests/component-recovery-fixture';
 import { DiagramService } from '../../backend/src/services/diagram-service';
 
 const id='00000000-0000-4000-8000-000000000001';
@@ -15,6 +15,42 @@ function setup(answer:string|null='yes',interactive=true) {
   return {stdout,stderr,confirm,fetcher,io:{stdout,stderr,confirm,isTTY:interactive},client:createApiClient({fetch:fetcher})};
 }
 describe('CLI confirmed Trash',()=>{
+  it.each(['trash', 'permanent'] as const)('keeps default ambiguity safe and explains unique %s collection scope', async mode => {
+    const f = await collectionDeletionFixture(), app = buildApp(f.repository, f.adrs);
+    const stdout = vi.fn(), stderr = vi.fn(), confirm = vi.fn().mockResolvedValue('yes');
+    try {
+      const baseUrl = await app.listen({ host: '127.0.0.1', port: 0 });
+      const fetcher = vi.fn(fetch), client = createApiClient({ baseUrl, fetch: fetcher });
+      expect(await runCli(['diagrams', 'delete', '--name', f.name, `--${mode}`, '--yes'], { stdout, stderr, confirm }, client)).toBe(1);
+      expect(stdout).not.toHaveBeenCalled(); expect(confirm).not.toHaveBeenCalled();
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(stderr.mock.calls.flat().join('')).toMatch(/--id.*--all-matches/);
+      expect(await f.snapshot()).toEqual(f.before);
+      stdout.mockClear(); stderr.mockClear(); fetcher.mockClear();
+      expect(await runCli(['diagrams', 'delete', '--name', f.name, '--all-matches', `--${mode}`, '--yes'], { stdout, stderr, confirm }, client)).toBe(0);
+      const output = stdout.mock.calls.flat().join('');
+      expect(output).toContain('Overlapping roots and descendants are counted once');
+      expect(output).toContain(`Affected count: ${mode === 'trash' ? 6 : 8}`);
+      if (mode === 'trash') expect(output).toContain('independently');
+      expect(fetcher).toHaveBeenCalledTimes(2); expect(stderr).not.toHaveBeenCalled(); expect(confirm).not.toHaveBeenCalled();
+    } finally { await app.close(); }
+  });
+  it('preserves terminal-control selectors in real ambiguity diagnostics', async () => {
+    const f = await diagramDeletionFixture(), app = buildApp(f.repository, f.adrs);
+    const name = 'Payments\u001b[31m\n\u202e';
+    for (const id of [f.ids.context, f.ids.unrelated]) await f.repository.replace({ ...(await f.repository.get(id))!, name });
+    const before = await f.repository.listAll(), stdout = vi.fn(), stderr = vi.fn();
+    try {
+      const baseUrl = await app.listen({ host: '127.0.0.1', port: 0 });
+      const fetcher = vi.fn(fetch);
+      expect(await runCli(['diagrams', 'delete', '--name', name, '--permanent', '--yes'], { stdout, stderr }, createApiClient({ baseUrl, fetch: fetcher }))).toBe(1);
+      expect(JSON.parse(fetcher.mock.calls[0][1]!.body as string).selector).toEqual({ name });
+      const output = stderr.mock.calls.flat().join('');
+      expect(output).toContain('Payments\\u001b[31m\\u000a\\u202e');
+      expect(output).not.toMatch(/[\u001b\u202e]/); expect(stdout).not.toHaveBeenCalled();
+      expect(await f.repository.listAll()).toEqual(before);
+    } finally { await app.close(); }
+  });
   it.each([' Payments ', 'payments', 'Payments.*?', '支払い é', id])('forwards literal name %j', async name => {
     const s = setup(); s.fetcher.mockReset().mockResolvedValueOnce(new Response(JSON.stringify({ ...preview, affectedDiagrams: [{ ...summary, name }] }))).mockResolvedValueOnce(new Response(JSON.stringify({ rootDiagramId: id, mode: 'trash', affectedDiagrams: [{ ...summary, name }] })));
     expect(await runCli(['diagrams', 'delete', '--name', name, '--trash', '--yes'], s.io, s.client)).toBe(0);

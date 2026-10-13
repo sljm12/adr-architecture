@@ -174,6 +174,9 @@ npm run cli -- diagrams delete --name "Payments" --trash
 npm run cli -- diagrams delete --id 00000000-0000-4000-8000-000000000001 --trash
 npm run cli -- diagrams delete --id 00000000-0000-4000-8000-000000000001 --permanent
 npm run cli -- diagrams delete --name "Disposable example" --trash --yes
+npm run cli -- diagrams delete --name "Payments" --all-matches --trash
+npm run cli -- diagrams delete --name "Payments" --all-matches --permanent --yes
+npm run cli -- diagrams clear-trash --yes
 ```
 
 Each invocation previews the root and affected descendants with names, UUIDs and statuses. Trash
@@ -190,16 +193,35 @@ or interruption cancels without executing deletion. Scripts and redirected input
 success exits `0`; cancellation, unavailable service, stale confirmation and other failures exit
 `1`; invalid selectors/options or missing/conflicting modes exit `2`. Diagnostics use stderr.
 
-Duplicate exact names refuse selection and list candidate UUIDs and statuses; rerun with `--id`.
+Duplicate exact names refuse selection by default and list candidate UUIDs and statuses; rerun
+with `--id` for one root, or `--name` with `--all-matches` for every eligible exact-name match.
+`--all-matches` is valid only with `--name` and one explicit mode. Overlapping matching roots and
+their descendants appear once in the unique affected total. Disjoint selected Trash subtrees
+have separate recovery batches and can be restored independently. All selected hierarchies
+commit or roll back together; references entirely within a permanently removed union are allowed.
 Trash searches active diagrams; permanent mode searches active diagrams and Trash. No exact match
 requires checking the saved name or UUID. Deletion operates only on saved data: unsaved browser
 edits are not captured. Save work you want retained first. A later stale browser save fails and
 retains the local draft rather than recreating the deleted UUID.
 
-Saved edits between preview and execution invalidate consent. Review a fresh preview in a new
+`diagrams clear-trash` permanently removes every saved diagram in Trash across all recovery batches,
+including owned artifacts, ADRs, links and recovery metadata. **This is irreversible.** Active
+diagrams remain outside the scope; an active descendant or outside dependency blocks the whole
+operation without changes. The command accepts only optional `--yes`, with no selector, mode,
+`--all-matches` or output flags. Nonempty Trash prints every affected identity and total, then
+requires interactive `yes` or explicit scripted `--yes`. Empty Trash reports "Trash is already
+empty" with count zero, exits `0`, and sends no execution request or confirmation prompt.
+
+Both new actions use the existing service URL and migration 0008; no new migration or dependency
+is required. Preview and execution are separate transactions, so user confirmation holds no locks.
+Execution briefly queues supported writers while checking the complete collection and committing.
+
+Saved edits, changes to the eligible exact-name match set, or Trash membership changes between
+preview and execution invalidate consent. Review a fresh preview in a new
 invocation; the CLI never refreshes consent or retries deletion automatically. If the execution
 response is lost or invalid, the operation may already have committed. Verify the root UUID and
-descendants in the application's active collection and Trash before another invocation; use
+descendants (every reviewed UUID for collection actions) in the application's active collection
+and Trash before another invocation; use
 `diagrams list` to check active saved entries. Absence from the active list alone does not prove
 permanent removal. See the [deletion validation guide](specs/012-cli-delete-diagrams/quickstart.md)
 for database, performance and workflow evidence.

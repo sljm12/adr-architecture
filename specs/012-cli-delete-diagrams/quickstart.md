@@ -408,3 +408,122 @@ updates and browser regressions remain unchecked. Foundation lock tests and HTTP
 are not substitutes for those remaining action-specific race checks. Browser E2E was not rerun;
 SC-005 first-time-author trials remain unverified. Database-gated skips above are not passes;
 the separate enabled PostgreSQL runs supply the recorded database evidence.
+
+## Phase 11–12 implementation evidence (T061–T067, 2026-10-14)
+
+Completed collection help, duplicate-name remedies, and unique overlap/count explanations.
+Help now describes name-only `--all-matches`, both status scopes, independent Trash recovery,
+permanent clear-Trash scope, empty success, consent, and uncertain-outcome verification.
+The existing terminal escaping is reused; literal selectors still reach the API unchanged.
+New HTTP tests reject token substitution between single-root, all-matches, and clear-Trash
+actions with the shared stale-impact code/remedy and unchanged documents, ADRs, provenance,
+revisions, and memory registration indexes. README examples cover both new commands.
+
+### Validation environment and commands
+
+Windows, Node 22.17.1, Intel Core i7-13700H, PostgreSQL 17.10 on local port 55412.
+Reused the existing stopped disposable `spec012-phase4-postgres-17` cluster; created a separate
+`spec012_phase1112` database. Public legacy-test tables and UUID-isolated test schemas use
+existing migrations 0001–0008. No application connection configuration, dependency, or migration
+was changed. The cluster was started as a hidden process and returned to its stopped state.
+The default shell helper failed to start, so commands used the available Node runner. Spec Kit
+prerequisites used a process-only PowerShell execution-policy bypass. All 16 checklist entries
+passed; there are no before/after implementation extension hooks. Existing ignore files suffice.
+
+Reproduce with a dedicated disposable `DATABASE_URL`. Set `RUN_POSTGRES_TESTS=1` for the database
+and browser commands; leave it unset for the standard full unit run:
+
+```powershell
+npm test -- --maxWorkers=2 cli/tests backend/tests/contract/diagram-deletion-stale.test.ts
+npm test -- --maxWorkers=2 backend/tests/persistence backend/tests/contract/diagram-deletion.test.ts backend/tests/contract/diagram-deletion-stale.test.ts backend/tests/contract/diagram-deletion-all-matches.test.ts backend/tests/contract/diagram-deletion-clear-trash.test.ts shared/tests/diagram-deletion-validation.test.ts shared/tests/diagram-deletion-collection-validation.test.ts cli/tests --exclude backend/tests/persistence/diagram-deletion-scale.test.ts
+npm test -- --maxWorkers=1 backend/tests/persistence/diagram-deletion-scale.test.ts
+npm test -- --maxWorkers=2
+npm run build
+npm run test:e2e -- --workers=2 e2e/tests/saved-diagrams.spec.ts e2e/tests/diagram-list-management.spec.ts e2e/tests/recovery.spec.ts e2e/tests/component-diagram-recovery.spec.ts e2e/tests/component-diagram-persistence.spec.ts e2e/tests/mermaid-export.spec.ts e2e/tests/html-package-component.spec.ts
+git diff --check
+```
+
+Focused Vitest and Playwright commands ran their installed Node entry points with these arguments.
+Full unit/build checks ran the npm scripts. Local generated logs are ignored artifacts named
+`spec012-phase1112-{phase11,postgres,scale,unit,build,playwright}.log` at the repository root;
+the measurements and requirement mapping below are the versioned evidence.
+
+| Check | Result |
+|---|---|
+| Phase 11: all CLI tests and stale HTTP matrix | 10 files / 182 tests passed, exit 0, 7.07 s |
+| PostgreSQL-enabled persistence, deletion HTTP, shared schemas, and CLI | 41 files / 511 tests passed, zero skips, exit 0, 87.80 s |
+| New action-specific PostgreSQL races (included above) | 51 tests passed across all-matches Trash/permanent and clear Trash |
+| Real PostgreSQL scale, legacy plus collection actions | 1 test passed, zero skips, exit 0, 108.30 s |
+| Full `npm test -- --maxWorkers=2` | 135 files passed / 15 database-gated files skipped; 882 tests passed / 183 database-gated tests skipped, exit 0, 94.24 s |
+| `npm run build` | Shared, backend, frontend, and CLI builds passed, exit 0 |
+| Selected Playwright workflows with PostgreSQL enabled | 25 passed, zero skips, exit 0, 34.4 s |
+| `git diff --check` | Passed |
+
+Help/remedy tests first failed for the missing flag/command guidance and UUID-only ambiguity
+remedy. CLI assertions then verify the new overlap explanation, default ambiguity refusal,
+status eligibility and control-character display through listening HTTP. Existing collection
+tests retain cancellation, flag restrictions, empty success, scripted consent and committed
+response-loss/mismatch checks. No missing-implementation red run is claimed for already-built
+collection storage paths. Initial race harness runs used invalid confirmation shapes/root order
+and a document accessor for membership fields; those test defects were corrected before the
+final enabled-database run. Active sibling creation during clear Trash correctly remains valid:
+it does not change Trash membership or any required saved document.
+
+The new races hold one real connection at a writer/collection barrier and observe another
+waiting in `pg_locks`. They cover top-level matching creation, child creation, owner rename,
+save, ADR/link edits, Trash/restore before and behind collection execution, opposite graph
+visitation order, and table-before-row locking. Pre-lock relevant changes reject stale consent
+without losing the saved edit; queued writers either reject inactive/missing owners or complete
+with valid surviving active data/new UUIDs. Preview locks are absent while awaiting user consent.
+The top-level pre-lock creation test runs the public creator within an ordinary writer transaction
+to hold its commit at a deterministic barrier. Existing collection rollback/owned-row tests and
+single-root graph/revision/migration tests passed again. Direct administrative SQL remains outside
+the supported writer protocol.
+
+All selected browser cases passed on the first run, but its runner did not finish teardown.
+The clean rerun reused the available test servers and exited successfully. Coverage includes
+both-mode stale-save draft retention, real HTTP/PostgreSQL permanent removal without UUID
+resurrection, exact recovery batches/ADR links, list deletion/switching, Mermaid and HTML exports.
+Existing pg concurrent-query deprecation and frontend bundle-size warnings remain.
+
+### Collection measurements
+
+The existing fixture contains 100 diagrams, 1,000 components, 1,000 relationships, and 100 ADRs.
+Collection measurements select three overlapping owner-derived roots and one disjoint empty
+Context, producing five unique affected diagrams. Each action has two warmups and 20 committed
+samples. Restore/reseed and human input are outside timers. A public save of an unrelated active
+diagram is queued at the first collection mutation; writer delay measures from that request to
+its completion, excluding earlier snapshot work. It is not a worst-case arrival-time estimate.
+Other validation jobs ran concurrently, so these are local planning measurements rather than
+isolated hardware benchmarks. All measured preview/execute p95 values meet the 2,000 ms budget.
+
+| Action | Preview p95 (ms) | Execute p95 (ms) | Queued writer p95 (ms) |
+|---|---:|---:|---:|
+| Legacy single-root Trash | 132.88 | 169.03 | Not measured |
+| Legacy single-root permanent | 145.12 | 302.52 | Not measured |
+| All-matches Trash | 236.30 | 284.19 | 61.54 |
+| All-matches permanent | 188.65 | 338.47 | 156.41 |
+| Clear Trash | 253.59 | 535.91 | 295.05 |
+
+### Requirements and success-criterion evidence
+
+| Requirement | Final automated evidence |
+|---|---|
+| FR-001–FR-005 | CLI parser/client tests, strict shared schemas, literal selectors and status/ambiguity HTTP tests; no unintended targeting |
+| FR-006–FR-008 | Single-root and collection Trash/purge persistence, raw owned-row removal, preserved ancestors/owners, exact recovery and prior provenance |
+| FR-009–FR-010 | CLI preview/count/warnings, interactive yes/refusal/EOF/interruption, non-TTY refusal and explicit `--yes` |
+| FR-011–FR-012 | Cross-action token refusal, stale content/membership/revision matrices, two-connection barriers, dependencies and whole-invocation rollback |
+| FR-013–FR-014 | Updated help, stdout/stderr/exit assertions, empty success, terminal-safe diagnostics and uncertain response verification without retry |
+| FR-015–FR-016 | Legacy list/export/deletion/graph/revision tests, full unit/build and selected browser recovery/export/stale-save workflows |
+| FR-017–FR-018 | All-matches HTTP/CLI/persistence tests for zero/one/multiple roots, literal/status eligibility, overlap, independent recovery and cross-root references |
+| FR-019–FR-021 | Clear-Trash schemas/HTTP/CLI/persistence, active-data protection, empty/no-consent no-op, owned purge and rollback; action-specific races |
+| SC-001 | Exact/case/whitespace/partial/UUID-like/ambiguous name matrices and default versus explicit collection targeting pass |
+| SC-002–SC-003 | Successful Trash/restore identity/content/provenance and permanent owned-artifact absence/unrelated-data checks pass |
+| SC-004 | Invalid, ambiguous, cancelled, stale, broken-hierarchy, dependent and rejected operation tests preserve saved state and provide remedies |
+| SC-005 | **Unverified**: no representative first-time-author trials; help assertions and performance measurements do not establish the two-minute usability target |
+| SC-006–SC-008 | Multi-root exact/unique/recovery cases, clear-Trash active preservation/empty success, cancellation/stale/dependency/rollback and real race cases pass |
+
+Standard unit-run database skips are not passes; the separate enabled run and scale/browser
+checks provide the recorded database evidence. This phase did not run the entire Playwright
+suite, production deployments, or first-time-author trials. No new UI controls or features
+outside phases 11–12 were added.

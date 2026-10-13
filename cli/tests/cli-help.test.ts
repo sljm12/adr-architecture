@@ -39,6 +39,7 @@ describe('CLI help and process contract', () => {
       expect(streams.stdout.join('')).toMatch(/ADR_DIAGRAM_API_URL/);
       for (const guidance of ['--id', '--name', 'case/whitespace-sensitive', 'Duplicate', 'recursively', '--trash', '--permanent', 'irreversible', 'previously trashed', '--yes', 'saved', 'uncertain', 'exit status']) expect(streams.stdout.join('')).toContain(guidance);
       expect(streams.stdout.join('')).not.toMatch(/reserved|unavailable/);
+      for (const guidance of ['--all-matches', 'only with --name', 'one eligible', 'unique', 'independently', 'clear-trash', 'already empty', 'exit status 0']) expect(streams.stdout.join('')).toContain(guidance);
       expect(streams.stderr).toEqual([]);
     }
   });
