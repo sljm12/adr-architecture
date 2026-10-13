@@ -2,13 +2,15 @@
 
 **Input**: Design documents from `specs/012-cli-delete-diagrams/`
 **Prerequisites**: `plan.md`, `spec.md`, `research.md`, `data-model.md`, `contracts/cli.md`, `contracts/openapi.json`, `quickstart.md`, and `.specify/memory/constitution.md`.
-**Tests**: Required by FR-016 and the constitution. Write the tests before their implementation and verify that they fail for the intended reason. PostgreSQL tests must actually execute; skipped database tests do not prove atomicity or concurrency safety.
+**Tests**: Required by FR-016, FR-021, and the constitution. Write the tests before their implementation and verify that they fail for the intended reason. PostgreSQL tests must actually execute; skipped database tests do not prove atomicity or concurrency safety.
 **Organization**: Shared safety prerequisites followed by independently testable story increments. All paths are relative to the repository root. Extend existing modules and fixtures; no new dependencies, public document fields, token registry, authentication, or UI controls.
+
+**Updated**: 2026-10-13. T001–T037 retain completed single-root implementation history; their marks do not prove the expanded scope. Execute new unchecked tasks T038–T067 in the update phases below. No new migration is required. SC-005 remains unverified until representative author trials are available.
 
 ## Format: `[ID] [P?] [Story] Description`
 
 - `[P]` identifies work that can run alongside the explicitly named independent work after its prerequisites are complete.
-- `[US1]`, `[US2]`, and `[US3]` map to the specification's stories.
+- `[US1]` through `[US5]` map to the specification's stories. Completed baseline phases retain their historical order; new phases place P1 stories US4/US5 before the P2 US3 update.
 - Tasks sharing a file run sequentially even when their stories differ.
 
 ## Phase 1: Setup (Shared Infrastructure)
@@ -104,7 +106,98 @@
 - [X] T036 Run focused story tests, actual `RUN_POSTGRES_TESTS=1` database tests with a dedicated configured database, full `npm test`, `npm run build`, and recovery/save/list/export Playwright regressions per `specs/012-cli-delete-diagrams/quickstart.md`; record results and blockers there, treating unavailable/skipped database or browser checks as outstanding evidence rather than passes.
 - [X] T037 Validate SC-001–SC-004 against recorded workflow outcomes and arrange representative first-time-author help-only trials for SC-005 in `specs/012-cli-delete-diagrams/quickstart.md`; record participant count, completion times, and the percentage completing intended selection/mode/consent within two minutes, or explicitly retain that criterion as unverified until participants are available.
 
-## Dependencies & Execution Order
+## Phase 7: Update Setup (Shared Infrastructure)
+
+**Purpose**: Reuse the completed baseline and establish the collection-writer/test reach without rebuilding infrastructure.
+
+- [ ] T038 Inspect collection coordination reach in `backend/src/persistence/diagram-repository.ts`, `backend/src/persistence/graph-transaction.ts`, `backend/src/services/diagram-service.ts`, and `backend/src/services/adr-service.ts`; audit every public graph writer, top-level creation caller, repository proxy/test double, and synchronous memory-create consumer; record table-before-row ordering, awaited MaybePromise callers, and reused migration 0008 in `specs/012-cli-delete-diagrams/quickstart.md`.
+- [ ] T039 Extend `backend/tests/component-recovery-fixture.ts` with disjoint exact-name roots, nested matching roots, near names, mixed-status/independent batches, representative cross-root internal/external references, active-descendant blockers, and complete document/ADR/index/provenance/revision snapshots; keep existing fixture callers compatible.
+
+## Phase 8: Collection Foundation (Blocking Prerequisites)
+
+**Purpose**: Shared strict boundaries, one transaction, membership coordination, and rollback for both new actions. Complete T038–T045 before story implementations.
+
+### Foundation Tests
+
+- [ ] T040 [P] Add collection target/preview/confirmation/impact/result schema tests in `shared/tests/diagram-deletion-collection-validation.test.ts` aligned with `specs/012-cli-delete-diagrams/contracts/openapi.json`; reject unknown fields, blank names, malformed/repeated roots/tokens, duplicate affected UUIDs, inconsistent target/mode/count/status, missing matching roots and invalid hierarchy order; accept zero-item clear-Trash impact and retain legacy schema behavior.
+- [ ] T041 [P] Add collection coordination tests in `backend/tests/persistence/diagram-deletion-collection-transactions.test.ts` for memory and real PostgreSQL: one transaction-bound diagram/ADR pair, table-before-row ordering, ordinary writer/create/ADR coordination, opposite graph order, nested transaction reentry, complete rollback after all roots disappear, and queued unrelated creation surviving rollback; use deterministic barriers instead of timing sleeps.
+
+### Foundation Implementation
+
+- [ ] T042 Add strict collection schemas and inferred types in `shared/src/validation/schemas.ts` and exports in `shared/src/index.ts` using T040 and the data model; keep existing single-root shapes unchanged, enforce target-specific nonempty roots/eligibility, unique affected identities/depth order and matching count, and expose no internal revision or ADR content.
+- [ ] T043 Add `withCollectionTransaction` to `DiagramRepositoryLike` and both implementations in `backend/src/persistence/diagram-repository.ts`; PostgreSQL acquires SHARE ROW EXCLUSIVE on diagrams before collection discovery, and existing graph transactions/top-level create acquire ROW EXCLUSIVE before row locks/writes; memory queues collection actions, graph writers and top-level creation with scoped reentry bypass and full diagram/provenance/revision rollback; await affected creation callers and update proxies/test doubles identified by T038.
+- [ ] T044 Add `GraphTransaction.runCollection` in `backend/src/persistence/graph-transaction.ts` with one transaction-scoped diagram/ADR pair and whole-collection ADR/index snapshot restoration in memory, reusing `backend/src/persistence/adr-repository.ts` snapshot support; preserve ordinary graph transactions and handle empty collections without a root UUID.
+- [ ] T045 Extract reusable validated gathering, saved-state hashing, depth ordering, and complete-union blocker checks from `backend/src/services/diagram-service.ts`; build versioned collection snapshots binding target/mode, sorted selected roots, full eligible match or Trash membership, unique contents/revisions/provenance and required ancestors; preserve existing single-root hashes/behavior and avoid per-root checks falsely blocking references within the removed union.
+
+**Checkpoint**: T040/T041 and existing single-root schemas, graph/revision and rollback tests pass; supported writers cannot change collection membership inside preview/execution and no locks span user input.
+
+## Phase 9: User Story 4 - Delete every exact-name match (Priority: P1)
+
+**Goal**: Add explicit name-only --all-matches with both modes, unique recursive scope, reviewed identity sets and invocation-wide atomicity.
+**Independent Test**: Delete populated disjoint and nested exact-name hierarchies in each mode; verify every eligible match is reported, each affected UUID changes once, unrelated near names remain, disjoint Trash batches restore independently, and any stale/blocking/failing member prevents the entire operation.
+
+### Tests for User Story 4
+
+- [ ] T046 [P] [US4] Add real all-matches preview/execute contract tests in `backend/tests/contract/diagram-deletion-all-matches.test.ts` for zero/one/multiple matches, exact owner-derived names and Unicode/UUID-like names, active versus mixed-status eligibility, nested selected roots, deterministic unique summaries/counts, target/root/token tampering, added/removed/renamed/eligibility-changed matches and unrelated edits; validate actual responses against collection schemas/OpenAPI and retain default ambiguity refusal.
+- [ ] T047 [P] [US4] Add memory/PostgreSQL all-matches persistence tests in `backend/tests/persistence/diagram-deletion-all-matches.test.ts` for disjoint independently recoverable batches, nested deduplication, earlier provenance, internal cross-root replacement/link success, external blockers, raw owned-row removal, outside preservation and whole-invocation rollback after one subtree and after the final root is removed.
+- [ ] T048 [P] [US4] Add listening-HTTP CLI/client all-matches tests in `cli/tests/delete-all-matches.test.ts` for literal name forwarding, both modes, root/count/unique preview output, cancellation/EOF/interruption/non-TTY and --yes, invalid UUID/no-name/repeated flags, default single-root endpoint compatibility, one execution only, stale barriers and malformed/mismatched/lost responses without false success or token disclosure.
+
+### Implementation for User Story 4
+
+- [ ] T049 [US4] Implement all-matches preview in `backend/src/services/diagram-service.ts` under runCollection; search every eligible exact resolved saved name without truncation, report all matching root IDs even when nested, gather/deduplicate the recursive union using T045, reject zero matches, and return collection impact without mutation.
+- [ ] T050 [US4] Implement all-matches execution in `backend/src/services/diagram-service.ts` under one runCollection transaction; compare reviewed target/root IDs/token and full eligible membership before mutation, reject any stale difference without retargeting, allocate one Trash batch per outermost selected subtree while preserving earlier batches, or purge owned ADRs and diagrams deepest-first once across the complete union; map restrictive-constraint failures to actionable rolled-back errors.
+- [ ] T051 [US4] Register additive POST `/diagrams/deletion-set-preview` and `/diagrams/deletion-set` in `backend/src/api/recovery-routes.ts` using strict collection request schemas and existing `backend/src/api/errors.ts` diagnostics; dispatch the implemented all-matches target and keep clear-trash safely unavailable until US5 is complete, without changing legacy browser/single-root routes.
+- [ ] T052 [US4] Extend `cli/src/api-client.ts` with validated collection preview/execute methods; verify target/mode, sorted root set, unique affected summaries/count and committed result against the reviewed impact, send target/root IDs/token exactly once, and treat execution transport/parse/identity mismatches as uncertain without automatic retry.
+- [ ] T053 [US4] Wire name-only --all-matches parsing in `cli/src/main.ts` and extend `cli/src/delete-command.ts` to reuse preview/consent/output for collections; print all matched roots and unique affected counts, retain single-root dispatch without the flag, and preserve literal selectors, terminal escaping, streams and exit codes in `cli/src/output.ts` where needed.
+
+**Checkpoint**: US4 works with prompts and scripts in both modes and restores disjoint batches using existing recovery. No unrelated diagram is included or partially changed.
+
+## Phase 10: User Story 5 - Clear Trash permanently (Priority: P1)
+
+**Goal**: Add diagrams clear-trash [--yes], permanently removing exactly all reviewed trashed diagrams while protecting active data; empty Trash succeeds without confirmation/execution.
+**Independent Test**: Clear mixed nested/disjoint Trash batches with full contents and ADRs, inspect raw absence and active-state equality, then verify empty success, cancellation, changing membership/content, active descendants, outside dependencies and injected failure.
+
+### Tests for User Story 5
+
+- [ ] T054 [P] [US5] Add clear-Trash HTTP/schema contract tests in `backend/tests/contract/diagram-deletion-clear-trash.test.ts` for all-batch trashed-only impact, zero-item preview, rejected selector/mode/unknown fields, empty root set, count/status invariants, membership/content/provenance/ancestor changes, token/target tampering, and unchanged empty confirmation no-op per OpenAPI; verify stale rejection before any removal.
+- [ ] T055 [P] [US5] Add memory/PostgreSQL clear-Trash persistence tests in `backend/tests/persistence/diagram-deletion-clear-trash.test.ts` for raw removal of every trashed owned artifact/ADR/index/revision/provenance, nested and independent batches, internal references, active ancestors/owners preserved, active-descendant and external blockers, no changes on empty Trash and full rollback after partial and final-root purge.
+- [ ] T056 [P] [US5] Add listening-HTTP clear-Trash command tests in `cli/tests/clear-trash.test.ts` for empty exit-0/count-zero without prompt or execute, nonempty irreversible preview, interactive and --yes consent, decline/EOF/interruption/no scripted consent, rejection of selectors/modes/all-matches/output options, stale membership/content barriers and uncertain/mismatched results without retries or false success.
+
+### Implementation for User Story 5
+
+- [ ] T057 [US5] Implement clear-Trash preview/execute branches in `backend/src/services/diagram-service.ts` using T045 and runCollection; select exactly all status=trashed IDs across batches without expanding into active descendants, return an empty impact when appropriate, compare full membership/token under execution coordination, block active/outside references, and purge the complete reviewed set once with atomic rollback and no recovery remnants.
+- [ ] T058 [US5] Enable clear-trash dispatch and strict target validation in `backend/src/api/recovery-routes.ts` and align existing error mapping in `backend/src/api/errors.ts` where needed; expose empty previews and unchanged empty execution as successful zero-item results, reject changed empty/nonempty membership as stale, and preserve the all-matches/legacy route contracts.
+- [ ] T059 [US5] Add clear-Trash handling to the collection flow in `cli/src/delete-command.ts` and client validation in `cli/src/api-client.ts`; print already-empty success and return before consent/execution when count is zero, otherwise show irreversible all-Trash scope, authorize only the reviewed set once, and verify committed identities/count before success.
+- [ ] T060 [US5] Wire `diagrams clear-trash [--yes]` parsing in `cli/src/main.ts`; reject name/UUID/mode/all-matches/output flags, preserve established statuses and keyboard consent, and keep default deletion/list/export dispatch unchanged.
+
+**Checkpoint**: US5 works independently of name selection, empty Trash is prompt-free, and active artifacts remain intact in every successful or rejected clear operation.
+
+## Phase 11: User Story 3 - Updated targeting diagnostics and help (Priority: P2)
+
+**Goal**: Explain both new actions and default ambiguity safely while retaining completed single-root failure behavior.
+**Independent Test**: Use help to choose a UUID versus --all-matches, understand permanent clearing and mode eligibility, and distinguish committed/empty success, usage errors, cancellation, stale confirmation and uncertain execution without disclosure or unintended changes.
+
+### Tests for User Story 3 Update
+
+- [ ] T061 [P] [US3] Extend `backend/tests/contract/diagram-deletion-stale.test.ts` for default ambiguity guidance naming UUID and --all-matches, no retargeting between single-root/collection actions, shared error codes/remedies and saved-state preservation after collection rejection; retain the original both-mode stale and exact-name matrix.
+- [ ] T062 [P] [US3] Extend `cli/tests/cli-help.test.ts` and `cli/tests/delete-command.test.ts` for default single-match behavior, flag restrictions, both status scopes, overlap/count explanations, independent Trash recovery, irreversible clear scope/empty success, script consent, usage/failure streams and response-loss verification; include terminal-control names without changing literal matching.
+
+### Implementation for User Story 3 Update
+
+- [ ] T063 [US3] Complete ambiguity remedies in `backend/src/services/diagram-service.ts` and help/terminal-safe actionable diagnostics in `cli/src/main.ts`, `cli/src/delete-command.ts`, and `cli/src/output.ts` against T061/T062; explain all-matches versus UUID, both modes, recursive unique scope, permanent clear, empty success and separate consent without exposing tokens or ADR contents.
+
+## Phase 12: Update Polish & Cross-Cutting Validation
+
+**Purpose**: Prove writer races and compatibility, document both commands and record new evidence separately from the completed baseline.
+
+- [ ] T064 Add and run real two-connection PostgreSQL barrier races in `backend/tests/persistence/diagram-deletion-collection-concurrency.test.ts` for both new actions: top-level matching creation, child creation, owner rename, save/ADR/link edit and Trash/restore before versus behind collection locks, opposite root ordering and ordinary writer table-before-row deadlock protection; prove pre-lock changes reject stale consent, queued writes preserve valid post-operation state, no partial writes/UUID resurrection, and locks are released before user confirmation. Write these tests before changing the exercised production paths and finalize after US4/US5.
+- [ ] T065 [P] Update `README.md` with --all-matches and clear-trash examples, exact/status eligibility, overlap/independent recovery, irreversible scope, empty no-op, consent/status/error behavior and uncertain-outcome verification; retain existing connection, migration-0008 and list/export/recovery guidance, stating no new migration/dependency.
+- [ ] T066 Extend `backend/tests/persistence/diagram-deletion-scale.test.ts` for overlapping matches, disjoint graphs and clear Trash using plan fixture sizes; record actual preview/execute p95 and writer delay in `specs/012-cli-delete-diagrams/quickstart.md` and document any failed budget without weakening integrity checks.
+- [ ] T067 Run focused new schemas/CLI/HTTP/memory tests, actual RUN_POSTGRES_TESTS=1 persistence/race tests, existing single-root deletion/graph/revision compatibility, full `npm test`, `npm run build`, and relevant list/export/recovery/stale-save Playwright checks; record commands, environment, FR-001–FR-021/SC-001–SC-008 evidence, results and unavailable/skipped checks in `specs/012-cli-delete-diagrams/quickstart.md` without claiming them as passes; retain historical evidence and SC-005 as unverified unless real first-time-author trials establish it.
+
+**Checkpoint**: Both requested features have new automated safety evidence, legacy workflows remain compatible, and completion reporting distinguishes tests from unverified usability trials.
+
+## Baseline Dependencies & Execution Order (T001–T037)
 
 ### Phase Dependencies
 
@@ -140,7 +233,7 @@ After US1, write permanent API/dependency tests (T021), storage purge/rollback t
 
 After both modes, write CLI/help/transport tests (T028), API invalidation tests (T029), PostgreSQL race tests (T030), and browser stale-save regressions (T031) concurrently. Apply demonstrated guard/diagnostic fixes sequentially in shared modules.
 
-## Implementation Strategy
+## Baseline Implementation Strategy (Completed)
 
 ### MVP First
 
@@ -156,3 +249,42 @@ Add US2 physical purge and prove raw storage removal/rollback. Add US3's full di
 - Direct administrative SQL is outside the supported graph-lock/revision protocol; any future public writer must adopt it.
 - Never automatically retry a deletion or refresh stale consent. Execution response loss requires saved-state verification before another invocation.
 - No implementation or destructive deletion is performed by generating this task list.
+
+## Update Dependencies & Execution Order (T038–T067)
+
+```text
+Completed baseline: US1 recoverable Trash, US2 permanent deletion, US3 single-root safety
+  -> Update setup (T038-T039)
+    -> Collection foundation (T040-T045)
+      -> US4: all exact-name matches (T046-T053)
+        -> US5: clear Trash (T054-T060)
+          -> US3 update: help/diagnostics (T061-T063)
+            -> Collection races/docs/scale/full validation (T064-T067)
+```
+
+- T038 audits reach; T039 supplies fixtures. T040/T041 are independent test files after setup; implement T042 then T043/T044 and T045 sequentially because interfaces and source files overlap. Collection schemas are common to both new stories. Run existing US1/US2 tests after the extraction and writer coordination changes; their completed baseline tasks are not repeated.
+- T046/T047/T048 may be drafted together after foundation. Service T049/T050 precedes routes T051; client T052 precedes flow/parser T053. Confirm US4 independently before US5. T054/T055/T056 then form an independent test group, followed by T057 through T060 in order.
+- US5's data behavior is independent of exact-name deletion, but reuses the endpoints/client flow delivered by US4. Both stories edit the same modules; do not implement them concurrently. Invalid all-matches or clear-trash syntax is handled in their own P1 tasks, not deferred to US3.
+- US3 tests T061/T062 use separate backend and CLI files after both commands; T063 updates shared remedies/help. US1 and US2 need no new dedicated phase: preserve their existing acceptance and regression tests. US3 is not newly complete until T061–T063 pass.
+- Draft T064's race assertions after foundation and before implementing the exercised US4/US5 service paths; execute/finalize them after both stories. This test-first scheduling does not permit marking T064 complete before the actions exist. T065 documentation may run alongside T064 after story completion; both use separate files. T066 measurements precede final T067 checks/evidence. T066 and T067 update the same quickstart file and run sequentially.
+- Requirements coverage: FR-001–FR-016 retain baseline tests plus compatibility T067; FR-017 is T040/T046/T048/T049/T053; FR-018 is T047/T050; FR-019–FR-020 are T054–T060; FR-021 and collection revisions/atomicity are T041/T046/T047/T054/T055/T064. SC-006 maps to US4, SC-007 to US5, and SC-008 to stale/rollback/race checks; T067 records all outcomes without fabricating SC-005 participant evidence.
+
+## Update Parallel Examples
+
+### US4
+
+After foundation, draft API tests in `backend/tests/contract/diagram-deletion-all-matches.test.ts` (T046), persistence/recovery tests in `backend/tests/persistence/diagram-deletion-all-matches.test.ts` (T047), and CLI tests in `cli/tests/delete-all-matches.test.ts` (T048) concurrently. Implement service, routes, client and flow sequentially after the tests fail for the missing behavior.
+
+### US5
+
+After US4's reusable collection flow, draft HTTP tests in `backend/tests/contract/diagram-deletion-clear-trash.test.ts` (T054), persistence/active-data protection tests in `backend/tests/persistence/diagram-deletion-clear-trash.test.ts` (T055), and CLI empty/consent tests in `cli/tests/clear-trash.test.ts` (T056) concurrently. Implement T057–T060 sequentially; do not edit the service or client alongside US4 work.
+
+### US3 Update
+
+After both commands, draft backend ambiguity/stale compatibility tests (T061) and CLI help/diagnostic tests (T062) concurrently. Apply T063 only after both assertions are available. Baseline US1/US2 parallel test examples above remain historical; their tests are rerun for compatibility, not regenerated.
+
+## Update Implementation Strategy
+
+The smallest new deliverable is setup/foundation plus US4 in both modes, including collection confirmation/rollback and correct recovery batches. Default single-match refusal remains the safe behavior when the flag is absent. Keep clear-trash explicitly unavailable until US5 passes; US4 alone is not completion of the user's full request.
+
+Then add US5, validate it independently with active data alongside Trash, complete US3 help/diagnostics, and finish real concurrency, scale, documentation and compatibility evidence. No new dependency, migration, graphical control, arbitrary UUID list, or retry infrastructure is included. Pending tasks are unchecked; only implementation evidence may change their marks.

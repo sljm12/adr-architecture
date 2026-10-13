@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "ADR Diagram Confirmed Deletion API",
-    "version": "1.0.0",
-    "description": "Additive contract. Existing list, DELETE-to-Trash and restore contracts remain unchanged. Tokens bind both modes to saved contents/revisions; never automatically refresh a stale execution."
+    "version": "1.1.0",
+    "description": "Additive collection deletion contract for all exact-name matches and clearing Trash. Existing single-root, list, DELETE-to-Trash and restore shapes remain unchanged. Tokens bind reviewed identities, match/Trash membership and saved contents/revisions; never automatically refresh stale execution."
   },
   "servers": [
     {
@@ -11,6 +11,35 @@
     }
   ],
   "paths": {
+    "/diagrams/deletion-set-preview": {
+      "post": {
+        "operationId": "previewDiagramDeletionSet",
+        "summary": "Preview every eligible exact-name match or all saved Trash",
+        "description": "Resolve under collection writer coordination. All-matches uses exact resolved names and mode eligibility; zero matches return 404. Clear Trash includes only trashed diagrams, blocks active descendants/dependencies and may return zero affected entries. No mutation. Empty Trash is a successful no-op; CLI does not execute or prompt.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CollectionPreview" } } } },
+        "responses": {
+          "200": { "description": "Consistent unique collection preview", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CollectionImpact" } } } },
+          "400": { "$ref": "#/components/responses/Invalid" },
+          "404": { "$ref": "#/components/responses/Missing" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "500": { "$ref": "#/components/responses/Failed" }
+        }
+      }
+    },
+    "/diagrams/deletion-set": {
+      "post": {
+        "operationId": "executeDiagramDeletionSet",
+        "summary": "Atomically execute the complete reviewed collection",
+        "description": "Explicit client consent required. Recompute eligible matches/Trash and saved state under collection coordination solely to compare target/root IDs/token; reject changed membership or saved contents with DELETE_IMPACT_CHANGED. No implicit retargeting or partial per-root commits. Check dependencies against the whole union. Return pre-action summaries only after commit. Clearing never removes active data. No automatic execution retry; response loss is uncertain. A valid unchanged empty-Trash confirmation is a zero-item no-op, though CLI never sends one.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CollectionConfirmation" } } } },
+        "responses": {
+          "200": { "description": "Committed collection or unchanged empty-Trash no-op", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CollectionResult" } } } },
+          "400": { "$ref": "#/components/responses/Invalid" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "500": { "$ref": "#/components/responses/Failed" }
+        }
+      }
+    },
     "/diagrams/deletion-preview": {
       "post": {
         "operationId": "previewDiagramDeletion",
@@ -105,6 +134,73 @@
   },
   "components": {
     "schemas": {
+      "CollectionTarget": {
+        "oneOf": [
+          {
+            "type": "object", "additionalProperties": false,
+            "required": ["kind", "name", "mode"],
+            "properties": {
+              "kind": { "type": "string", "enum": ["all-matches"] },
+              "name": { "type": "string", "minLength": 1, "pattern": "\\S", "description": "Complete literal saved summary name; no trimming, case folding or partial matching." },
+              "mode": { "$ref": "#/components/schemas/Mode" }
+            }
+          },
+          {
+            "type": "object", "additionalProperties": false,
+            "required": ["kind"],
+            "properties": { "kind": { "type": "string", "enum": ["clear-trash"] } }
+          }
+        ]
+      },
+      "CollectionPreview": {
+        "type": "object", "additionalProperties": false,
+        "required": ["target"],
+        "properties": { "target": { "$ref": "#/components/schemas/CollectionTarget" } }
+      },
+      "CollectionRootIds": {
+        "type": "array", "uniqueItems": true,
+        "items": { "type": "string", "format": "uuid" },
+        "description": "Sorted UUIDs of every eligible exact-name matching root, including nested matches; nonempty for all-matches, empty for clear-trash. Execution must equal the previewed set, not arbitrary supplied targets."
+      },
+      "CollectionAffected": {
+        "type": "array",
+        "items": { "$ref": "#/components/schemas/DiagramSummary" },
+        "description": "Unique by UUID, ordered by absolute saved hierarchy depth then UUID. Nonempty for all-matches, includes every selected root; Trash mode members active. Clear-trash allows empty and all members must be trashed. Strict runtime schemas enforce these cross-field rules and summary identity uniqueness."
+      },
+      "CollectionConfirmation": {
+        "type": "object", "additionalProperties": false,
+        "required": ["target", "rootDiagramIds", "confirmationToken"],
+        "properties": {
+          "target": { "$ref": "#/components/schemas/CollectionTarget" },
+          "rootDiagramIds": { "$ref": "#/components/schemas/CollectionRootIds" },
+          "confirmationToken": { "$ref": "#/components/schemas/Token" }
+        }
+      },
+      "CollectionImpact": {
+        "type": "object", "additionalProperties": false,
+        "required": ["target", "mode", "rootDiagramIds", "affectedDiagrams", "affectedCount", "confirmationToken"],
+        "description": "Runtime validation enforces mode=target.mode for all-matches and permanent for clear-trash; affectedCount equals affectedDiagrams.length; roots and eligibility obey target-specific rules.",
+        "properties": {
+          "target": { "$ref": "#/components/schemas/CollectionTarget" },
+          "mode": { "$ref": "#/components/schemas/Mode" },
+          "rootDiagramIds": { "$ref": "#/components/schemas/CollectionRootIds" },
+          "affectedDiagrams": { "$ref": "#/components/schemas/CollectionAffected" },
+          "affectedCount": { "type": "integer", "minimum": 0 },
+          "confirmationToken": { "$ref": "#/components/schemas/Token" }
+        }
+      },
+      "CollectionResult": {
+        "type": "object", "additionalProperties": false,
+        "required": ["target", "mode", "rootDiagramIds", "affectedDiagrams", "affectedCount"],
+        "description": "Same target, mode, reviewed root set, unique pre-action summaries and count as the impact. Runtime cross-field validation matches CollectionImpact. No token or saved ADR content returned.",
+        "properties": {
+          "target": { "$ref": "#/components/schemas/CollectionTarget" },
+          "mode": { "$ref": "#/components/schemas/Mode" },
+          "rootDiagramIds": { "$ref": "#/components/schemas/CollectionRootIds" },
+          "affectedDiagrams": { "$ref": "#/components/schemas/CollectionAffected" },
+          "affectedCount": { "type": "integer", "minimum": 0 }
+        }
+      },
       "Mode": {
         "type": "string",
         "enum": [

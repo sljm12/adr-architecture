@@ -1,5 +1,40 @@
 # Validation Guide: CLI Diagram Deletion
 
+## Update validation (2026-10-13)
+
+The recorded phase evidence below covers the earlier single-root implementation only. --all-matches and clear-trash are planned, not implemented by this workflow. Use disposable data; clearing Trash permanently removes all retained diagrams and ADRs. Existing SC-005 participant evidence remains unverified; historical task completion does not prove SC-006–SC-008.
+
+After implementing the update, retain the setup/check commands below and run the new scenarios through the real HTTP CLI, memory repositories, and PostgreSQL with database tests enabled. No new migration is required; retain applied migration 0008. Authoritative request/response fields are in [contracts/openapi.json](contracts/openapi.json), command syntax in [contracts/cli.md](contracts/cli.md), and entity rules in [data-model.md](data-model.md).
+
+Create several exact-name Payments roots across Context graphs, matching parent/child names, near matches, mixed active/Trash statuses, independent recovery batches, and representative ADR replacements/links. Record complete saved state and raw normalized row counts before each destructive test; recreate fixtures between modes.
+
+```powershell
+npm run cli -- diagrams delete --name "Payments" --all-matches --trash
+npm run cli -- diagrams delete --name "Payments" --all-matches --permanent --yes
+npm run cli -- diagrams clear-trash
+npm run cli -- diagrams clear-trash --yes
+```
+
+| Scenario | Expected result |
+|---|---|
+| Default duplicate name | Existing command refuses and lists candidates; guidance explains UUID or --all-matches. |
+| Zero/one/several matches | Zero fails safely; one retains single-root scope; several select every eligible exact match and unique descendant union. |
+| Eligibility and near matches | Trash selects active exact matches only; permanent includes trashed matches; partial/case/whitespace variants outside selected subtrees stay unchanged. |
+| Overlapping and disjoint roots | Each UUID listed/processed once; selected nested matches still reported; restore each disjoint outermost Trash batch separately with identities/content intact. |
+| Cross-root references | Dependencies wholly within the permanent union succeed; outside dependencies block the entire invocation without detachment. |
+| Invalid flag/action usage | --all-matches with UUID/no name and clear-trash with selectors/modes/output flags exit 2 without mutation. |
+| Empty Trash | Exit 0, already-empty message/count zero; no consent prompt or execution request, including without --yes. |
+| Nonempty clear/cancel | Full named preview, irreversible warning/count; cancel/EOF/no scripted consent exit 1 with saved state unchanged. |
+| Confirmed clear | Every trashed diagram/artifact/ADR/provenance row absent; active documents and owned artifacts unchanged. |
+| Active descendant/external blocker | Clearing fails without any removal and identifies the blocker/next action. |
+| Stale set/content | New matching root, owner rename, Trash/restore, or affected edit after preview rejects the whole action; queued supported edits remain intact. |
+| Rollback across graphs | Inject failure after removing one subtree and after removing the last root; all documents, ADR/indexes, revisions and provenance restore in memory/PostgreSQL. |
+| Interrupted result | Suppress response after actual commit; uncertain outcome advice, one execution only, no false rollback/success claim. |
+
+Use two real PostgreSQL connections and barriers: writer commits before collection lock -> stale rejection; writer starts behind collection lock -> waits, then acts on post-operation state without resurrection. Cover top-level matching create, child create, owner rename, ADR/link writes and Trash/restore. Run overlapping/disjoint roots in opposite orders; verify table-before-row order prevents deadlocks. Memory queues must preserve unrelated creation that resumes after rollback. These tests must not substitute a single-graph transaction loop for invocation-wide atomicity.
+
+After focused schemas/CLI/HTTP/persistence tests pass, run existing single-root list/export/recovery/save compatibility, full Vitest/build and relevant Playwright regressions. Record actual PostgreSQL runs separately from skipped tests. Measure the plan's p95 budget for overlapping matches, disjoint graphs and clear Trash; update SC-006–SC-008 evidence only from new checks. Do not overwrite historical evidence or claim usability trials from automated timings.
+
 ## Writer and revision coverage (T001)
 
 | Public writer | Coordination / repository operation | Revision coverage |
@@ -162,7 +197,7 @@ the full product usability gate still requires those trials.
 
 ## Setup
 
-Use Node.js 22, repository dependencies and a dedicated PostgreSQL database. Follow README for pending migrations 0001–0007; retain applied migrations. Then apply the planned additive migration before updated runtime:
+Use Node.js 22, repository dependencies and a dedicated PostgreSQL database. Follow README for pending migrations 0001–0007; retain applied migrations. Apply existing migration 0008 only if not yet applied; this update adds no migration:
 
 ```powershell
 npm install
