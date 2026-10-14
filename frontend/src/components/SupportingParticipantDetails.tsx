@@ -4,8 +4,11 @@ import { diagramClient } from '../api/diagram-client';
 
 export function SupportingParticipantDetails({ document, component }: { document: DiagramDocument; component: Component }) {
   const [context, setContext] = useState<ComponentContext | null>(null), [error, setError] = useState(''), [retry, setRetry] = useState(0);
+  const contextKey = `${document.id}:${document.kind}:${component.id}:${component.sourceComponentId}:${retry}`;
+  const [previousContextKey, setPreviousContextKey] = useState(contextKey);
+  if (contextKey !== previousContextKey) { setPreviousContextKey(contextKey); setContext(null); setError(''); }
   useEffect(() => {
-    let current = true; setContext(null); setError('');
+    let current = true;
     if (document.kind === 'component') diagramClient.componentContext(document.id).then(value => { if (current) setContext(value); }).catch(error => { if (current) setError(error instanceof Error ? error.message : 'Could not resolve the source.'); });
     return () => { current = false; };
   }, [document.id, document.kind, component.id, component.sourceComponentId, retry]);

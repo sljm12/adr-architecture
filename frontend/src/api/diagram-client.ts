@@ -3,9 +3,9 @@ import { componentAvailabilitySchema, componentContextSchema, type ComponentAvai
 export class DiagramApiError extends Error { constructor(message: string, readonly status: number, readonly details: Record<string, unknown> = {}) { super(message); this.name = 'DiagramApiError'; } }
 export function formatDiagramApiError(error: unknown): string {
   if (!(error instanceof DiagramApiError)) return error instanceof Error ? error.message : 'Request failed';
-  const blockers = Array.isArray(error.details.diagramBlockers) ? error.details.diagramBlockers : [];
-  const details = blockers.map((b: any) => `${b.name} (${b.status}; child ${b.diagramId}${b.componentId ? `; occurrence/component ${b.componentId}` : ''}${b.sourceComponentId ? `; source ${b.sourceComponentId}` : ''}): ${b.nextAction}`).join(' ');
-  const adrBlockers = Array.isArray(error.details.blockers) ? error.details.blockers.map((b: any) => `${b.title} (${b.adrId}): ${b.reason}`).join(' ') : '';
+  const blockers = Array.isArray(error.details.diagramBlockers) ? error.details.diagramBlockers.filter((value): value is Record<string, unknown> => typeof value === 'object' && value !== null) : [];
+  const details = blockers.map((b) => `${b.name} (${b.status}; child ${b.diagramId}${b.componentId ? `; occurrence/component ${b.componentId}` : ''}${b.sourceComponentId ? `; source ${b.sourceComponentId}` : ''}): ${b.nextAction}`).join(' ');
+  const adrBlockers = Array.isArray(error.details.blockers) ? error.details.blockers.filter((value): value is Record<string, unknown> => typeof value === 'object' && value !== null).map((b) => `${b.title} (${b.adrId}): ${b.reason}`).join(' ') : '';
   return [error.message, details, adrBlockers].filter(Boolean).join(' ');
 }
 export type ComponentRemovalResult = { document: DiagramDocument; relationshipCount: number };

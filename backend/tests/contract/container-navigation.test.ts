@@ -1,3 +1,4 @@
+import type * as Domain from '../../../shared/src/index';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/api/app';
 import { DiagramRepository } from '../../src/persistence/diagram-repository';
@@ -29,8 +30,8 @@ describe('saved container navigation contract', () => {
       expect(repository.get(parent.id)).toEqual(parentBefore);
       const rows = (await app.inject('/diagrams')).json();
       expect(rows).toHaveLength(2);
-      expect(rows.find((row: any) => row.id === child.id)).toMatchObject({ name: 'Payments', kind: 'container', scope: child.scope });
-      expect(rows.every((row: any) => !('components' in row))).toBe(true);
+      expect(rows.find((row: Domain.DiagramSummary) => row.id === child.id)).toMatchObject({ name: 'Payments', kind: 'container', scope: child.scope });
+      expect(rows.every((row: Domain.DiagramSummary) => !('components' in row))).toBe(true);
     }
   });
 
@@ -44,7 +45,7 @@ describe('saved container navigation contract', () => {
     for (const path of ['/diagrams', '/diagrams/trash']) {
       if (path.endsWith('trash')) repository.trash(child.id);
       const rows = (await app.inject(path)).json();
-      expect(rows.find((row: any) => row.id === child.id)).toMatchObject({ name: 'Current owner', kind: 'container', createdAt: child.createdAt, scope: { parentDiagramId: parent.id, parentDiagramName: 'Current overview', softwareSystemName: 'Current owner' } });
+      expect(rows.find((row: Domain.DiagramSummary) => row.id === child.id)).toMatchObject({ name: 'Current owner', kind: 'container', createdAt: child.createdAt, scope: { parentDiagramId: parent.id, parentDiagramName: 'Current overview', softwareSystemName: 'Current owner' } });
     }
   });
 
@@ -55,10 +56,10 @@ describe('saved container navigation contract', () => {
     const other = await app.inject({ method: 'POST', url: `/diagrams/${otherParentId}/components/${otherOwnerId}/container-diagram` });
     const otherChild = { ...other.json(), name: child.name };
     expect((await app.inject({ method: 'PUT', url: `/diagrams/${otherChild.id}`, payload: otherChild })).statusCode).toBe(200);
-    const rows = (await app.inject('/diagrams')).json().filter((row: any) => row.kind === 'container');
-    expect(rows.map((row: any) => row.scope.parentDiagramId).sort()).toEqual([parent.id, otherParentId].sort());
-    expect(new Set(rows.map((row: any) => row.id)).size).toBe(2);
-    expect(rows.map((row: any) => row.name)).toEqual(['Payments', 'Payments']);
+    const rows = (await app.inject('/diagrams')).json().filter((row: Domain.DiagramSummary) => row.kind === 'container');
+    expect(rows.map((row: Domain.DiagramSummary) => row.scope!.parentDiagramId).sort()).toEqual([parent.id, otherParentId].sort());
+    expect(new Set(rows.map((row: Domain.DiagramSummary) => row.id)).size).toBe(2);
+    expect(rows.map((row: Domain.DiagramSummary) => row.name)).toEqual(['Payments', 'Payments']);
   });
 
   it.each(['/diagrams', '/diagrams/trash'])('rejects broken ownership in %s rather than publishing a valid-looking summary', async path => {

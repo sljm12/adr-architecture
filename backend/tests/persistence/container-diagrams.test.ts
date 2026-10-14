@@ -191,7 +191,7 @@ function instrumentGraphRepository(
       if (property === 'withGraphTransaction') {
         return async (parentDiagramId:string, childDiagramIds:string[], action:(transactionRepository:DiagramRepositoryLike, transaction?:unknown) => unknown) => {
           await beforeTransaction?.();
-          return (target.withGraphTransaction as any).call(target, parentDiagramId, childDiagramIds, (transactionRepository:DiagramRepositoryLike, transaction:unknown) =>
+          return (target.withGraphTransaction ).call(target, parentDiagramId, childDiagramIds, (transactionRepository:DiagramRepositoryLike, transaction:unknown) =>
             action(wrapTransactionRepository?.(transactionRepository) ?? transactionRepository, transaction));
         };
       }

@@ -4,13 +4,13 @@ import { DiagramRepository } from '../../src/persistence/diagram-repository';
 import { emptyChildFixture, generalParentFixture, populatedChildFixture, containerFixtureIds as ids } from '../../../shared/tests/container-fixtures';
 
 export function recoveryFixture() {
-  const repository = new DiagramRepository(); repository.create(generalParentFixture() as any); repository.create(populatedChildFixture() as any);
-  const earlier = emptyChildFixture(); earlier.scope.softwareSystemId = ids.duplicateOwner; repository.create(earlier as any);
+  const repository = new DiagramRepository(); repository.create(generalParentFixture() ); repository.create(populatedChildFixture() );
+  const earlier = emptyChildFixture(); earlier.scope.softwareSystemId = ids.duplicateOwner; repository.create(earlier );
   return repository;
 }
 describe('confirmed exact recovery contract', () => {
   it('retains null-provenance legacy single-row restore and rejects malformed confirmations', async () => {
-    const repository = new DiagramRepository(), parent = generalParentFixture(); parent.status = 'trashed'; parent.trashedAt = parent.updatedAt; repository.create(parent as any);
+    const repository = new DiagramRepository(), parent = generalParentFixture(); parent.status = 'trashed'; parent.trashedAt = parent.updatedAt; repository.create(parent );
     const app = buildApp(repository);
     try {
       expect((await app.inject(`/diagrams/${parent.id}/restore-impact`)).json()).toMatchObject({ trashBatchId: null, affectedDiagramIds: [parent.id] });

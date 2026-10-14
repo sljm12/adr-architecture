@@ -1,3 +1,4 @@
+import type * as Domain from '../../shared/src/index';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { componentContextFixture, componentParentFixture, populatedComponentFixture, componentFixtureIds as ids } from '../../shared/tests/component-fixtures';
@@ -10,7 +11,7 @@ import { useAdrStore } from '../src/state/adr-store';
 import { componentAdrFixtures } from '../../shared/tests/component-fixtures';
 vi.mock('../src/state/diagram-store', async importOriginal => {
   const actual = await importOriginal<typeof import('../src/state/diagram-store')>();
-  return { ...actual, useDiagramStore: Object.assign((selector: any = (s: any) => s) => selector(actual.useDiagramStore.getState()), actual.useDiagramStore) };
+  return { ...actual, useDiagramStore: Object.assign((selector: (state: ReturnType<typeof actual.useDiagramStore.getState>) => unknown = (state: ReturnType<typeof actual.useDiagramStore.getState>) => state) => selector(actual.useDiagramStore.getState()), actual.useDiagramStore) };
 });
 const store = () => useDiagramStore.getState();
 afterEach(() => { vi.restoreAllMocks(); store().startNew(); useAdrStore.getState().clear(); });
@@ -44,7 +45,7 @@ describe('Component hierarchy navigation', () => {
   it('rejects a library load that changes the known parent/owner association', async () => {
     const c = populatedComponentFixture() as DiagramDocument, p = componentParentFixture(); store().open(p);
     useDiagramStore.setState({ savedDocuments: [p, c] });
-    vi.spyOn(diagramClient, 'get').mockResolvedValue({ ...c, scope: { ...(c.scope as any), containerId: ids.datastore } });
+    vi.spyOn(diagramClient, 'get').mockResolvedValue({ ...c, scope: { ...(c.scope as Domain.ComponentScope), containerId: ids.datastore } });
     expect(await store().loadSavedDocument(c.id)).toBe(false); expect(store().document).toEqual(p);
     expect(store().loadError).toContain('parent/owner association');
   });

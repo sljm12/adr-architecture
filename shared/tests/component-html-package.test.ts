@@ -1,3 +1,4 @@
+import type * as Domain from '../src/index';
 import { describe, expect, it } from 'vitest';
 import { assembleHtmlPackageSnapshot, renderAggregateHtmlPackage, validatePackageReferences } from '../src/index';
 import { componentPackageInput } from './component-package-input';
@@ -53,7 +54,7 @@ describe('three-level Component packages', () => {
   it.each(['missing', 'scope', 'source', 'availability', 'identity'] as const)('rejects %s without a partial package', invalid => {
     const { source, capture, parent, child } = componentPackageInput();
     if (invalid === 'missing') source.diagrams = source.diagrams.filter(d => d.diagram.id !== child.id);
-    if (invalid === 'scope') (child.scope as any).containerId = ids.datastore;
+    if (invalid === 'scope') (child.scope as Domain.ComponentScope).containerId = ids.datastore;
     if (invalid === 'source') { const draft = structuredClone(parent); draft.components = draft.components.filter(c => c.id !== ids.personOccurrence); capture.overrides[parent.id] = { diagram: draft }; }
     if (invalid === 'availability') source.availability.pop();
     if (invalid === 'identity') { const draft = structuredClone(child); draft.components[1].sourceComponentId = ids.application; capture.overrides[child.id] = { diagram: draft }; }

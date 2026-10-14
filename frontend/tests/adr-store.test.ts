@@ -1,3 +1,4 @@
+import type * as Domain from '../../shared/src/index';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ArchitectureDecisionRecord } from '../../shared/src/index';
 import { adrClient } from '../src/api/adr-client';
@@ -28,10 +29,10 @@ describe('ADR draft state', () => {
   });
   it('ignores an ADR listing that arrives after navigation resets the decision context', async () => {
     useAdrStore.getState().open(record);
-    let release!: (rows: any[]) => void;
+    let release!: (rows: Domain.AdrSummary[]) => void;
     vi.spyOn(adrClient, 'list').mockImplementation(() => new Promise(resolve => { release = resolve; }));
     const loading = useAdrStore.getState().load(record.diagramId);
-    const nextId = crypto.randomUUID(); useAdrStore.getState().startNew(nextId); release([record]); await loading;
+    const nextId = crypto.randomUUID(); useAdrStore.getState().startNew(nextId); release([{ ...record, componentCount: 0, relationshipCount: 0 }]); await loading;
     expect(useAdrStore.getState()).toMatchObject({ diagramId: nextId, records: [], draft: expect.objectContaining({ diagramId: nextId }), status: 'idle' });
   });
   it('validates required fields before save and retains the draft', async () => {

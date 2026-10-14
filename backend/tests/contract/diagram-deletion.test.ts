@@ -1,3 +1,4 @@
+import type * as Domain from '../../../shared/src/index';
 import { afterEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -13,23 +14,23 @@ import { scopedRepository } from '../html-export-source-fixtures';
 const contractPath = resolve('specs/012-cli-delete-diagrams/contracts/openapi.json');
 const contract = JSON.parse(readFileSync(contractPath, 'utf8'));
 // Resolve this contract's local and external schemas, then validate actual HTTP bodies.
-function dereference(value: any, path = contractPath): any {
+function dereference(value: unknown, path = contractPath): unknown {
   if (Array.isArray(value)) return value.map(v => dereference(v, path));
   if (!value || typeof value !== 'object') return value;
-  if (value.$ref) {
+  if ('$ref' in value && typeof value.$ref === 'string') {
     const [file, pointer] = value.$ref.split('#'); const target = file ? resolve(dirname(path), file) : path;
     const source = readFileSync(target, 'utf8');
     // Pin the four referenced legacy YAML schemas; fail if their source changes.
     const document = target.endsWith('.yaml') ? JSON.parse(readFileSync(new URL('./diagram-deletion-summary-contract.json', import.meta.url), 'utf8')) : JSON.parse(source);
     if (target.endsWith('.yaml')) expect(createHash('sha256').update(source).digest('hex')).toBe(document.sourceSha256);
-    const schema = pointer.split('/').slice(1).reduce((v: any, key: string) => v[key], document);
+    const schema = pointer.split('/').slice(1).reduce((v: unknown, key: string) => (v as Record<string, unknown>)[key], document);
     return dereference(schema, target);
   }
   return Object.fromEntries(Object.entries(value).map(([k,v]) => [k,dereference(v,path)]));
 }
 const ajv = new Ajv({ strict: false, validateFormats: false });
 const validate = (name: string, body: unknown) => {
-  const check = ajv.compile(dereference(contract.components.schemas[name]));
+  const check = ajv.compile(dereference(contract.components.schemas[name]) as object);
   expect(check(body), JSON.stringify(check.errors)).toBe(true);
 };
 const apps: ReturnType<typeof buildApp>[] = [];
@@ -65,7 +66,7 @@ describe('confirmed Trash HTTP contract', () => {
     const preview=await app.inject({ method:'POST',url:'/diagrams/deletion-preview',payload:{ selector:{ name:document.name },mode:'trash' } });
     expect(preview.statusCode).toBe(200);
     expect(preview.json().rootDiagramId).toBe(document.id);
-    expect(preview.json().affectedDiagrams.map((d:any)=>d.id)).toEqual(selected==='parent'?[ids.parent,ids.child]:[ids.child]);
+    expect(preview.json().affectedDiagrams.map((d: Domain.DiagramDocument)=>d.id)).toEqual(selected==='parent'?[ids.parent,ids.child]:[ids.child]);
   });
   it('rejects invalid, missing, ambiguous, stale and mismatched-mode execution without mutation', async () => {
     const { app, repository, adrs, ids }=await setup(); const service=new DiagramService(repository,adrs);
@@ -129,7 +130,7 @@ describe('confirmed permanent HTTP contract',()=>{
   it.each(['parent','child','datastoreChild'] as const)('selects only the %s subtree',async selected=>{
     const {app,repository,ids,before}=await setup();
     const preview=await app.inject({method:'POST',url:'/diagrams/deletion-preview',payload:{selector:{id:ids[selected]},mode:'permanent'}});expect(preview.statusCode).toBe(200);validate('DeletionImpact',preview.json());
-    const affected=preview.json().affectedDiagrams.map((d:any)=>d.id);
+    const affected=preview.json().affectedDiagrams.map((d: Domain.DiagramDocument)=>d.id);
     const result=await app.inject({method:'POST',url:`/diagrams/${ids[selected]}/deletion`,payload:{mode:'permanent',confirmationToken:preview.json().confirmationToken}});expect(result.statusCode).toBe(200);validate('DeletionResult',result.json());
     for(const d of before.documents.filter(d=>!affected.includes(d.id)))expect(await repository.get(d.id)).toEqual(d);
   });
@@ -146,7 +147,7 @@ describe('confirmed permanent HTTP contract',()=>{
       if(kind==='source')outside.components=[{...inside.components[0],id:artifactId,diagramId:outside.id,sourceComponentId:ids.internal}];
       if(kind==='endpoint')outside.relationships=[{...inside.relationships[0],id:artifactId,diagramId:outside.id}];
       if(kind==='group')outside.groups=[{...before.documents.find(d=>d.id===ids.context)!.groups[0],id:artifactId,diagramId:outside.id,memberComponentIds:[ids.internal]}];
-      (repository as any).documents.set(outside.id,outside);
+      (repository as unknown as { documents: Map<string, Domain.DiagramDocument> }).documents.set(outside.id,outside);
     }
     const state=await repository.listAll();
     for(const request of [
@@ -162,7 +163,7 @@ describe('confirmed permanent HTTP contract',()=>{
   it('rejects wrong-level and missing-owner hierarchies in permanent mode',async()=>{
     const {app,repository,ids,before}=await setup();const child=before.documents.find(d=>d.id===ids.child)!;
     for(const scope of [{...child.scope,parentDiagramId:ids.context},{...child.scope,containerId:crypto.randomUUID()}]){
-      (repository as any).documents.set(child.id,{...child,scope});
+      (repository as unknown as { documents: Map<string, Domain.DiagramDocument> }).documents.set(child.id,Object.assign({}, child, { scope }));
       const response=await app.inject({method:'POST',url:'/diagrams/deletion-preview',payload:{selector:{id:ids.context},mode:'permanent'}});
       expect(response.statusCode).toBe(409);validate('Error',response.json());expect(response.json().code).toBe('DIAGRAM_REFERENCE_BROKEN');
     }

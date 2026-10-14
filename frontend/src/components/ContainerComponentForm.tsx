@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { containerTypes, type Component, type ContainerType } from '../../../shared/src/index';
 import { useDiagramStore } from '../state/diagram-store';
 
@@ -8,7 +8,8 @@ export function ContainerComponentForm({ component, onClose }: { component?: Com
   const [technology,setTechnology]=useState(component?.technology??'');
   const [containerType,setContainerType]=useState<ContainerType>(component?.containerType??'application');
   const [error,setError]=useState('');
-  useEffect(()=>{setName(component?.name??'');setDescription(component?.description??'');setTechnology(component?.technology??'');setContainerType(component?.containerType??'application');setError('');},[component]);
+  const [previousComponent, setPreviousComponent] = useState(component);
+  if (component !== previousComponent) { setPreviousComponent(component);setName(component?.name??'');setDescription(component?.description??'');setTechnology(component?.technology??'');setContainerType(component?.containerType??'application');setError('');}
   const prefix=component?'component-edit':'component';
   const submit=(event:FormEvent)=>{
     event.preventDefault();const store=useDiagramStore.getState();const details={name,description,technology,containerType};

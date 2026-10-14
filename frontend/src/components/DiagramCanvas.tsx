@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { applyNodeChanges, SelectionMode, ReactFlow, Background, Controls, type EdgeMouseHandler, type NodeMouseHandler, type Node, type NodeChange, type OnSelectionChangeFunc } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { fromReactFlow, toReactFlow } from '../adapters/react-flow/diagram-adapter';
@@ -44,7 +44,11 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
   }, [onOpenContainerDiagram]);
   const visual = useMemo(() => document ? toReactFlow(document, undefined, adrCounts, onOpenComponentAdrs, requestContainerOpen) : { nodes: [], edges: [] }, [document, adrCounts, onOpenComponentAdrs, requestContainerOpen]);
   const [interactiveNodes, setInteractiveNodes] = useState<Node[]>([]);
-  useEffect(() => setInteractiveNodes(previous => (document?.kind === 'container' || document?.kind === 'component') ? visual.nodes.map(node=>({...node,selected:previous.find(item=>item.id===node.id)?.selected??false})) : visual.nodes), [visual, document?.kind]);
+  const [previousVisual, setPreviousVisual] = useState(visual);
+  if (visual !== previousVisual) {
+    setPreviousVisual(visual);
+    setInteractiveNodes(previous => (document?.kind === 'container' || document?.kind === 'component') ? visual.nodes.map(node => ({ ...node, selected: previous.find(item => item.id === node.id)?.selected ?? false })) : visual.nodes);
+  }
   const selectedIds = useMemo(() => new Set(selectedComponentIds.length ? selectedComponentIds : selectedComponentId ? [selectedComponentId] : selectedCandidateComponentId ? [selectedCandidateComponentId] : []), [selectedCandidateComponentId, selectedComponentId, selectedComponentIds]);
   const renderedNodes = interactiveNodes.length || visual.nodes.length === 0 ? interactiveNodes : visual.nodes;
   const nodes = renderedNodes.map(node => ({ ...node, data: { ...node.data, isSelected: node.type === 'systemGroup' ? node.id === selectedGroupId : selectedIds.has(node.id), isCandidate: node.type === 'component' && node.id === selectedCandidateComponentId } }));
@@ -79,7 +83,6 @@ export function DiagramCanvas({ onSelection, selectedComponentIds = [], selected
     }
     const component = nextDocument.components.find(item => item.id === node.id);
     if (component) {
-      const group = nextDocument.groups.find(item => item.memberComponentIds.includes(component.id));
       update(() => nextDocument);
     }
   }, [document, interactiveNodes, update, applyComponentGeometry, visual.nodes]);

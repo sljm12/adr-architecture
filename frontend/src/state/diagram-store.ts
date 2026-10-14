@@ -192,7 +192,7 @@ const removalChecks = (current: DiagramDocument, next: DiagramDocument): Promise
         if (error instanceof DiagramApiError && error.status === 404 && savedMetadata?.id === current.id && !savedMetadata.components.some(c => c.id === component.id)) continue;
         throw error;
       }
-      const diagramBlockers = (dependencies.diagramBlockers ?? []).filter((b: any) => removing || !isC4ArtifactType(next.components.find(c => c.id === component.id)?.type) || b.componentId === component.id);
+      const diagramBlockers = (dependencies.diagramBlockers ?? []).filter((b) => removing || !isC4ArtifactType(next.components.find(c => c.id === component.id)?.type) || (typeof b === 'object' && b !== null && 'componentId' in b && b.componentId === component.id));
       if (diagramBlockers.length || removing && (dependencies.relationshipCount || dependencies.blockers?.length || dependencies.groupIds?.length)) throw new DiagramApiError('Repair dependent diagrams, occurrences, relationships, decisions or groups before removing or reclassifying this element.', 409, { ...dependencies, diagramBlockers });
     }
     for (const relationship of relationships) {
@@ -846,7 +846,8 @@ export const useDiagramStore = create<State>((set, get) => ({
       void get().refreshSavedDocuments();
       return true;
     } catch (error) {
-      if (error instanceof DiagramApiError && error.details.code === 'RESTORE_REQUIRED' && typeof (error.details.diagram as any)?.id === 'string' && get().document === sourceDocument && options.canCommit?.() !== false && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind: 'restore', id: (error.details.diagram as any).id } }));
+      const recoveryDiagram = error instanceof DiagramApiError ? error.details.diagram : undefined;
+      if (error instanceof DiagramApiError && error.details.code === 'RESTORE_REQUIRED' && typeof recoveryDiagram === 'object' && recoveryDiagram !== null && 'id' in recoveryDiagram && typeof recoveryDiagram.id === 'string' && get().document === sourceDocument && options.canCommit?.() !== false && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind: 'restore', id: recoveryDiagram.id } }));
       set({ containerOpenStatus: 'failed', containerOpenError: saveErrorMessage(error) });
       return false;
     }
@@ -886,7 +887,8 @@ export const useDiagramStore = create<State>((set, get) => ({
       return true;
     } catch (error) {
       if (session === requestSession) {
-        if (error instanceof DiagramApiError && error.details.code === 'RESTORE_REQUIRED' && unchanged() && typeof (error.details.diagram as any)?.id === 'string' && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind: 'restore', id: (error.details.diagram as any).id } }));
+        const recoveryDiagram = error instanceof DiagramApiError ? error.details.diagram : undefined;
+        if (error instanceof DiagramApiError && error.details.code === 'RESTORE_REQUIRED' && unchanged() && typeof recoveryDiagram === 'object' && recoveryDiagram !== null && 'id' in recoveryDiagram && typeof recoveryDiagram.id === 'string' && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind: 'restore', id: recoveryDiagram.id } }));
         set({ componentOpenStatus: 'failed', componentOpenError: saveErrorMessage(error) });
       }
       return false;

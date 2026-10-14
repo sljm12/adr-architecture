@@ -1,10 +1,11 @@
+import type * as Domain from '../../../shared/src/index';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/api/app';
 import { DiagramRepository } from '../../src/persistence/diagram-repository';
 import { containerFixtureIds as ids, emptyChildFixture, generalParentFixture, populatedChildFixture } from '../../../shared/tests/container-fixtures';
 
 const activeApps: Array<{ close: () => Promise<void> }> = [];
-const makeApp = (...documents: any[]) => {
+const makeApp = (...documents: Domain.DiagramDocument[]) => {
   const repository = new DiagramRepository();
   documents.forEach(document => repository.create(document));
   const app = buildApp(repository);
@@ -34,9 +35,9 @@ describe('container diagram create-or-open contract', () => {
   });
 
   it('keeps duplicate labels separate and rejects ineligible or mismatched path artifacts', async () => {
-    const parent = generalParentFixture() as any;
+    const parent = generalParentFixture() ;
     const otherParentId = '95000000-0000-4000-8000-000000000001';
-    const otherParent = { ...parent, id:otherParentId, name:'Second parent', components:parent.components.map((component:any,index:number) => ({ ...component, id:`95000000-0000-4000-8000-${String(index + 2).padStart(12,'0')}`, diagramId:otherParentId })), relationships:[], groups:[] };
+    const otherParent = { ...parent, id:otherParentId, name:'Second parent', components:parent.components.map((component: Domain.Component,index:number) => ({ ...component, id:`95000000-0000-4000-8000-${String(index + 2).padStart(12,'0')}`, diagramId:otherParentId })), relationships:[], groups:[] };
     const { app } = makeApp(parent, otherParent);
     const first = await app.inject({ method:'POST', url:`/diagrams/${parent.id}/components/${ids.owner}/container-diagram` });
     const duplicateName = await app.inject({ method:'POST', url:`/diagrams/${parent.id}/components/${ids.duplicateOwner}/container-diagram` });
@@ -62,7 +63,7 @@ describe('container diagram create-or-open contract', () => {
 
   it('returns RESTORE_REQUIRED for an existing trashed canonical child and rejects inactive parents', async () => {
     const parent = generalParentFixture();
-    const child = emptyChildFixture() as any;
+    const child = emptyChildFixture() ;
     child.status = 'trashed';
     child.trashedAt = child.updatedAt;
     const { app, repository } = makeApp(parent, child);

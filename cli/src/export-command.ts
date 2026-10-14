@@ -7,7 +7,7 @@ import { uuidSchema } from '../../shared/src/validation/schemas.js';
 import type { ApiClient } from './api-client.js';
 
 type ExportFileOps = {
-  openFile?: (path: string, flags: string) => Promise<FileHandle>;
+  openFile?: (path: string, flags: string) => Promise<Pick<FileHandle, 'writeFile' | 'close'>>;
   removeFile?: (path: string) => Promise<void>;
   statPath?: (path: string) => Promise<{ isDirectory(): boolean }>;
 };
@@ -46,7 +46,7 @@ export async function exportDiagramCommand(
 
   const openFile = options.openFile ?? ((path, flags) => open(path, flags));
   const removeFile = options.removeFile ?? unlink;
-  let handle: FileHandle | undefined;
+  let handle: Pick<FileHandle, 'writeFile' | 'close'> | undefined;
   let created = false;
   try {
     handle = await openFile(destination, 'wx');

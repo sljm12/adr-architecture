@@ -1,5 +1,4 @@
 import type { FastifyInstance } from 'fastify';
-import type { AdrRepositoryLike } from '../persistence/adr-repository';
 import { AdrComponentNotFoundError, AdrDiagramNotFoundError, AdrNotFoundError, AdrRelationshipNotFoundError, AdrService } from '../services/adr-service';
 import { sendError } from './errors';
 

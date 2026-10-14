@@ -31,7 +31,7 @@ describe('atomic container authoring commands', () => {
     expect(store().addComponent('Person', 'person')).toBe(false);
     expect(store().createGroup('Group', [ids.owner, ids.sourceSystem])).toBe(false);
     expect(store().addContainer({ name:'API', description:' ', technology:'TS', containerType:'application' })).toBe(false);
-    expect(store().addContainer({ name:'API', description:'Handles requests', technology:'TS', containerType:'person' as any })).toBe(false);
+    expect(store().addContainer({ name:'API', description:'Handles requests', technology:'TS', containerType:'person' as unknown as import('../../shared/src/index').ContainerType })).toBe(false);
     expect(store().document).toBe(before);
     expect(store().status).toBe('saved');
     expect(store().canUndo).toBe(false);

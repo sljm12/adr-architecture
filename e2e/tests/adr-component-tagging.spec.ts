@@ -1,3 +1,4 @@
+import type * as Domain from '../../shared/src/index';
 import { expect, test } from '@playwright/test';
 import { fillAdrForm } from './adr-fixtures';
 
@@ -7,7 +8,7 @@ test('creates, validates, saves, reopens, and retries an ADR', async ({ page }) 
   await page.route('**/api/diagrams', route => route.fulfill({ status: route.request().method() === 'POST' ? 201 : 200, contentType: 'application/json', body: JSON.stringify(route.request().method() === 'POST' ? diagram : []) }));
   await page.route('**/api/diagrams/*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(diagram) }));
   await page.route('**/api/diagrams/*/adrs', async route => { if (route.request().method() === 'GET') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr ? [{ id: adr.id, title: adr.title, status: adr.status, updatedAt: adr.updatedAt, componentCount: 0 }] : []) }); const payload = route.request().postDataJSON(); adr = { ...payload, id: '00000000-0000-0000-0000-000000000502', diagramId: diagram.id, componentIds: [], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }; return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(adr) }); });
-  await page.route('**/api/adrs/*', async route => { if (route.request().method() === 'GET') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr) }); if (route.request().method() === 'PATCH' && failNextSave) { failNextSave = false; return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Backend unavailable' }) }); } const payload = route.request().postDataJSON(); adr = { ...adr, ...payload, updatedAt: '2026-01-02T00:00:00.000Z' }; return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr) }); });
+  await page.route('**/api/adrs/*', async route => { if (route.request().method() === 'GET') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr) }); if (route.request().method() === 'PATCH' && failNextSave) { failNextSave = false; return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Backend unavailable' }) }); } const payload = route.request().postDataJSON(); adr = { ...adr!, ...payload, updatedAt: '2026-01-02T00:00:00.000Z' }; return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr) }); });
   await page.goto('/');
   await page.getByLabel('Diagram name').fill('Payments'); await page.getByRole('button', { name: 'Create diagram' }).click();
   await page.getByRole('button', { name: 'Decision' }).click(); const adrWorkspace = page.getByLabel('ADR workspace'); await adrWorkspace.getByRole('button', { name: 'New decision' }).click();
@@ -21,7 +22,7 @@ test('links zero, one, and multiple components, then unlinks without changing co
     { id: '00000000-0000-0000-0000-000000000512', diagramId: '00000000-0000-0000-0000-000000000511', name: 'API gateway', description: null, type: 'service', position: { x: 80, y: 100 }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
     { id: '00000000-0000-0000-0000-000000000513', diagramId: '00000000-0000-0000-0000-000000000511', name: 'Payments database', description: null, type: 'store', position: { x: 320, y: 100 }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
   ], relationships: [] };
-  let adr: any = null;
+  let adr: Domain.ArchitectureDecisionRecord | null = null;
   await page.route('**/api/diagrams', route => route.fulfill({ status: route.request().method() === 'POST' ? 201 : 200, contentType: 'application/json', body: JSON.stringify(route.request().method() === 'POST' ? diagram : [diagram]) }));
   await page.route('**/api/diagrams/*/adrs', async route => {
     if (route.request().method() === 'GET') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr ? [{ id: adr.id, title: adr.title, status: adr.status, updatedAt: adr.updatedAt, componentCount: adr.componentIds.length }] : []) });
@@ -29,7 +30,7 @@ test('links zero, one, and multiple components, then unlinks without changing co
   });
   await page.route('**/api/adrs/**', async route => {
     const url = route.request().url();
-    if (url.endsWith('/components') && route.request().method() === 'PUT') { adr = { ...adr, componentIds: route.request().postDataJSON().componentIds, updatedAt: '2026-01-02T00:00:00.000Z' }; return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr) }); }
+    if (url.endsWith('/components') && route.request().method() === 'PUT') { adr = { ...adr!, componentIds: route.request().postDataJSON().componentIds, updatedAt: '2026-01-02T00:00:00.000Z' }; return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr) }); }
     if (route.request().method() === 'GET') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr) });
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr) });
   });
@@ -39,9 +40,9 @@ test('links zero, one, and multiple components, then unlinks without changing co
   await expect(workspace.getByText('Unlinked — this ADR applies across the diagram.')).toBeVisible();
   await workspace.getByRole('checkbox', { name: 'API gateway' }).check(); await workspace.getByRole('checkbox', { name: 'Payments database' }).check();
   await workspace.getByRole('button', { name: 'Save decision' }).click(); await expect(workspace.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
-  expect(adr.componentIds).toEqual([diagram.components[0].id, diagram.components[1].id]);
+  expect(adr!.componentIds).toEqual([diagram.components[0].id, diagram.components[1].id]);
   await workspace.getByRole('button', { name: `Remove ${diagram.components[0].name}` }).click(); await workspace.getByRole('button', { name: 'Save decision' }).click();
-  expect(adr.componentIds).toEqual([diagram.components[1].id]);
+  expect(adr!.componentIds).toEqual([diagram.components[1].id]);
 });
 
 test('shows linked and unlinked component ADR summaries and opens a decision directly', async ({ page }) => {
@@ -77,7 +78,7 @@ test('links a mixed component and relationship scope, opens its relationship sum
     { id: '00000000-0000-0000-0000-000000000532', diagramId: '00000000-0000-0000-0000-000000000531', name: 'API gateway', description: null, type: 'service', position: { x: 80, y: 100 }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
     { id: '00000000-0000-0000-0000-000000000533', diagramId: '00000000-0000-0000-0000-000000000531', name: 'Payments database', description: null, type: 'store', position: { x: 320, y: 100 }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
   ], relationships: [{ id: '00000000-0000-0000-0000-000000000534', diagramId: '00000000-0000-0000-0000-000000000531', sourceComponentId: '00000000-0000-0000-0000-000000000532', targetComponentId: '00000000-0000-0000-0000-000000000533', direction: 'directed', label: 'sends', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }], };
-  let adr: any = null;
+  let adr: Domain.ArchitectureDecisionRecord | null = null;
   await page.route('**/api/diagrams', route => route.fulfill({ status: route.request().method() === 'POST' ? 201 : 200, contentType: 'application/json', body: JSON.stringify(route.request().method() === 'POST' ? diagram : [diagram]) }));
   await page.route('**/api/diagrams/*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(diagram) }));
   await page.route('**/api/diagrams/*/adrs', async route => {
@@ -87,8 +88,8 @@ test('links a mixed component and relationship scope, opens its relationship sum
   await page.route('**/api/diagrams/*/relationships/*/adrs', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr ? [{ id: adr.id, title: adr.title, status: adr.status, updatedAt: adr.updatedAt }] : []) }));
   await page.route('**/api/adrs/**', async route => {
     const url = route.request().url(); const payload = route.request().method() === 'PUT' ? route.request().postDataJSON() : undefined;
-    if (url.endsWith('/components')) adr = { ...adr, componentIds: payload.componentIds, updatedAt: '2026-01-02T00:00:00.000Z' };
-    if (url.endsWith('/relationships')) adr = { ...adr, relationshipIds: payload.relationshipIds, updatedAt: '2026-01-02T00:00:00.000Z' };
+    if (url.endsWith('/components')) adr = { ...adr!, componentIds: payload.componentIds, updatedAt: '2026-01-02T00:00:00.000Z' };
+    if (url.endsWith('/relationships')) adr = { ...adr!, relationshipIds: payload.relationshipIds, updatedAt: '2026-01-02T00:00:00.000Z' };
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adr) });
   });
   await page.goto('/');
@@ -96,7 +97,7 @@ test('links a mixed component and relationship scope, opens its relationship sum
   const workspace = page.getByLabel('ADR workspace'); await page.getByRole('button', { name: 'Decision' }).click(); await workspace.getByRole('button', { name: 'New decision' }).click(); await fillAdrForm(page);
   await workspace.getByRole('checkbox', { name: 'API gateway', exact: true }).check(); await workspace.getByRole('checkbox', { name: 'Relationship API gateway → Payments database · sends', exact: true }).check();
   await workspace.getByRole('button', { name: 'Save decision' }).click(); await expect(workspace.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
-  expect(adr.componentIds).toEqual([diagram.components[0].id]); expect(adr.relationshipIds).toEqual([diagram.relationships[0].id]);
+  expect(adr!.componentIds).toEqual([diagram.components[0].id]); expect(adr!.relationshipIds).toEqual([diagram.relationships[0].id]);
   await workspace.getByRole('button', { name: 'Remove relationship API gateway → Payments database · sends' }).click();
   await workspace.getByRole('checkbox', { name: 'Relationship API gateway → Payments database · sends' }).check();
   await workspace.getByRole('button', { name: 'View' }).last().click();
@@ -105,7 +106,7 @@ test('links a mixed component and relationship scope, opens its relationship sum
 });
 
 test('edits component names and relationship label/direction without changing artifact identities', async ({ page }) => {
-  let diagram: any = { id: '00000000-0000-0000-0000-000000000541', name: 'Payments', status: 'active', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', trashedAt: null, components: [
+  let diagram = { id: '00000000-0000-0000-0000-000000000541', name: 'Payments', status: 'active', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', trashedAt: null, components: [
     { id: '00000000-0000-0000-0000-000000000542', diagramId: '00000000-0000-0000-0000-000000000541', name: 'API', description: null, type: 'service', position: { x: 80, y: 100 }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
     { id: '00000000-0000-0000-0000-000000000543', diagramId: '00000000-0000-0000-0000-000000000541', name: 'Database', description: null, type: 'store', position: { x: 320, y: 100 }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
   ], relationships: [{ id: '00000000-0000-0000-0000-000000000544', diagramId: '00000000-0000-0000-0000-000000000541', sourceComponentId: '00000000-0000-0000-0000-000000000542', targetComponentId: '00000000-0000-0000-0000-000000000543', direction: 'directed', label: 'queries', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }] };
@@ -131,7 +132,7 @@ test('edits component names and relationship label/direction without changing ar
   await inspector.getByRole('button', { name: 'Save relationship' }).click();
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
-  expect(diagram.components.find((component: any) => component.id === '00000000-0000-0000-0000-000000000542').name).toBe('Gateway');
+  expect((diagram.components.find((component: { id: string; name: string }) => component.id === '00000000-0000-0000-0000-000000000542')!).name).toBe('Gateway');
   expect(diagram.relationships[0]).toMatchObject({ id: '00000000-0000-0000-0000-000000000544', sourceComponentId: '00000000-0000-0000-0000-000000000543', targetComponentId: '00000000-0000-0000-0000-000000000542', direction: 'undirected', label: 'sends events' });
 });
 
@@ -140,7 +141,7 @@ test('reviews statuses, supersedes with a replacement, blocks replacement deleti
   const originalId = '00000000-0000-0000-0000-000000000552';
   const replacementId = '00000000-0000-0000-0000-000000000553';
   const rejectedId = '00000000-0000-0000-0000-000000000554';
-  let adrs: any[] = [];
+  let adrs: Domain.ArchitectureDecisionRecord[] = [];
   await page.route('**/api/diagrams', route => route.fulfill({ status: route.request().method() === 'POST' ? 201 : 200, contentType: 'application/json', body: JSON.stringify(route.request().method() === 'POST' ? diagram : [diagram]) }));
   await page.route('**/api/diagrams/*/adrs', async route => {
     if (route.request().method() === 'GET') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adrs.map(adr => ({ id: adr.id, title: adr.title, status: adr.status, updatedAt: adr.updatedAt, componentCount: 0, relationshipCount: 0 }))) });
@@ -161,7 +162,7 @@ test('reviews statuses, supersedes with a replacement, blocks replacement deleti
       return route.fulfill({ status: 204 });
     }
     const payload = route.request().postDataJSON();
-    const updated = { ...adr, ...payload, updatedAt: '2026-01-02T00:00:00.000Z' };
+    const updated = { ...adr!, ...payload, updatedAt: '2026-01-02T00:00:00.000Z' };
     adrs = adrs.map(item => item.id === id ? updated : item);
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify(updated) });
   });

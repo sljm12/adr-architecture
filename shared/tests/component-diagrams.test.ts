@@ -1,3 +1,4 @@
+import type * as Domain from '../src/index';
 import { describe, expect, it } from 'vitest';
 import { assertDiagramInvariants, diagramDocumentSchema, diagramSummarySchema, isC4ArtifactType, getComponentTypeLabel } from '../src/index';
 import type { DiagramDocument } from '../src/index';
@@ -36,33 +37,33 @@ describe('Component document foundations', () => {
   });
   it('rejects owner sources, role variants, duplicate sources and groups', () => {
     for (const mutate of [
-      (d: any) => { d.components[1].sourceComponentId = ids.application; },
-      (d: any) => { d.components[0].role = 'container'; },
-      (d: any) => { d.components[0].type = 'container'; },
-      (d: any) => { d.components[0].containerType = 'application'; },
-      (d: any) => { d.components[2].sourceComponentId = d.components[3].sourceComponentId; },
-      (d: any) => { d.components[1].technology = null; },
-      (d: any) => { d.components[2].containerType = 'datastore'; },
-      (d: any) => { d.components[0].position.x = -1; },
-      (d: any) => { d.components[1].position.x = 480; },
-      (d: any) => { d.scope.parentDiagramId = d.id; },
-      (d: any) => { d.components.push(structuredClone(d.components[0])); },
+      (d: Domain.DiagramDocument) => { d.components[1].sourceComponentId = ids.application; },
+      (d: Domain.DiagramDocument) => { d.components[0].role = 'container'; },
+      (d: Domain.DiagramDocument) => { d.components[0].type = 'container'; },
+      (d: Domain.DiagramDocument) => { d.components[0].containerType = 'application'; },
+      (d: Domain.DiagramDocument) => { d.components[2].sourceComponentId = d.components[3].sourceComponentId; },
+      (d: Domain.DiagramDocument) => { d.components[1].technology = null; },
+      (d: Domain.DiagramDocument) => { d.components[2].containerType = 'datastore'; },
+      (d: Domain.DiagramDocument) => { d.components[0].position.x = -1; },
+      (d: Domain.DiagramDocument) => { d.components[1].position.x = 480; },
+      (d: Domain.DiagramDocument) => { d.scope!.parentDiagramId = d.id; },
+      (d: Domain.DiagramDocument) => { d.components.push(structuredClone(d.components[0])); },
     ]) {
       const child = populatedComponentFixture(); mutate(child);
       expect(diagramDocumentSchema.safeParse(child).success).toBe(false);
       expect(() => assertDiagramInvariants(child as DiagramDocument)).toThrow();
     }
-    const child = emptyComponentFixture(); (child as any).groups = [{ id: ids.relationship }];
+    const child = emptyComponentFixture(); Object.assign(child, { groups: [{ id: ids.relationship }] });
     expect(diagramDocumentSchema.safeParse(child).success).toBe(false);
   });
   it('rejects self, missing, boundary, supporting-only, undirected and overlong-protocol interactions', () => {
     for (const mutate of [
-      (r: any) => { r.targetComponentId = r.sourceComponentId; },
-      (r: any) => { r.targetComponentId = ids.child; },
-      (r: any) => { r.sourceComponentId = ids.childPerson; },
-      (r: any) => { r.direction = 'undirected'; },
-      (r: any) => { r.label = ' '; },
-      (r: any) => { r.protocol = 'p'.repeat(201); },
+      (r: Domain.Relationship) => { r.targetComponentId = r.sourceComponentId; },
+      (r: Domain.Relationship) => { r.targetComponentId = ids.child; },
+      (r: Domain.Relationship) => { r.sourceComponentId = ids.childPerson; },
+      (r: Domain.Relationship) => { r.direction = 'undirected'; },
+      (r: Domain.Relationship) => { r.label = ' '; },
+      (r: Domain.Relationship) => { r.protocol = 'p'.repeat(201); },
     ]) {
       const child = populatedComponentFixture(); mutate(child.relationships[0]);
       expect(diagramDocumentSchema.safeParse(child).success).toBe(false);

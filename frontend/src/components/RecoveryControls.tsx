@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { DiagramApiError, diagramClient, formatDiagramApiError } from '../api/diagram-client';
 import { useDiagramStore } from '../state/diagram-store';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -28,7 +28,8 @@ export function RecoveryControls({ selection, onSelectionClear }: { selection: S
   const [removingRelationship, setRemovingRelationship] = useState(false);
   const [notice, setNotice] = useState('');
   const [trash, setTrash] = useState<DiagramSummary[]>([]);
-  useEffect(() => { setTrash(recoveredTrash); }, [recoveredTrash]);
+  const [previousRecoveredTrash, setPreviousRecoveredTrash] = useState(recoveredTrash);
+  if (recoveredTrash !== previousRecoveredTrash) { setPreviousRecoveredTrash(recoveredTrash); setTrash(recoveredTrash); }
   if (!document) return null;
   const component = selection?.kind === 'component' ? document.components.find(item => item.id === selection.id) : undefined;
   const relationship = selection?.kind === 'relationship' ? document.relationships.find(item => item.id === selection.id) : undefined;

@@ -8,7 +8,7 @@ for (const mode of ['trash', 'permanent'] as const) test(`keeps the local draft 
   const repository = componentRecoveryFixture(), app = buildApp(repository), service = new DiagramService(repository);
   await page.route(/\/api\/(?:diagrams|adrs)(?:\/|$|\?)/, async route => {
     const request = route.request(), path = new URL(request.url()).pathname.replace(/^\/api/, '');
-    const response = await app.inject({ method: request.method() as any, url: path, ...(request.postData() ? { payload: JSON.parse(request.postData()!) } : {}) });
+    const response = await app.inject({ method: request.method() as import('light-my-request').InjectOptions['method'], url: path, ...(request.postData() ? { payload: JSON.parse(request.postData()!) } : {}) });
     await route.fulfill({ status: response.statusCode, contentType: 'application/json', body: response.body });
   });
   try {
@@ -39,7 +39,7 @@ test('confirms exact three-level batches, cancels with focus, guards drafts and 
     const request = route.request(), path = new URL(request.url()).pathname.replace(/^\/api/, '');
     if (request.method() === 'POST' && path.endsWith('/restore')) restores++;
     if (failLoad && request.method() === 'GET' && path === `/diagrams/${ids.child}`) { failLoad = false; await route.fulfill({ status: 503, json: { message: 'Restored; load unavailable' } }); return; }
-    const response = await app.inject({ method: request.method() as any, url: path, ...(request.postData() ? { payload: JSON.parse(request.postData()!) } : {}) });
+    const response = await app.inject({ method: request.method() as import('light-my-request').InjectOptions['method'], url: path, ...(request.postData() ? { payload: JSON.parse(request.postData()!) } : {}) });
     await route.fulfill({ status: response.statusCode, contentType: 'application/json', body: response.body });
   });
   const recovery = async (kind: 'trash' | 'restore', id: string) => page.evaluate(({ kind, id }) => window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind, id } })), { kind, id });

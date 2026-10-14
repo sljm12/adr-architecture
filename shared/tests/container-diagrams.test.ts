@@ -11,8 +11,8 @@ import {
 
 describe('C4 container document validation', () => {
   it.each(['application', 'datastore'])('retains explicit %s subtype without widening source eligibility', subtype => {
-    const child = populatedChildFixture() as any;
-    child.components[0].containerType = subtype;
+    const child = populatedChildFixture() ;
+    Object.assign(child.components[0], { containerType: subtype });
     child.components[1].containerType = null;
     const parsed = diagramDocumentSchema.parse(child);
     expect(parsed.components[0].containerType).toBe(subtype);
@@ -21,8 +21,8 @@ describe('C4 container document validation', () => {
   });
 
   it.each([undefined, null, 'queue', 'person', 'software-system'])('rejects unsupported internal subtype %s with a field path', subtype => {
-    const child = populatedChildFixture() as any;
-    child.components[0].containerType = subtype;
+    const child = populatedChildFixture() ;
+    Object.assign(child.components[0], { containerType: subtype });
     child.components[1].containerType = null;
     const result = diagramDocumentSchema.safeParse(child);
     expect(result.success).toBe(false);
@@ -30,11 +30,11 @@ describe('C4 container document validation', () => {
   });
 
   it('requires null subtype for ordinary elements and external occurrences', () => {
-    const parent = generalParentFixture() as any;
+    const parent = generalParentFixture() ;
     expect(diagramDocumentSchema.parse(parent).components[0].containerType).toBe(null);
     parent.components[0].containerType = 'application';
     expect(diagramDocumentSchema.safeParse(parent).success).toBe(false);
-    const child = populatedChildFixture() as any;
+    const child = populatedChildFixture() ;
     child.components[0].containerType = 'application';
     child.components[1].containerType = 'datastore';
     expect(diagramDocumentSchema.safeParse(child).success).toBe(false);
@@ -61,7 +61,7 @@ describe('C4 container document validation', () => {
 
   it('requires trimmed container name, responsibility, and technology', () => {
     const child = emptyChildFixture();
-    const component = { ...(populatedChildFixture() as any).components[0], diagramId: child.id };
+    const component = { ...(populatedChildFixture() ).components[0], diagramId: child.id };
     for (const invalid of [
       { ...component, name: '   ' },
       { ...component, description: '  ' },
@@ -74,15 +74,15 @@ describe('C4 container document validation', () => {
   });
 
   it('rejects invalid UUIDs and non-finite feature geometry', () => {
-    const child = emptyChildFixture() as any;
+    const child = emptyChildFixture() ;
     expect(diagramDocumentSchema.safeParse({ ...child, scope: { ...child.scope, softwareSystemId: 'owner' } }).success).toBe(false);
     expect(diagramDocumentSchema.safeParse({ ...child, boundary: { ...child.boundary, position: { x: Number.NaN, y: 0 } } }).success).toBe(false);
-    const component = (populatedChildFixture() as any).components[0];
+    const component = (populatedChildFixture() ).components[0];
     expect(diagramDocumentSchema.safeParse({ ...child, components: [{ ...component, size: { width: Number.POSITIVE_INFINITY, height: 80 } }] }).success).toBe(false);
   });
 
   it('requires directed, nonblank child relationships with valid local endpoints', () => {
-    const child = populatedChildFixture() as any;
+    const child = populatedChildFixture() ;
     const relationship = child.relationships[0];
     const secondExternal = {
       ...(child.components[1]),
@@ -103,7 +103,7 @@ describe('C4 container document validation', () => {
   });
 
   it('rejects groups and unknown feature content in container documents', () => {
-    const child = emptyChildFixture() as any;
+    const child = emptyChildFixture() ;
     const invalidGroup = {
       id: ids.group,
       diagramId: child.id,
@@ -119,7 +119,7 @@ describe('C4 container document validation', () => {
   });
 
   it('normalizes only legacy general fields and preserves free-form component types', () => {
-    const parsed = diagramDocumentSchema.parse(legacyPayloadFixture() as any);
+    const parsed = diagramDocumentSchema.parse(legacyPayloadFixture() );
     expect(parsed).toMatchObject({ kind: 'general', scope: null, boundary: null, groups: [] });
     expect(parsed.components[0]).toMatchObject({ type: 'microservice', role: 'element', technology: null, sourceComponentId: null });
   });

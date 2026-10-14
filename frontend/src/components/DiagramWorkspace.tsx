@@ -138,8 +138,7 @@ export function DiagramWorkspace() {
   };
   const containerOpenRequestRef = useRef(requestContainerOpen);
   const sourceParentRequestRef = useRef(requestLoad);
-  sourceParentRequestRef.current = requestLoad;
-  containerOpenRequestRef.current = requestContainerOpen;
+  useEffect(() => { sourceParentRequestRef.current = requestLoad; containerOpenRequestRef.current = requestContainerOpen; });
   useEffect(() => {
     const onContainerOpen = (event: Event) => {
       const componentId = (event as CustomEvent<{ componentId?: string }>).detail?.componentId;

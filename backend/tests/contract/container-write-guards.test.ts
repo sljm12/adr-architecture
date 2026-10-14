@@ -1,3 +1,4 @@
+import type * as Domain from '../../../shared/src/index';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/api/app';
 import { AdrRepository } from '../../src/persistence/adr-repository';
@@ -6,7 +7,7 @@ import { completeAdrPayload } from '../fixtures';
 import { containerFixtureIds as ids, generalParentFixture, populatedChildFixture } from '../../../shared/tests/container-fixtures';
 
 const apps: Array<{ close: () => Promise<void> }> = [];
-const createApp = (parentInput:any = generalParentFixture(), childInput:any = populatedChildFixture(), adrs = new AdrRepository()) => {
+const createApp = (parentInput: Domain.DiagramDocument = generalParentFixture(), childInput: Domain.DiagramDocument | null = populatedChildFixture(), adrs = new AdrRepository()) => {
   const repository = new DiagramRepository();
   repository.create(parentInput);
   if (childInput) repository.create(childInput);
@@ -30,17 +31,17 @@ describe('container graph write guards', () => {
   });
 
   it('prevents complete PUT from omitting or invalidly reclassifying owners and sources', async () => {
-    const parent = { ...(generalParentFixture() as any), relationships:[] };
+    const parent = { ...(generalParentFixture() ), relationships:[] };
     const { app } = createApp(parent);
-    const omittingOwner = { ...parent, components:parent.components.filter((component:any) => component.id !== ids.owner) };
+    const omittingOwner = { ...parent, components:parent.components.filter((component: Domain.Component) => component.id !== ids.owner) };
     const missing = await app.inject({ method:'PUT', url:`/diagrams/${ids.parentDiagram}`, payload:omittingOwner });
     expect(missing.statusCode).toBe(409);
     expect(missing.json()).toMatchObject({ code:'DIAGRAM_DEPENDENCY', diagramBlockers:[expect.objectContaining({ componentId:ids.owner })] });
 
-    const invalidOwner = { ...parent, components:parent.components.map((component:any) => component.id === ids.owner ? { ...component, type:'person' } : component) };
+    const invalidOwner = { ...parent, components:parent.components.map((component: Domain.Component) => component.id === ids.owner ? { ...component, type:'person' } : component) };
     expect((await app.inject({ method:'PUT', url:`/diagrams/${ids.parentDiagram}`, payload:invalidOwner })).json()).toMatchObject({ code:'DIAGRAM_DEPENDENCY' });
 
-    const invalidSource = { ...parent, components:parent.components.map((component:any) => component.id === ids.sourceSystem ? { ...component, type:'database' } : component) };
+    const invalidSource = { ...parent, components:parent.components.map((component: Domain.Component) => component.id === ids.sourceSystem ? { ...component, type:'database' } : component) };
     const response = await app.inject({ method:'PUT', url:`/diagrams/${ids.parentDiagram}`, payload:invalidSource });
     expect(response.statusCode).toBe(409);
     expect(response.json()).toMatchObject({ code:'DIAGRAM_DEPENDENCY', diagramBlockers:[expect.objectContaining({ sourceComponentId:ids.sourceSystem })] });
@@ -48,11 +49,11 @@ describe('container graph write guards', () => {
 
   it('keeps child ownership and occurrence source identities immutable and rejects status changes', async () => {
     const { app, repository } = createApp();
-    const child = repository.get(ids.populatedChild)! as any;
+    const child = repository.get(ids.populatedChild)! ;
     const ownerChanged = { ...child, scope:{ ...child.scope, softwareSystemId:ids.duplicateOwner } };
     expect((await app.inject({ method:'PUT', url:`/diagrams/${child.id}`, payload:ownerChanged })).json()).toMatchObject({ code:'IMMUTABLE_SCOPE' });
 
-    const sourceChanged = { ...child, components:child.components.map((component:any) => component.id === ids.externalOccurrence ? { ...component, sourceComponentId:ids.person } : component) };
+    const sourceChanged = { ...child, components:child.components.map((component: Domain.Component) => component.id === ids.externalOccurrence ? { ...component, sourceComponentId:ids.person } : component) };
     expect((await app.inject({ method:'PUT', url:`/diagrams/${child.id}`, payload:sourceChanged })).json()).toMatchObject({ code:'IMMUTABLE_SCOPE' });
 
     const trashedPayload = { ...child, status:'trashed', trashedAt:child.updatedAt };
@@ -60,12 +61,12 @@ describe('container graph write guards', () => {
   });
 
   it('blocks omission of an ADR-linked component and keeps generic creation at general scope', async () => {
-    const parent = generalParentFixture() as any;
+    const parent = generalParentFixture() ;
     const adrs = new AdrRepository();
     const { app } = createApp(parent, null, adrs);
     const adr = adrs.create(ids.parentDiagram, completeAdrPayload);
     adrs.replaceLinks(adr.id, [ids.person]);
-    const incoming = { ...parent, components:parent.components.filter((component:any) => component.id !== ids.person) };
+    const incoming = { ...parent, components:parent.components.filter((component: Domain.Component) => component.id !== ids.person) };
     const blocked = await app.inject({ method:'PUT', url:`/diagrams/${ids.parentDiagram}`, payload:incoming });
     expect(blocked.statusCode).toBe(409);
     expect(blocked.json()).toMatchObject({ code:'DIAGRAM_DEPENDENCY', blockers:[expect.objectContaining({ adrId:adr.id })] });

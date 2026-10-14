@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { htmlExportSourceSchema } from '../src/index';
+import type { ArchitectureDecisionRecord } from '../src/index';
 import { exportTimestamp, htmlPackageFixture } from './html-export-fixtures';
 
 function source() {
@@ -26,18 +27,18 @@ describe('HTML export source wire schema', () => {
     expect(htmlExportSourceSchema.parse(input).sourceContexts[child.id].sources).toHaveLength(1);
   });
   it.each([
-    ['entry UUID', (input: any) => { input.entryDiagramId = 'invalid'; }],
-    ['capture date', (input: any) => { input.sourceCapturedAt = 'yesterday'; }],
-    ['empty members', (input: any) => { input.diagrams = []; }],
-    ['summary ADR', (input: any) => { input.diagrams[0].adrs[0] = { id: input.diagrams[0].adrs[0].id, title: 'Summary', status: 'accepted' }; }],
-    ['missing nullable ADR field', (input: any) => { delete input.diagrams[0].adrs[0].alternativesOrConstraints; }],
-    ['ADR UUID', (input: any) => { input.diagrams[0].adrs[0].componentIds = ['invalid']; }],
-    ['ADR date', (input: any) => { input.diagrams[0].adrs[0].updatedAt = 'invalid'; }],
-    ['diagram date', (input: any) => { input.diagrams[0].diagram.updatedAt = 'invalid'; }],
-    ['member geometry', (input: any) => { input.diagrams[1].diagram.boundary.size.width = -1; }],
-    ['availability', (input: any) => { input.availability[0].availability = 'unknown'; }],
-    ['context shape', (input: any) => { input.sourceContexts[input.entryDiagramId] = { scope: {}, sources: [], capturedAt: exportTimestamp }; }],
-    ['extra root field', (input: any) => { input.partial = true; }],
+    ['entry UUID', (input: ReturnType<typeof source>) => { input.entryDiagramId = 'invalid'; }],
+    ['capture date', (input: ReturnType<typeof source>) => { input.sourceCapturedAt = 'yesterday'; }],
+    ['empty members', (input: ReturnType<typeof source>) => { input.diagrams = []; }],
+    ['summary ADR', (input: ReturnType<typeof source>) => { Object.assign(input.diagrams[0].adrs, { 0: { id: input.diagrams[0].adrs[0].id, title: 'Summary', status: 'accepted' } }); }],
+    ['missing nullable ADR field', (input: ReturnType<typeof source>) => { delete (input.diagrams[0].adrs[0] as Partial<ArchitectureDecisionRecord>).alternativesOrConstraints; }],
+    ['ADR UUID', (input: ReturnType<typeof source>) => { input.diagrams[0].adrs[0].componentIds = ['invalid']; }],
+    ['ADR date', (input: ReturnType<typeof source>) => { input.diagrams[0].adrs[0].updatedAt = 'invalid'; }],
+    ['diagram date', (input: ReturnType<typeof source>) => { input.diagrams[0].diagram.updatedAt = 'invalid'; }],
+    ['member geometry', (input: ReturnType<typeof source>) => { (input.diagrams[1].diagram.boundary!).size.width = -1; }],
+    ['availability', (input: ReturnType<typeof source>) => { Object.assign(input.availability[0], { availability: 'unknown' }); }],
+    ['context shape', (input: ReturnType<typeof source>) => { Object.assign(input.sourceContexts, { [input.entryDiagramId]: { scope: {}, sources: [], capturedAt: exportTimestamp } }); }],
+    ['extra root field', (input: ReturnType<typeof source>) => { Object.assign(input, { partial: true }); }],
   ])('rejects malformed %s', (_name, mutate) => {
     const input = source(); mutate(input);
     expect(htmlExportSourceSchema.safeParse(input).success).toBe(false);

@@ -47,6 +47,7 @@ describe('CLI confirmed Trash',()=>{
       expect(JSON.parse(fetcher.mock.calls[0][1]!.body as string).selector).toEqual({ name });
       const output = stderr.mock.calls.flat().join('');
       expect(output).toContain('Payments\\u001b[31m\\u000a\\u202e');
+      // eslint-disable-next-line no-control-regex -- Assert that terminal escape characters were removed.
       expect(output).not.toMatch(/[\u001b\u202e]/); expect(stdout).not.toHaveBeenCalled();
       expect(await f.repository.listAll()).toEqual(before);
     } finally { await app.close(); }

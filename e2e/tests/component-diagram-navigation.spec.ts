@@ -10,7 +10,7 @@ test('saves twice, returns through ancestors, previews owner names and reopens t
   await page.route(/\/api\/(?:diagrams|adrs)(?:\/|$|\?)/, async route => {
     const request = route.request(), path = new URL(request.url()).pathname.replace(/^\/api/, '');
     if (failSave && request.method() === 'PUT') { failSave = false; await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: 'Injected save failure' }) }); return; }
-    const response = await app.inject({ method: request.method() as any, url: path, ...(request.postData() ? { payload: JSON.parse(request.postData()!) } : {}) });
+    const response = await app.inject({ method: request.method() as import('light-my-request').InjectOptions['method'], url: path, ...(request.postData() ? { payload: JSON.parse(request.postData()!) } : {}) });
     await route.fulfill({ status: response.statusCode, contentType: 'application/json', body: response.body });
   });
   try {
@@ -42,7 +42,7 @@ for (const [level, currentId, destinationId] of [
   await page.route(/\/api\/(?:diagrams|adrs)(?:\/|$|\?)/, async route => {
     const request = route.request(), path = new URL(request.url()).pathname.replace(/^\/api/, '');
     if (failAdrSave && request.method() === 'POST' && path.endsWith('/adrs')) { failAdrSave = false; await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: 'Injected ADR save failure' }) }); return; }
-    const response = await app.inject({ method: request.method() as any, url: path, ...(request.postData() ? { payload: JSON.parse(request.postData()!) } : {}) });
+    const response = await app.inject({ method: request.method() as import('light-my-request').InjectOptions['method'], url: path, ...(request.postData() ? { payload: JSON.parse(request.postData()!) } : {}) });
     await route.fulfill({ status: response.statusCode, contentType: 'application/json', body: response.body });
   });
   const row = (id: string) => page.locator(`.saved-diagram-button[data-diagram-id="${id}"]`);

@@ -1,3 +1,4 @@
+import type * as Domain from '../../../shared/src/index';
 import { describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../../src/api/app';
 import { DiagramRepository } from '../../src/persistence/diagram-repository';
@@ -16,12 +17,12 @@ describe('Component foundational write guards', () => {
     try {
       const before = repository.get(ids.child)!;
       for (const change of [
-        (d: any) => { d.kind = 'general'; d.scope = null; d.boundary = null; d.components = []; d.relationships = []; },
-        (d: any) => { d.scope.containerId = ids.datastore; },
-        (d: any) => { d.scope.parentDiagramId = ids.context; },
-        (d: any) => { d.status = 'trashed'; },
-        (d: any) => { d.components[2].sourceComponentId = ids.systemOccurrence; d.components.splice(3, 1); },
-        (d: any) => { d.components[2] = { ...d.components[2], role: 'component', type: 'component', sourceComponentId: null, technology: 'TS', description: 'New internal', position: { x: 250, y: 68 } }; },
+        (d: Domain.DiagramDocument) => { d.kind = 'general'; d.scope = null; d.boundary = null; d.components = []; d.relationships = []; },
+        (d: Domain.DiagramDocument) => { (d.scope as Domain.ComponentScope).containerId = ids.datastore; },
+        (d: Domain.DiagramDocument) => { d.scope!.parentDiagramId = ids.context; },
+        (d: Domain.DiagramDocument) => { d.status = 'trashed'; },
+        (d: Domain.DiagramDocument) => { d.components[2].sourceComponentId = ids.systemOccurrence; d.components.splice(3, 1); },
+        (d: Domain.DiagramDocument) => { d.components[2] = { ...d.components[2], role: 'component', type: 'component', sourceComponentId: null, technology: 'TS', description: 'New internal', position: { x: 250, y: 68 } }; },
       ]) {
         const input = structuredClone(before); change(input);
         const response = await app.inject({ method: 'PUT', url: `/diagrams/${ids.child}`, payload: input });

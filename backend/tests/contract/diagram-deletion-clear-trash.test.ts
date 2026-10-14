@@ -1,3 +1,4 @@
+import type * as Domain from '../../../shared/src/index';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/api/app';
 import { DiagramService } from '../../src/services/diagram-service';
@@ -12,7 +13,7 @@ async function setup() {
   const app = buildApp(fixture.repository, fixture.adrs); apps.push(app);
   const service = new DiagramService(fixture.repository, fixture.adrs);
   const preview = () => app.inject({ method: 'POST', url: '/diagrams/deletion-set-preview', payload: { target } });
-  const execute = (impact: any, overrides = {}) => app.inject({ method: 'POST', url: '/diagrams/deletion-set', payload: { target, rootDiagramIds: impact.rootDiagramIds, confirmationToken: impact.confirmationToken, ...overrides } });
+  const execute = (impact: Domain.CollectionImpact, overrides = {}) => app.inject({ method: 'POST', url: '/diagrams/deletion-set', payload: { target, rootDiagramIds: impact.rootDiagramIds, confirmationToken: impact.confirmationToken, ...overrides } });
   return { ...fixture, app, service, preview, execute };
 }
 
@@ -25,8 +26,8 @@ describe('clear Trash HTTP contract', () => {
     const impact = response.json();
     expect(impact.target).toEqual(target); expect(impact.mode).toBe('permanent'); expect(impact.rootDiagramIds).toEqual([]);
     const trashed = before.documents.filter(d => d.status === 'trashed').map(d => d.id).sort();
-    expect(impact.affectedDiagrams.map((d: any) => d.id).sort()).toEqual(trashed); expect(impact.affectedCount).toBe(trashed.length);
-    expect(impact.affectedDiagrams.every((d: any) => d.status === 'trashed')).toBe(true);
+    expect(impact.affectedDiagrams.map((d: Domain.DiagramDocument) => d.id).sort()).toEqual(trashed); expect(impact.affectedCount).toBe(trashed.length);
+    expect(impact.affectedDiagrams.every((d: Domain.DiagramDocument) => d.status === 'trashed')).toBe(true);
     expect(await f.snapshot()).toEqual(before);
     const result = await f.execute(impact); expect(result.statusCode).toBe(200); validate('CollectionResult', result.json());
     const { confirmationToken: _token, ...expected } = impact; expect(result.json()).toEqual(expected);
@@ -77,7 +78,7 @@ describe('clear Trash HTTP contract', () => {
     if (change === 'restored') { const p = await f.service.restoreImpact(f.first.datastoreChild); await f.service.restore(f.first.datastoreChild, { confirmedDiagramIds: p.affectedDiagramIds, confirmedTrashBatchId: p.trashBatchId }); }
     if (change === 'content') {
       const d = (await f.repository.get(f.first.datastoreChild))!;
-      (f.repository as any).documents.set(d.id, { ...d, updatedAt: '2030-01-01T00:00:00.000Z' });
+      (f.repository as unknown as { documents: Map<string, Domain.DiagramDocument> }).documents.set(d.id, { ...d, updatedAt: '2030-01-01T00:00:00.000Z' });
     }
     if (change === 'provenance') { await f.service.restore(f.first.datastoreChild); await f.service.trash(f.first.datastoreChild); }
     if (change === 'ancestor') {

@@ -73,7 +73,7 @@ for (const kind of ['general', 'container'] as const) {
     await page.route(/\/api\/(?:diagrams|adrs)(?:\/|$|\?)/, async route => {
       const request = route.request(), url = new URL(request.url());
       if (url.pathname.endsWith('/container-context')) contextRequests++;
-      const response = await app.inject({ method: request.method() as any, url: url.pathname.replace(/^\/api/, '') + url.search, ...(request.postData() ? { payload: JSON.parse(request.postData()!) } : {}) });
+      const response = await app.inject({ method: request.method() as import('light-my-request').InjectOptions['method'], url: url.pathname.replace(/^\/api/, '') + url.search, ...(request.postData() ? { payload: JSON.parse(request.postData()!) } : {}) });
       await route.fulfill({ status: response.statusCode, contentType: response.headers['content-type'] as string, body: response.body });
     });
     try {
@@ -130,7 +130,7 @@ test('measures warmed Container/Component scale loads, edits, saves, opens and b
   await page.route(/\/api\/(?:diagrams|adrs)(?:\/|$|\?)/, async route => {
     const request = route.request(), url = new URL(request.url()), path = url.pathname.replace(/^\/api/, '');
     requests[path] = (requests[path] ?? 0) + 1;
-    const response = await app.inject({ method: request.method() as any, url: path + url.search, ...(request.postData() ? { payload: JSON.parse(request.postData()!) } : {}) });
+    const response = await app.inject({ method: request.method() as import('light-my-request').InjectOptions['method'], url: path + url.search, ...(request.postData() ? { payload: JSON.parse(request.postData()!) } : {}) });
     await route.fulfill({ status: response.statusCode, contentType: response.headers['content-type'] as string, body: response.body });
   });
   try {

@@ -6,7 +6,7 @@ import { generalParentFixture, populatedChildFixture, containerFixtureIds as ids
 
 describe('container-local decisions', () => {
   it('links local artifacts, isolates parent decisions and enforces lifecycle, boundary and activity rules', async () => {
-    const repository = new DiagramRepository(); repository.create(generalParentFixture() as any); repository.create(populatedChildFixture() as any);
+    const repository = new DiagramRepository(); repository.create(generalParentFixture() ); repository.create(populatedChildFixture() );
     const app = buildApp(repository);
     try {
       const created = await app.inject({ method: 'POST', url: `/diagrams/${ids.populatedChild}/adrs`, payload: completeAdrPayload });

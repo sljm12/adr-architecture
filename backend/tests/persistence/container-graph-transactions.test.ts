@@ -1,3 +1,4 @@
+import type * as Domain from '../../../shared/src/index';
 import { describe, expect, it } from 'vitest';
 import { DiagramRepository } from '../../src/persistence/diagram-repository';
 import { GraphTransaction } from '../../src/persistence/graph-transaction';
@@ -8,10 +9,10 @@ describe('memory graph transactions', () => {
   it('rolls diagram and ADR mutations back together when a graph write fails', async () => {
     const diagrams = new DiagramRepository();
     const adrs = new AdrRepository();
-    diagrams.create(generalParentFixture() as any);
+    diagrams.create(generalParentFixture() );
     adrs.registerDiagram(ids.parentDiagram);
     const graph = new GraphTransaction(diagrams, adrs);
-    const child = emptyChildFixture() as any;
+    const child = emptyChildFixture() ;
 
     await expect(graph.run(ids.parentDiagram, [], async ({ diagrams: transactionDiagrams, adrs: transactionAdrs }) => {
       transactionDiagrams.create(child);
@@ -25,7 +26,7 @@ describe('memory graph transactions', () => {
 
   it('serializes competing graph mutations on the parent before taking child work', async () => {
     const diagrams = new DiagramRepository();
-    diagrams.create(generalParentFixture() as any);
+    diagrams.create(generalParentFixture() );
     const graph = new GraphTransaction(diagrams);
     const events: string[] = [];
     let releaseFirst!: () => void;
@@ -41,20 +42,20 @@ describe('memory graph transactions', () => {
 
   it('round-trips feature fields and resolves current parent/source labels without changing local layout', () => {
     const diagrams = new DiagramRepository();
-    const parent = generalParentFixture() as any;
-    const child = populatedChildFixture() as any;
+    const parent = generalParentFixture() ;
+    const child = populatedChildFixture() ;
     diagrams.create(parent);
     diagrams.create(child);
-    const before = diagrams.get(child.id)! as any;
+    const before = diagrams.get(child.id)! ;
     expect(before).toMatchObject({ kind:'container', scope:{ parentDiagramId:parent.id, softwareSystemId:ids.owner }, boundary:child.boundary });
     expect(before.relationships[0].protocol).toBe('HTTPS');
     expect(before.components[1]).toMatchObject({ role:'external', sourceComponentId:ids.sourceSystem, name:'Ledger' });
 
-    const renamedParent = { ...parent, name:'Payments platform', components:parent.components.map((component:any) => component.id === ids.owner
+    const renamedParent = { ...parent, name:'Payments platform', components:parent.components.map((component: Domain.Component) => component.id === ids.owner
       ? { ...component, name:'Payments Core', description:'Updated owner summary' }
       : component.id === ids.sourceSystem ? { ...component, name:'Ledger v2', description:'Updated ledger summary' } : component) };
     diagrams.replace(renamedParent);
-    const after = diagrams.get(child.id)! as any;
+    const after = diagrams.get(child.id)! ;
     expect(after.scope).toMatchObject({ parentDiagramName:'Payments platform', softwareSystemName:'Payments Core', softwareSystemDescription:'Updated owner summary' });
     expect(after.components[1]).toMatchObject({ name:'Ledger v2', description:'Updated ledger summary', sourceComponentId:ids.sourceSystem, position:before.components[1].position });
     expect(after.createdAt).toBe(child.createdAt);

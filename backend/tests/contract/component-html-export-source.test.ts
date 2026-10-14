@@ -1,3 +1,4 @@
+import type * as Domain from '../../../shared/src/index';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/api/app';
 import { DiagramRepository } from '../../src/persistence/diagram-repository';
@@ -20,9 +21,9 @@ describe('Component HTML source REST contract', () => {
       const response = await app.inject({ method: 'GET', url: `/diagrams/${entry.id}/export/html-source` });
       expect(response.statusCode).toBe(200);
       const body = response.json(); expect(body.diagrams).toHaveLength(count); expect(body.diagrams[0].diagram.id).toBe(entry.id);
-      expect(body.containerContext).toBeUndefined(); expect(body.sourceContexts[child.id].scope.containerId).toBe(child.scope!.containerId);
-      if (entry.kind === 'general') expect(body.availability.some((a: any) => a.containerId)).toBe(true);
-      expect(body.diagrams.find((d: any) => d.diagram.id === child.id).adrs).toHaveLength(2);
+      expect(body.containerContext).toBeUndefined(); expect(body.sourceContexts[child.id].scope.containerId).toBe((child.scope as Domain.ComponentScope).containerId);
+      if (entry.kind === 'general') expect(body.availability.some((a: Domain.ComponentAvailability) => a.containerId)).toBe(true);
+      expect(body.diagrams.find((d: Domain.HtmlExportSource['diagrams'][number]) => d.diagram.id === child.id).adrs).toHaveLength(2);
     }
   });
   it('excludes deliberate trash but fails unavailable required children and ancestors with actionable identities', async () => {

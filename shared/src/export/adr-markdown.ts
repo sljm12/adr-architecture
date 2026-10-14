@@ -8,7 +8,7 @@ function escapeMarkdown(value: string): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/([`*_{}\[\]()#+\-.!|~])/g, '\\$1')
+    .replace(/([`*_{}[\]()#+\-.!|~])/g, '\\$1')
     .replace(/\r\n|\r|\n/g, '  \n');
 }
 

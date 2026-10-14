@@ -4,7 +4,7 @@ import './recovery.css';
 type ConfirmDialogProps = { title: string; message: string; confirmLabel?: string | null; onConfirm?: () => void; onCancel: () => void; busy?: boolean };
 export function ConfirmDialog({ title, message, confirmLabel = 'Confirm', onConfirm, onCancel, busy = false }: ConfirmDialogProps) {
   const dialogRef = useRef<HTMLElement>(null), actions = useRef({ onCancel, busy });
-  actions.current = { onCancel, busy };
+  useEffect(() => { actions.current = { onCancel, busy }; }, [onCancel, busy]);
   const titleId = useId(), messageId = useId();
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null;

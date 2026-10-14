@@ -6,7 +6,6 @@ const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'u
 const store = source('../src/state/adr-store.ts');
 const list = source('../src/components/AdrList.tsx');
 const editor = source('../src/components/AdrEditor.tsx');
-const inspector = source('../src/components/WorkspaceInspector.tsx');
 const dialog = source('../src/components/ConfirmDialog.tsx');
 
 describe('ADR lifecycle status contract', () => {

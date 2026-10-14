@@ -1,3 +1,4 @@
+import type * as Domain from '../../../shared/src/index';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/api/app';
 import { DiagramRepository } from '../../src/persistence/diagram-repository';
@@ -16,13 +17,13 @@ describe('Component navigation REST', () => {
         const response = (await app.inject(url)).json(); const child = response.diagram ?? response;
         expect(child).toMatchObject({ id: ids.child, name: 'Renamed application', kind: 'component', scope: { parentDiagramId: ids.parent, containerId: ids.application, containerType: 'datastore' }, createdAt: before.createdAt, updatedAt: before.updatedAt });
       }
-      const rows = (await app.inject('/diagrams')).json(); expect(rows.find((d: any) => d.id === ids.child).name).toBe('Renamed application');
-      expect(rows.find((d: any) => d.id === ids.datastoreChild).name).toBe(before.name);
+      const rows = (await app.inject('/diagrams')).json(); expect(rows.find((d: Domain.DiagramDocument) => d.id === ids.child).name).toBe('Renamed application');
+      expect(rows.find((d: Domain.DiagramDocument) => d.id === ids.datastoreChild).name).toBe(before.name);
       const opened = await app.inject({ method: 'POST', url: `/diagrams/${ids.parent}/components/${ids.application}/component-diagram` }); expect(opened.statusCode).toBe(200);
       expect(repository.get(ids.child)).toMatchObject({ createdAt: before.createdAt, updatedAt: before.updatedAt, components: before.components, relationships: before.relationships, boundary: before.boundary });
       const trash = await app.inject(`/diagrams/${ids.child}/trash-impact`); expect(trash.statusCode).toBe(200); expect(trash.json().affectedDiagrams[0].name).toBe('Renamed application');
       expect((await app.inject({ method: 'DELETE', url: `/diagrams/${ids.child}` })).statusCode).toBe(204);
-      expect((await app.inject('/diagrams/trash')).json().find((d: any) => d.id === ids.child)).toMatchObject({ name: 'Renamed application', kind: 'component', scope: { containerId: ids.application, parentDiagramId: ids.parent } });
+      expect((await app.inject('/diagrams/trash')).json().find((d: Domain.DiagramDocument) => d.id === ids.child)).toMatchObject({ name: 'Renamed application', kind: 'component', scope: { containerId: ids.application, parentDiagramId: ids.parent } });
       const impact = await app.inject(`/diagrams/${ids.child}/restore-impact`); expect(impact.json().affectedDiagrams[0].name).toBe('Renamed application');
       const restored = await app.inject({ method: 'POST', url: `/diagrams/${ids.child}/restore` }); expect(restored.statusCode).toBe(200);
       expect(restored.json()).toMatchObject({ id: ids.child, name: 'Renamed application', createdAt: before.createdAt, scope: { containerType: 'datastore' }, components: before.components, relationships: before.relationships, boundary: before.boundary });

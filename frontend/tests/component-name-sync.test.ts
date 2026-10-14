@@ -1,3 +1,4 @@
+import type * as Domain from '../../shared/src/index';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { componentParentFixture, populatedComponentFixture, emptyComponentFixture, componentFixtureIds as ids } from '../../shared/tests/component-fixtures';
 import { diagramDocumentSchema, type DiagramDocument } from '../../shared/src/index';
@@ -48,7 +49,7 @@ describe('Component owner naming and reconciliation', () => {
     const c = child(); store().open(c); let release!: (d: DiagramDocument) => void;
     vi.spyOn(diagramClient, 'save').mockImplementation(() => new Promise(resolve => { release = resolve; }));
     const saving = store().save(); store().renameComponent(ids.internal, 'Newer internal');
-    const scope = { ...(c.scope as any), containerName: 'Renamed owner' };
+    const scope = { ...(c.scope as Domain.ComponentScope), containerName: 'Renamed owner' };
     release({ ...c, name: scope.containerName, scope }); await saving;
     expect(store().document).toMatchObject({ name: 'Renamed owner', components: [expect.objectContaining({ name: 'Newer internal' }), ...c.components.slice(1)] });
     store().undo(); expect(store().document?.name).toBe('Renamed owner'); store().redo(); expect(store().document?.components[0].name).toBe('Newer internal');

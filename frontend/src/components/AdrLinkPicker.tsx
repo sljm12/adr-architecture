@@ -21,13 +21,13 @@ export function AdrLinkPicker({ components, relationships = [], selectedIds, rel
     const target = components.find(component => component.id === relationship.targetComponentId)?.name ?? 'Unknown component';
     return `${source} → ${target}${relationship.label ? ` · ${relationship.label}` : ''}`;
   };
-  const matches = useMemo(() => {
+  const matches = (() => {
     const normalized = query.trim().toLowerCase();
     return {
       components: components.filter(component => !normalized || component.name.toLowerCase().includes(normalized)),
       relationships: relationships.filter(relationship => !normalized || relationshipName(relationship).toLowerCase().includes(normalized)),
     };
-  }, [components, relationships, query]);
+  })();
   const toggleComponent = (id: string) => onChange(selectedIds.includes(id) ? selectedIds.filter(selectedId => selectedId !== id) : [...selectedIds, id]);
   const toggleRelationship = (id: string) => onRelationshipChange?.(relationshipIds.includes(id) ? relationshipIds.filter(selectedId => selectedId !== id) : [...relationshipIds, id]);
   const selectedCount = selectedComponents.length + selectedRelationships.length;

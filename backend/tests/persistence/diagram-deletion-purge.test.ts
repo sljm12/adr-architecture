@@ -1,3 +1,4 @@
+import type * as Domain from '../../../shared/src/index';
 import { describe, expect, it } from 'vitest';
 import { diagramDeletionFixture } from '../component-recovery-fixture';
 import { DiagramRepository } from '../../src/persistence/diagram-repository';
@@ -88,7 +89,7 @@ for (const postgres of [false,true]) describe.skipIf(postgres && !postgresEnable
         if(kind==='source')outside.components=[{...child.components[1],id:artifactId,diagramId:outside.id}];
         if(kind==='endpoint')outside.relationships=[{...child.relationships[0],id:artifactId,diagramId:outside.id}];
         if(kind==='group')outside.groups=[{...before.documents.find(d=>d.id===ids.context)!.groups[0],id:artifactId,diagramId:outside.id,memberComponentIds:[ids.internal]}];
-        (repository as any).documents.set(outside.id,outside);
+        (repository as unknown as { documents: Map<string, Domain.DiagramDocument> }).documents.set(outside.id,outside);
       }
       if(kind!=='trash-root')await repository.trash(ids.unrelated);
       const saved=await repository.listAll();const sorted=(docs:typeof saved)=>[...docs].sort((a,b)=>a.id.localeCompare(b.id));

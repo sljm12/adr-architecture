@@ -1,4 +1,3 @@
-import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RecoveryImpactDialog } from '../src/components/RecoveryImpactDialog';
@@ -13,6 +12,13 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const child = () => populatedChildFixture() as unknown as DiagramDocument;
 const row = (d: DiagramDocument) => ({ id: d.id, name: d.name, status: d.status, createdAt: d.createdAt, updatedAt: d.updatedAt, kind: d.kind, scope: d.scope });
 describe('confirmed recovery UI and reconciliation', () => {
+  it('retains actionable blockers when error arrays contain malformed entries', () => {
+    const error = new DiagramApiError('Cannot remove.', 409, {
+      diagramBlockers: [null, 'invalid', { name: 'Runtime', status: 'active', diagramId: 'child', nextAction: 'Repair the source.' }],
+      blockers: [null, false, { title: 'Decision', adrId: 'adr', reason: 'Linked component.' }],
+    });
+    expect(formatDiagramApiError(error)).toBe('Cannot remove. Runtime (active; child child): Repair the source. Decision (adr): Linked component.');
+  });
   it('normalizes legacy removal responses and rejects broken local references before updating the editor', async () => {
     const parent = generalParentFixture() as unknown as DiagramDocument;
     delete parent.kind; parent.relationships = [];

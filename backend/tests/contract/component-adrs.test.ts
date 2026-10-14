@@ -1,3 +1,4 @@
+import type * as Domain from '../../../shared/src/index';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/api/app';
 import { completeAdrPayload } from '../fixtures';
@@ -23,10 +24,10 @@ describe('Component-local decision contracts', () => {
       expect((await app.inject({ method: 'DELETE', url: `/adrs/${replacement.id}` })).statusCode).toBe(409);
       const before = (await app.inject(`/adrs/${adr.id}`)).json();
       const child = (await app.inject(`/diagrams/${ids.child}`)).json();
-      child.components.find((c: any) => c.id === ids.internal).name = 'Renamed handler';
+      child.components.find((c: Domain.Component) => c.id === ids.internal).name = 'Renamed handler';
       expect((await app.inject({ method: 'PUT', url: `/diagrams/${ids.child}`, payload: child })).statusCode).toBe(200);
       expect((await app.inject(`/adrs/${adr.id}`)).json()).toEqual(before);
-      expect((await app.inject(`/diagrams/${ids.child}/adrs`)).json().map((a: any) => a.id).sort()).toEqual([adr.id, replacement.id].sort());
+      expect((await app.inject(`/diagrams/${ids.child}/adrs`)).json().map((a: Domain.ArchitectureDecisionRecord) => a.id).sort()).toEqual([adr.id, replacement.id].sort());
       expect((await app.inject(`/diagrams/${ids.child}/components/${ids.childPerson}/adrs`)).json()).toEqual([expect.objectContaining({ id: adr.id, status: 'superseded' })]);
       expect((await app.inject({ method: 'DELETE', url: `/diagrams/${ids.child}/relationships/${ids.relationship}` })).statusCode).toBe(409);
     } finally { await app.close(); }

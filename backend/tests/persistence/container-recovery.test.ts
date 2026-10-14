@@ -15,20 +15,20 @@ import { completeAdrPayload } from '../fixtures';
 function barrier() { let release!: () => void; const promise = new Promise<void>(resolve => { release = resolve; }); return { promise, release }; }
 function controlled(repository: DiagramRepositoryLike, acquired: ReturnType<typeof barrier>, release: ReturnType<typeof barrier>): DiagramRepositoryLike {
   return new Proxy(repository, { get(target, key) {
-    if (key === 'withGraphTransaction') return async (parent: string, children: string[], action: any) => target.withGraphTransaction(parent, children, async (scoped, transaction) => { acquired.release(); await release.promise; return action(scoped, transaction); });
+    if (key === 'withGraphTransaction') return async (parent: string, children: string[], action: Parameters<typeof target.withGraphTransaction>[2]) => target.withGraphTransaction(parent, children, async (scoped, transaction) => { acquired.release(); await release.promise; return action(scoped, transaction); });
     const value = Reflect.get(target, key); return typeof value === 'function' ? value.bind(target) : value;
   } });
 }
 function attempted(repository: DiagramRepositoryLike, entered: ReturnType<typeof barrier>): DiagramRepositoryLike {
   return new Proxy(repository, { get(target, key) {
-    if (key === 'withGraphTransaction') return (parent: string, children: string[], action: any) => { entered.release(); return target.withGraphTransaction(parent, children, action); };
+    if (key === 'withGraphTransaction') return (parent: string, children: string[], action: Parameters<typeof target.withGraphTransaction>[2]) => { entered.release(); return target.withGraphTransaction(parent, children, action); };
     const value = Reflect.get(target, key); return typeof value === 'function' ? value.bind(target) : value;
   } });
 }
 
 async function seed(repository: DiagramRepositoryLike) {
-  await repository.create(generalParentFixture() as any); await repository.create(populatedChildFixture() as any);
-  const early = emptyChildFixture(); early.scope.softwareSystemId = ids.duplicateOwner; await repository.create(early as any);
+  await repository.create(generalParentFixture() ); await repository.create(populatedChildFixture() );
+  const early = emptyChildFixture(); early.scope.softwareSystemId = ids.duplicateOwner; await repository.create(early );
 }
 async function roundTrip(repository: DiagramRepositoryLike) {
   await seed(repository); const service = new DiagramService(repository), before = await repository.get(ids.populatedChild);
@@ -92,7 +92,7 @@ describe.skipIf(!enabled)('PostgreSQL exact recovery', () => {
     await service.restore(ids.parentDiagram, { confirmedDiagramIds: impact.affectedDiagramIds, confirmedTrashBatchId: impact.trashBatchId }); expect(await adrs.get(adr.id)).toEqual(decision);
   });
   it('rechecks a trash confirmation after a competing canonical child creation', async () => {
-    await repository.create(generalParentFixture() as any); await repository.create(populatedChildFixture() as any);
+    await repository.create(generalParentFixture() ); await repository.create(populatedChildFixture() );
     const acquired = barrier(), release = barrier(), entered = barrier();
     const creating = new ContainerContextService(controlled(repository, acquired, release)).createOrOpen(ids.parentDiagram, ids.duplicateOwner);
     await acquired.promise;
@@ -113,7 +113,7 @@ describe.skipIf(!enabled)('PostgreSQL exact recovery', () => {
     if (action === 'delete') await service.removeRelationship(ids.parentDiagram, ids.parentRelationship);
     if (operation === 'create') { await service.removeRelationship(ids.populatedChild, ids.childRelationship); await service.save(ids.populatedChild, { ...(await repository.get(ids.populatedChild))!, components: (await repository.get(ids.populatedChild))!.components.filter(c => c.role === 'container'), relationships: [] }); }
     const acquired = barrier(), release = barrier(), entered = barrier();
-    const changed = operation === 'create' ? populatedChildFixture() as any : { ...(await repository.get(ids.populatedChild))!, components: (await repository.get(ids.populatedChild))!.components.filter(c => c.role === 'container'), relationships: [] };
+    const changed = operation === 'create' ? populatedChildFixture()  : { ...(await repository.get(ids.populatedChild))!, components: (await repository.get(ids.populatedChild))!.components.filter(c => c.role === 'container'), relationships: [] };
     if (operation === 'remove') await service.removeRelationship(ids.populatedChild, ids.childRelationship);
     const writing = new DiagramService(controlled(repository, acquired, release)).save(ids.populatedChild, changed); await acquired.promise;
     const parent = (await repository.get(ids.parentDiagram))!; parent.components.find(c => c.id === ids.sourceSystem)!.type = 'database';

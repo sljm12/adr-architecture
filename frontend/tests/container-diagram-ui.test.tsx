@@ -7,7 +7,7 @@ import { WorkspaceInspector } from '../src/components/WorkspaceInspector';
 import { DiagramToolbar } from '../src/components/DiagramToolbar';
 vi.mock('../src/state/diagram-store',async importOriginal=>{
   const actual=await importOriginal<typeof import('../src/state/diagram-store')>();
-  return {...actual,useDiagramStore:Object.assign((selector:any=(state:any)=>state)=>selector(actual.useDiagramStore.getState()),actual.useDiagramStore)};
+  return {...actual,useDiagramStore:Object.assign((selector: (state: ReturnType<typeof actual.useDiagramStore.getState>) => unknown=(state: ReturnType<typeof actual.useDiagramStore.getState>)=>state)=>selector(actual.useDiagramStore.getState()),actual.useDiagramStore)};
 });
 describe('container authoring surfaces',()=>{
   it('offers precisely Application and Datastore for internal creation, defaulting to Application',()=>{

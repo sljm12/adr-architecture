@@ -1,3 +1,4 @@
+import type * as Domain from '../../../shared/src/index';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -43,7 +44,7 @@ for(const postgres of [false,true]) describe.skipIf(postgres&&!enabled)(`contain
   });
   it('rolls back invalid child writes and keeps parent and child artifacts intact',async()=>{
     const before=(await repository.get(populatedChildFixture().id))!;const parent=await repository.get(generalParentFixture().id);const service=new DiagramService(repository);
-    for(const mutate of [(d:any)=>d.components[0].containerType=null,(d:any)=>d.components[0].containerType='queue',(d:any)=>d.components[1].sourceComponentId=d.components[0].id,(d:any)=>d.components[1].position={x:100,y:100},(d:any)=>d.relationships[0].label=' ']){const input=structuredClone(before);mutate(input);await expect(service.save(input.id,input)).rejects.toThrow();expect(await repository.get(input.id)).toEqual(before);expect(await repository.get(parent!.id)).toEqual(parent);}
+    for(const mutate of [(d: Domain.DiagramDocument)=>d.components[0].containerType=null,(d: Domain.DiagramDocument)=>Object.assign(d.components[0], { containerType: 'queue' }),(d: Domain.DiagramDocument)=>d.components[1].sourceComponentId=d.components[0].id,(d: Domain.DiagramDocument)=>d.components[1].position={x:100,y:100},(d: Domain.DiagramDocument)=>d.relationships[0].label=' ']){const input=structuredClone(before);mutate(input);await expect(service.save(input.id,input)).rejects.toThrow();expect(await repository.get(input.id)).toEqual(before);expect(await repository.get(parent!.id)).toEqual(parent);}
   });
   it('batch lists active/trash children with owner-derived names and unchanged local timestamps', async () => {
     const service = new DiagramService(repository);

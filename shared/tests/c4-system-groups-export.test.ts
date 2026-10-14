@@ -28,7 +28,7 @@ describe('C4 Mermaid group export', () => {
     const source = exportMermaid(document());
 
     expect(source).toContain('%% Semantic group membership is preserved; exact canvas positions are not exported.');
-    expect(source).toContain(`component_${personId.replaceAll('-', '_')}(\("Operator"\))`);
+    expect(source).toContain(`component_${personId.replaceAll('-', '_')}(("Operator"))`);
     expect(source).toContain(`subgraph group_${groupId.replaceAll('-', '_')}["Payments &amp; Core"]`);
     expect(source.match(new RegExp(`component_${firstId.replaceAll('-', '_')}`, 'g'))).toHaveLength(2);
     expect(source.match(new RegExp(`component_${secondId.replaceAll('-', '_')}`, 'g'))).toHaveLength(1);

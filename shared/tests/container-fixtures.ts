@@ -1,3 +1,5 @@
+import type { Component, DiagramDocument, ContainerScope, GroupBoundaryLayout } from '../src/domain/types';
+type ContainerFixture = DiagramDocument & { kind: 'container'; scope: ContainerScope; boundary: GroupBoundaryLayout };
 import { calculateGroupBounds } from '../src/domain/group-layout';
 
 export const containerFixtureIds = {
@@ -17,7 +19,7 @@ export const containerFixtureIds = {
 
 export const containerFixtureTimestamp = '2026-01-01T00:00:00.000Z';
 
-const makeComponent = (id: string, diagramId: string, name: string, type: string, x: number, y: number) => ({
+const makeComponent = (id: string, diagramId: string, name: string, type: string, x: number, y: number): Component => ({
   id,
   diagramId,
   name,
@@ -33,7 +35,7 @@ const makeComponent = (id: string, diagramId: string, name: string, type: string
   updatedAt: containerFixtureTimestamp,
 });
 
-const makeParent = () => {
+const makeParent = (): DiagramDocument => {
   const id = containerFixtureIds.parentDiagram;
   const owner = makeComponent(containerFixtureIds.owner, id, 'Payments', 'software-system', 80, 100);
   const duplicateOwner = makeComponent(containerFixtureIds.duplicateOwner, id, 'Payments', 'software-system', 360, 100);
@@ -90,7 +92,7 @@ export const groupedOwnerParentFixture = () => {
   });
 };
 
-const makeScope = () => ({
+const makeScope = (): ContainerScope => ({
   parentDiagramId: containerFixtureIds.parentDiagram,
   softwareSystemId: containerFixtureIds.owner,
   parentDiagramName: 'Payments architecture',
@@ -98,7 +100,7 @@ const makeScope = () => ({
   softwareSystemDescription: null,
 });
 
-export const emptyChildFixture = () => structuredClone({
+export const emptyChildFixture = (): ContainerFixture => structuredClone({
   id: containerFixtureIds.emptyChild,
   name: 'Payments',
   kind: 'container',
@@ -113,16 +115,16 @@ export const emptyChildFixture = () => structuredClone({
   groups: [],
 });
 
-export const populatedChildFixture = () => {
+export const populatedChildFixture = (): ContainerFixture => {
   const id = containerFixtureIds.populatedChild;
-  const container = {
+  const container: Component = {
     ...makeComponent(containerFixtureIds.container, id, 'Payment API', 'container', 100, 100),
     description: 'Accepts and processes payment requests',
     role: 'container',
     containerType: 'application',
     technology: 'TypeScript',
   };
-  const external = {
+  const external: Component = {
     ...makeComponent(containerFixtureIds.externalOccurrence, id, 'Ledger', 'software-system', 640, 100),
     role: 'external',
     sourceComponentId: containerFixtureIds.sourceSystem,

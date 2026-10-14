@@ -1,3 +1,4 @@
+import type * as Domain from '../../../shared/src/index';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/api/app';
 import { createDatabase } from '../../src/persistence/database';
@@ -32,7 +33,7 @@ describe('diagram artifact editing API', () => {
     document.relationships = [{ id: relationshipId, diagramId: document.id, sourceComponentId: componentA, targetComponentId: componentB, direction: 'directed', label: 'queries', createdAt: document.createdAt, updatedAt: document.updatedAt }];
     const initial = await app.inject({ method: 'PUT', url: `/diagrams/${document.id}`, payload: document });
     expect(initial.statusCode).toBe(200);
-    const edited = { ...initial.json(), components: initial.json().components.map((component: any) => component.id === componentA ? { ...component, name: 'Gateway', size: { width: 280, height: 104 } } : component), relationships: [{ ...initial.json().relationships[0], sourceComponentId: componentB, targetComponentId: componentA, direction: 'undirected', label: 'sends events' }] };
+    const edited = { ...initial.json(), components: initial.json().components.map((component: Domain.Component) => component.id === componentA ? { ...component, name: 'Gateway', size: { width: 280, height: 104 } } : component), relationships: [{ ...initial.json().relationships[0], sourceComponentId: componentB, targetComponentId: componentA, direction: 'undirected', label: 'sends events' }] };
     const saved = await app.inject({ method: 'PUT', url: `/diagrams/${document.id}`, payload: edited });
     expect(saved.statusCode).toBe(200);
     expect(saved.json().components).toEqual(expect.arrayContaining([expect.objectContaining({ id: componentA, name: 'Gateway', size: { width: 280, height: 104 } }), expect.objectContaining({ id: componentB, name: 'DB', size: { width: 180, height: 72 } })]));
@@ -40,7 +41,7 @@ describe('diagram artifact editing API', () => {
     const reopened = await app.inject({ method: 'GET', url: `/diagrams/${document.id}` });
     expect(reopened.statusCode).toBe(200);
     expect(reopened.json().components).toEqual(expect.arrayContaining([expect.objectContaining({ id: componentA, size: { width: 280, height: 104 } })]));
-    const invalid = { ...saved.json(), components: saved.json().components.map((component: any) => component.id === componentA ? { ...component, name: '   ' } : component) };
+    const invalid = { ...saved.json(), components: saved.json().components.map((component: Domain.Component) => component.id === componentA ? { ...component, name: '   ' } : component) };
     expect((await app.inject({ method: 'PUT', url: `/diagrams/${document.id}`, payload: invalid })).statusCode).toBe(422);
     await app.close();
   });
@@ -61,7 +62,7 @@ describe('diagram artifact editing API', () => {
     const initial = await app.inject({ method: 'PUT', url: `/diagrams/${document.id}`, payload: initialDocument });
     expect(initial.statusCode).toBe(200);
 
-    const invalidComponent = { ...initial.json(), components: initial.json().components.map((component: any) => component.id === componentA ? { ...component, name: '   ' } : component) };
+    const invalidComponent = { ...initial.json(), components: initial.json().components.map((component: Domain.Component) => component.id === componentA ? { ...component, name: '   ' } : component) };
     const componentError = await app.inject({ method: 'PUT', url: `/diagrams/${document.id}`, payload: invalidComponent });
     expect(componentError.statusCode).toBe(422);
     expect(componentError.json()).toMatchObject({ message: expect.any(String), fields: expect.any(Object) });

@@ -1,3 +1,4 @@
+import type * as Domain from '../../../shared/src/index';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/api/app';
 import { DiagramRepository } from '../../src/persistence/diagram-repository';
@@ -14,7 +15,7 @@ describe('Component editing REST contract', () => {
     const { repository, app } = setup();
     try {
       const context = (await app.inject(`/diagrams/${ids.child}/component-context`)).json();
-      expect(context.sources.map((s: any) => s.id).sort()).toEqual([ids.datastore, ids.personOccurrence, ids.systemOccurrence].sort());
+      expect(context.sources.map((s: Domain.Component) => s.id).sort()).toEqual([ids.datastore, ids.personOccurrence, ids.systemOccurrence].sort());
       expect(context.sources).toContainEqual(expect.objectContaining({ id: ids.personOccurrence, canonicalSourceComponentId: ids.canonicalPerson, sourceDiagramId: ids.context }));
       expect(context.sources).toContainEqual(expect.objectContaining({ id: ids.datastore, type: 'container', containerType: 'datastore', technology: 'PostgreSQL' }));
       const before = repository.get(ids.child)!;
@@ -25,10 +26,10 @@ describe('Component editing REST contract', () => {
       }
     } finally { await app.close(); }
   });
-  it.each(['name', 'description', 'technology'])('rejects blank internal %s with actionable fields and no partial save', async field => {
+  it.each(['name', 'description', 'technology'] as const)('rejects blank internal %s with actionable fields and no partial save', async field => {
     const { repository, app } = setup();
     try {
-      const before = repository.get(ids.child)!; const input = structuredClone(before); (input.components[0] as any)[field] = ' ';
+      const before = repository.get(ids.child)!; const input = structuredClone(before); (input.components[0] )[field] = ' ';
       const response = await app.inject({ method: 'PUT', url: `/diagrams/${ids.child}`, payload: input });
       expect(response.statusCode).toBe(422); expect(Object.keys(response.json().fields).some(key => key.includes(field))).toBe(true); expect(repository.get(ids.child)).toEqual(before);
     } finally { await app.close(); }
@@ -38,12 +39,12 @@ describe('Component editing REST contract', () => {
     try {
       const before = repository.get(ids.child)!;
       for (const change of [
-        (d: any) => { d.components[0].type = 'container'; },
-        (d: any) => { d.relationships[0].label = ' '; },
-        (d: any) => { d.relationships[0].direction = 'undirected'; },
-        (d: any) => { d.relationships[0].targetComponentId = ids.internal; },
-        (d: any) => { d.relationships[0].sourceComponentId = ids.childPerson; },
-        (d: any) => { d.relationships[0].targetComponentId = ids.canonicalPerson; },
+        (d: Domain.DiagramDocument) => { d.components[0].type = 'container'; },
+        (d: Domain.DiagramDocument) => { d.relationships[0].label = ' '; },
+        (d: Domain.DiagramDocument) => { d.relationships[0].direction = 'undirected'; },
+        (d: Domain.DiagramDocument) => { d.relationships[0].targetComponentId = ids.internal; },
+        (d: Domain.DiagramDocument) => { d.relationships[0].sourceComponentId = ids.childPerson; },
+        (d: Domain.DiagramDocument) => { d.relationships[0].targetComponentId = ids.canonicalPerson; },
       ]) {
         const input = structuredClone(before); change(input);
         const response = await app.inject({ method: 'PUT', url: `/diagrams/${ids.child}`, payload: input });
@@ -61,11 +62,11 @@ describe('Component editing REST contract', () => {
       expect(loaded.components[2]).toMatchObject({ name: 'Renamed customer', id: ids.childPerson, sourceComponentId: ids.personOccurrence, position: before.components[2].position });
       expect(loaded.components[1].technology).toBe('SQLite'); expect(loaded.relationships).toEqual(before.relationships);
       expect(repository.get(ids.child)!.updatedAt).toBe(before.updatedAt); expect(repository.get(ids.child)!.components.map(c => ({ id: c.id, updatedAt: c.updatedAt, position: c.position }))).toEqual(before.components.map(c => ({ id: c.id, updatedAt: c.updatedAt, position: c.position })));
-      const refreshed = (await app.inject(`/diagrams/${ids.child}/component-context`)).json(); expect(refreshed.sources.find((s: any) => s.id === ids.personOccurrence).name).toBe('Renamed customer');
+      const refreshed = (await app.inject(`/diagrams/${ids.child}/component-context`)).json(); expect(refreshed.sources.find((s: Domain.Component) => s.id === ids.personOccurrence).name).toBe('Renamed customer');
       loaded.components[1].name = 'Forged local name'; loaded.components[1].technology = 'Forged';
       const saved = await app.inject({ method: 'PUT', url: `/diagrams/${ids.child}`, payload: loaded });
       expect(saved.statusCode).toBe(200); expect(saved.json().components[1].technology).toBe('SQLite'); expect(saved.json().components[1].name).not.toBe('Forged local name');
-      expect(saved.json().relationships.map(({ updatedAt, ...relationship }: any) => relationship)).toEqual(before.relationships.map(({ updatedAt, ...relationship }) => relationship)); expect(repository.get(ids.parent)!.relationships.map(({ updatedAt, ...relationship }) => relationship)).toEqual(parentBefore.relationships.map(({ updatedAt, ...relationship }) => relationship));
+      expect(saved.json().relationships.map(({ updatedAt, ...relationship }: Domain.Relationship) => relationship)).toEqual(before.relationships.map(({ updatedAt, ...relationship }) => relationship)); expect(repository.get(ids.parent)!.relationships.map(({ updatedAt, ...relationship }) => relationship)).toEqual(parentBefore.relationships.map(({ updatedAt, ...relationship }) => relationship));
     } finally { await app.close(); }
   });
 });

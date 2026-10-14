@@ -4,6 +4,7 @@ import { ApiClientError } from './api-client.js';
 import type { CliIo } from './main.js';
 import type { DeletionPreview, CollectionPreview } from '../../shared/src/validation/schemas.js';
 
+// eslint-disable-next-line no-control-regex -- Escape terminal control characters in untrusted names.
 export const terminalText = (text: string) => text.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g, c => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
 
 async function confirm(): Promise<string | null> {

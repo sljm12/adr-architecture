@@ -80,6 +80,9 @@ including ADR-only edits and edits subsequently reverted; it is not an editable 
 
 ## Tests
 
+Run `npm run lint` to check TypeScript across the repository and React/React Hooks rules in the
+frontend. Run `npm run lint:fix` to apply available automatic fixes.
+
 ```text
 npm test
 npm run test:e2e

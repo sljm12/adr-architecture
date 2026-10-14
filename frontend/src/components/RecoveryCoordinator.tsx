@@ -14,7 +14,7 @@ export function RecoveryCoordinator({ onLoad, onExitAffected }: { onLoad: (id: s
   const [completed, setCompleted] = useState<Intent | null>(null);
   const [errorNotice, setErrorNotice] = useState(false);
   const request = useRef(0), mutating = useRef(false), callbacks = useRef({ onLoad, onExitAffected });
-  callbacks.current = { onLoad, onExitAffected };
+  useEffect(() => { callbacks.current = { onLoad, onExitAffected }; }, [onLoad, onExitAffected]);
   const preview = async (kind: 'trash' | 'restore', id: string, separate = false) => {
     if (mutating.current || useDiagramStore.getState().savePending || ['loading'].includes(useDiagramStore.getState().navigationStatus) || useAdrStore.getState().status === 'saving') return;
     const token = ++request.current; setIntent(null); setCompleted(null); setErrorNotice(false); setGuard(false); setRetry(null); setBusy(true); setNotice('Checking affected diagrams…');
@@ -25,11 +25,12 @@ export function RecoveryCoordinator({ onLoad, onExitAffected }: { onLoad: (id: s
     } catch (error) { if (token === request.current) { setErrorNotice(true); setNotice(formatDiagramApiError(error)); setRetry({ kind, id }); } }
     finally { if (token === request.current) setBusy(false); }
   };
-  const previewRef = useRef(preview); previewRef.current = preview;
+  const previewRef = useRef(preview); useEffect(() => { previewRef.current = preview; });
   useEffect(() => {
     const listener = (event: Event) => { const detail = (event as CustomEvent<{ kind: 'trash' | 'restore'; id: string }>).detail; if (detail?.id && ['trash', 'restore'].includes(detail.kind)) void previewRef.current(detail.kind, detail.id); };
     window.addEventListener('adr:recover-diagram', listener);
-    return () => { request.current++; window.removeEventListener('adr:recover-diagram', listener); };
+    const invalidate = () => { request.current++; };
+    return () => { invalidate(); window.removeEventListener('adr:recover-diagram', listener); };
   }, []);
   const finishRecovery = async (confirmed: Intent) => {
     await useDiagramStore.getState().refreshRecoveryLists(confirmed.impact.affectedDiagramIds);

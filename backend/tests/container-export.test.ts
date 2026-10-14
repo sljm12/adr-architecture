@@ -5,8 +5,8 @@ import { generalParentFixture, populatedChildFixture, emptyChildFixture, contain
 
 describe('resolved persisted container export', () => {
   it('uses current sources and saved subtype and rejects empty and inactive graphs', async () => {
-    const repository = new DiagramRepository(); repository.create(generalParentFixture() as any);
-    const child = populatedChildFixture(); child.components[0].containerType = 'datastore'; repository.create(child as any);
+    const repository = new DiagramRepository(); repository.create(generalParentFixture() );
+    const child = populatedChildFixture(); child.components[0].containerType = 'datastore'; repository.create(child );
     const app = buildApp(repository);
     try {
       const parent = repository.get(ids.parentDiagram)!; parent.components.find(c => c.id === ids.sourceSystem)!.name = 'Current Ledger'; parent.components.find(c => c.id === ids.owner)!.name = 'Renamed Payments'; repository.replace(parent);
@@ -16,7 +16,7 @@ describe('resolved persisted container export', () => {
       repository.trash(ids.parentDiagram);
       expect((await app.inject(`/diagrams/${ids.populatedChild}/export/mermaid`)).json().code).toBe('PARENT_INACTIVE');
     } finally { await app.close(); }
-    const emptyRepository = new DiagramRepository(); emptyRepository.create(generalParentFixture() as any); emptyRepository.create(emptyChildFixture() as any);
+    const emptyRepository = new DiagramRepository(); emptyRepository.create(generalParentFixture() ); emptyRepository.create(emptyChildFixture() );
     const emptyApp = buildApp(emptyRepository);
     try { const response = await emptyApp.inject(`/diagrams/${ids.emptyChild}/export/mermaid`); expect(response.statusCode).toBe(422); expect(response.json().code).toBe('EMPTY_CONTAINER_MERMAID'); } finally { await emptyApp.close(); }
   });

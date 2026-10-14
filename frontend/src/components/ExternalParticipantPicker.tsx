@@ -5,7 +5,10 @@ import { useDiagramStore } from '../state/diagram-store';
 
 export function ExternalParticipantPicker({ document, onClose }: { document:DiagramDocument; onClose:()=>void }) {
   const [context,setContext]=useState<ContainerContext|ComponentContext|null>(null),[source,setSource]=useState(''),[error,setError]=useState(''),[retry,setRetry]=useState(0);
-  useEffect(()=>{let current=true;setContext(null);setSource('');setError('');(document.kind==='component'?diagramClient.componentContext(document.id):diagramClient.containerContext(document.id)).then(value=>{if(current)setContext(value);}).catch(error=>{if(current)setError(error instanceof Error?error.message:'Could not load parent participants.');});return()=>{current=false;};},[document.id,document.kind,retry]);
+  const contextKey = `${document.id}:${document.kind}:${retry}`;
+  const [previousContextKey, setPreviousContextKey] = useState(contextKey);
+  if (contextKey !== previousContextKey) { setPreviousContextKey(contextKey); setContext(null); setSource(''); setError(''); }
+  useEffect(()=>{let current=true;(document.kind==='component'?diagramClient.componentContext(document.id):diagramClient.containerContext(document.id)).then(value=>{if(current)setContext(value);}).catch(error=>{if(current)setError(error instanceof Error?error.message:'Could not load parent participants.');});return()=>{current=false;};},[document.id,document.kind,retry]);
   const submit=(event:FormEvent)=>{event.preventDefault();if(!context||!useDiagramStore.getState().includeExternalParticipant(source,context)){setError(useDiagramStore.getState().error??'Choose an eligible participant.');return;}onClose();};
   const canonical=(id:string)=>{const source=context?.sources.find(c=>c.id===id);return source&&'canonicalSourceComponentId' in source?source.canonicalSourceComponentId:id;};
   const included=new Set(document.components.filter(c=>c.role==='external').map(c=>canonical(c.sourceComponentId!)));

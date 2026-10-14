@@ -1,3 +1,4 @@
+import type * as Domain from '../../shared/src/index';
 import { expect, test, type Locator, type Page, type Route } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { calculateGroupBounds, diagramDocumentSchema, fitContainerLayout } from '../../shared/src/index';
@@ -23,7 +24,7 @@ async function recoveryHarness(page: Page, repository: DiagramRepository, adrs =
   const behavior = { failChildLoad: false, failRecoveryRefresh: false, staleRestore: false, unsupportedSourceSave: false, restores: 0 };
   await page.route(/\/api\/(?:diagrams|adrs)(?:\/|$|\?)/, async route => {
     const request = route.request(), path = new URL(request.url()).pathname.replace(/^\/api/, '');
-    let payload = request.postData() ? JSON.parse(request.postData()!) : undefined;
+    const payload = request.postData() ? JSON.parse(request.postData()!) : undefined;
     if (path === '/diagrams' && request.method() === 'GET' && behavior.failRecoveryRefresh) { behavior.failRecoveryRefresh = false; return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Recovery list refresh temporarily failed.' }) }); }
     if (path === `/diagrams/${ids.populatedChild}` && request.method() === 'GET' && behavior.failChildLoad) { behavior.failChildLoad = false; return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Recovery succeeded; child load temporarily failed.' }) }); }
     if (request.method() === 'POST' && path.endsWith('/restore')) {
@@ -36,15 +37,15 @@ async function recoveryHarness(page: Page, repository: DiagramRepository, adrs =
       }
     }
     // Model an unsupported source classification arriving from a stale client; the service supplies the real blockers.
-    if (behavior.unsupportedSourceSave && request.method() === 'PUT' && path === `/diagrams/${ids.parentDiagram}`) { payload.components.find((c: any) => c.id === ids.sourceSystem).type = 'database'; payload.groups = []; }
-    const response = await app.inject({ method: request.method() as any, url: path, ...(payload ? { payload } : {}) });
+    if (behavior.unsupportedSourceSave && request.method() === 'PUT' && path === `/diagrams/${ids.parentDiagram}`) { payload.components.find((c: Domain.Component) => c.id === ids.sourceSystem).type = 'database'; payload.groups = []; }
+    const response = await app.inject({ method: request.method() as import('light-my-request').InjectOptions['method'], url: path, ...(payload ? { payload } : {}) });
     await route.fulfill({ status: response.statusCode, contentType: response.headers['content-type'] as string, body: response.body });
   });
   return { app, behavior };
 }
 
 test('protects dirty child and ADR work before named parent trash and restores stable local decisions', async ({ page }) => {
-  const repository = new DiagramRepository(); repository.create(makeParent()); repository.create(populatedChildFixture() as any);
+  const repository = new DiagramRepository(); repository.create(makeParent()); repository.create(populatedChildFixture() );
   const adrs = new AdrRepository(), decision = adrs.create(ids.populatedChild, completeAdrPayload); adrs.replaceLinks(decision.id, [ids.container, ids.externalOccurrence]); adrs.replaceRelationshipLinks(decision.id, [ids.childRelationship]);
   const { app } = await recoveryHarness(page, repository, adrs);
   try {
@@ -65,7 +66,7 @@ test('protects dirty child and ADR work before named parent trash and restores s
 });
 
 test('links and supersedes local child decisions while protecting referenced artifacts and active sources', async ({ page }) => {
-  const repository = new DiagramRepository(); repository.create(makeParent()); repository.create(populatedChildFixture() as any);
+  const repository = new DiagramRepository(); repository.create(makeParent()); repository.create(populatedChildFixture() );
   const adrs = new AdrRepository(), replacement = adrs.create(ids.populatedChild, { ...completeAdrPayload, title: 'Replacement decision', status: 'accepted' });
   const { app, behavior } = await recoveryHarness(page, repository, adrs);
   try {
@@ -92,7 +93,7 @@ test('links and supersedes local child decisions while protecting referenced art
 });
 
 test('reconfirms a later trash batch and retries a failed post-recovery load without repeating restoration', async ({ page }) => {
-  const repository = new DiagramRepository(); repository.create(makeParent()); repository.create(populatedChildFixture() as any);
+  const repository = new DiagramRepository(); repository.create(makeParent()); repository.create(populatedChildFixture() );
   await new DiagramService(repository).trash(ids.parentDiagram, [ids.parentDiagram, ids.populatedChild]);
   const { app, behavior } = await recoveryHarness(page, repository);
   try {
@@ -109,7 +110,7 @@ test('reconfirms a later trash batch and retries a failed post-recovery load wit
 });
 
 test('restores the canonical child by keyboard through its owner and retains actionable recoverable source blockers', async ({ page }) => {
-  const repository = new DiagramRepository(); repository.create(makeParent()); repository.create(populatedChildFixture() as any); await new DiagramService(repository).trash(ids.populatedChild);
+  const repository = new DiagramRepository(); repository.create(makeParent()); repository.create(populatedChildFixture() ); await new DiagramService(repository).trash(ids.populatedChild);
   const { app, behavior } = await recoveryHarness(page, repository);
   try {
     await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click();
@@ -180,8 +181,8 @@ test('completes selection, child creation, editing, interaction, save and parent
   await activate(page.getByRole('button', { name: 'Save', exact: true }));
   await expect(page.locator('.save-status')).toHaveText('Saved');
   const saved = mock.children.get(ids.owner);
-  expect(saved.components.map((component: any) => component.name)).toEqual(['Keyboard API edited', 'Keyboard database']);
-  expect(saved.relationships).toHaveLength(1); expect(saved.relationships[0].protocol).toBe('SQL');
+  expect(saved!.components.map((component: Domain.Component) => component.name)).toEqual(['Keyboard API edited', 'Keyboard database']);
+  expect(saved!.relationships).toHaveLength(1); expect(saved!.relationships[0].protocol).toBe('SQL');
   await activate(page.getByRole('button', { name: 'Return to Payments architecture, owner Payments', exact: true }));
   await expect(page.getByLabel('Diagram name', { exact: true })).toHaveValue(parentBefore.name);
   await expect(page.locator('#diagram-heading')).toBeFocused();
@@ -189,14 +190,14 @@ test('completes selection, child creation, editing, interaction, save and parent
 });
 
 test('confirms a child-requested exact parent batch, cancels safely and separately restores earlier trash', async ({ page }) => {
-  const repository = new DiagramRepository(); repository.create(makeParent()); repository.create(populatedChildFixture() as any);
-  const earlier = emptyChildFixture(); earlier.scope.softwareSystemId = ids.duplicateOwner; repository.create(earlier as any);
+  const repository = new DiagramRepository(); repository.create(makeParent()); repository.create(populatedChildFixture() );
+  const earlier = emptyChildFixture(); earlier.scope.softwareSystemId = ids.duplicateOwner; repository.create(earlier );
   const service = new DiagramService(repository); await service.trash(earlier.id); await service.trash(ids.parentDiagram, [ids.parentDiagram, ids.populatedChild]);
   const app = buildApp(repository);
   let restores = 0;
   await page.route(/\/api\/(?:diagrams|adrs)(?:\/|$|\?)/, async route => {
     const request = route.request(); if (request.method() === 'POST' && request.url().endsWith('/restore')) restores++;
-    const response = await app.inject({ method: request.method() as any, url: new URL(request.url()).pathname.replace(/^\/api/, ''), ...(request.postData() ? { payload: JSON.parse(request.postData()!) } : {}) });
+    const response = await app.inject({ method: request.method() as import('light-my-request').InjectOptions['method'], url: new URL(request.url()).pathname.replace(/^\/api/, ''), ...(request.postData() ? { payload: JSON.parse(request.postData()!) } : {}) });
     await route.fulfill({ status: response.statusCode, contentType: response.headers['content-type'] as string, body: response.body });
   });
   try {
@@ -221,11 +222,11 @@ test('exports a saved child with subtype, protocol, scope and its offline local 
   child.name = 'Payments runtime'; child.components[0].description = 'Accepts 日本語 requests & records "payments". '.repeat(8);
   child.components.push({ ...child.components[0], id: randomUUID(), name: 'Ledger datastore', containerType: 'datastore', technology: 'PostgreSQL', position: { x: 100, y: 340 } });
   const fitted = fitContainerLayout(child.components.filter(c => c.role === 'container'), child.components.filter(c => c.role === 'external')); child.boundary = fitted.boundary;
-  child.components = child.components.map(c => fitted.externalComponents.find(e => e.id === c.id) ?? c); repository.create(child as any);
+  child.components = child.components.map(c => fitted.externalComponents.find(e => e.id === c.id) ?? c); repository.create(child );
   const adrs = new AdrRepository(), decision = adrs.create(child.id, completeAdrPayload); adrs.replaceLinks(decision.id, [ids.container, ids.externalOccurrence]); adrs.replaceRelationshipLinks(decision.id, [ids.childRelationship]);
   const app = buildApp(repository, adrs);
   await page.route(/\/api\/(?:diagrams|adrs)(?:\/|$|\?)/, async route => {
-    const response = await app.inject({ method: route.request().method() as any, url: new URL(route.request().url()).pathname.replace(/^\/api/, ''), ...(route.request().postData() ? { payload: JSON.parse(route.request().postData()!) } : {}) });
+    const response = await app.inject({ method: route.request().method() as import('light-my-request').InjectOptions['method'], url: new URL(route.request().url()).pathname.replace(/^\/api/, ''), ...(route.request().postData() ? { payload: JSON.parse(route.request().postData()!) } : {}) });
     await route.fulfill({ status: response.statusCode, contentType: response.headers['content-type'] as string, body: response.body });
   });
   try {
@@ -254,71 +255,71 @@ test('exports a saved child with subtype, protocol, scope and its offline local 
 });
 
 function makeParent() {
-  const parent = groupedOwnerParentFixture() as any;
-  parent.components = parent.components.map((component: any) => ({
+  const parent = groupedOwnerParentFixture() ;
+  parent.components = parent.components.map((component: Domain.Component) => ({
     ...component,
     name: component.id === ids.owner || component.id === ids.duplicateOwner ? 'Payments' : component.name,
   }));
-  return diagramDocumentSchema.parse(parent) as any;
+  return diagramDocumentSchema.parse(parent) ;
 }
 
-function makeChild(parent: any, ownerId: string, id = childIds[ownerId] ?? randomUUID()) {
-  const owner = parent.components.find((component: any) => component.id === ownerId);
-  const base = emptyChildFixture() as any;
+function makeChild(parent: Domain.DiagramDocument, ownerId: string, id = childIds[ownerId] ?? randomUUID()) {
+  const owner = parent.components.find((component: Domain.Component) => component.id === ownerId);
+  const base = emptyChildFixture() ;
   return diagramDocumentSchema.parse({
     ...base,
     id,
-    name: owner.name,
-    scope: { parentDiagramId: parent.id, softwareSystemId: owner.id, parentDiagramName: parent.name, softwareSystemName: owner.name, softwareSystemDescription: owner.description },
-  }) as any;
+    name: owner!.name,
+    scope: { parentDiagramId: parent.id, softwareSystemId: owner!.id, parentDiagramName: parent.name, softwareSystemName: owner!.name, softwareSystemDescription: owner!.description },
+  }) ;
 }
 
-function makeSourceOccurrenceChild(parent: any) {
-  const base = populatedChildFixture() as any;
+function makeSourceOccurrenceChild(parent: Domain.DiagramDocument) {
+  const base = populatedChildFixture() ;
   const childId = ids.populatedChild;
-  const owner = parent.components.find((component: any) => component.id === ids.sourceSystem);
-  const payment = parent.components.find((component: any) => component.id === ids.owner);
+  const owner = parent.components.find((component: Domain.Component) => component.id === ids.sourceSystem);
+  const payment = parent.components.find((component: Domain.Component) => component.id === ids.owner);
   return diagramDocumentSchema.parse({
     ...base,
     id: childId,
-    name: owner.name,
-    scope: { parentDiagramId: parent.id, softwareSystemId: owner.id, parentDiagramName: parent.name, softwareSystemName: owner.name, softwareSystemDescription: owner.description },
-    components: base.components.map((component: any) => component.role === 'external'
-      ? { ...component, diagramId: childId, name: payment.name, description: payment.description, type: payment.type, sourceComponentId: payment.id }
+    name: owner!.name,
+    scope: { parentDiagramId: parent.id, softwareSystemId: owner!.id, parentDiagramName: parent.name, softwareSystemName: owner!.name, softwareSystemDescription: owner!.description },
+    components: base.components.map((component: Domain.Component) => component.role === 'external'
+      ? { ...component, diagramId: childId, name: payment!.name, description: payment!.description, type: payment!.type, sourceComponentId: payment!.id }
       : { ...component, diagramId: childId }),
-    relationships: base.relationships.map((relationship: any) => ({ ...relationship, diagramId: childId })),
-  }) as any;
+    relationships: base.relationships.map((relationship: Domain.Relationship) => ({ ...relationship, diagramId: childId })),
+  }) ;
 }
 
 async function mockContainerApi(page: Page, options: { failFirstChildLoad?: boolean; failFirstAvailability?: boolean; sourceOccurrence?: boolean; duplicateParent?: boolean } = {}) {
   let parent = makeParent();
-  const children = new Map<string, any>();
+  const children = new Map<string, Domain.DiagramDocument>();
   const allocatedChildIds = new Map<string, string>();
   let failFirstChildLoad = options.failFirstChildLoad ?? false;
   let failFirstAvailability = options.failFirstAvailability ?? false;
   let failNextSave = false;
   const savedPaths: string[] = [];
-  const adrs = new Map<string, any>();
-  const extraParents = new Map<string, any>();
+  const adrs = new Map<string, Domain.ArchitectureDecisionRecord>();
+  const extraParents = new Map<string, Domain.DiagramDocument>();
   if (options.duplicateParent) {
-    const otherParent = { ...makeParent(), id: randomUUID(), components: [] as any[], relationships: [], groups: [] };
+    const otherParent = { ...makeParent(), id: randomUUID(), components: [] as Domain.Component[], relationships: [], groups: [] };
     const owner = { ...parent.components[0], id: randomUUID(), diagramId: otherParent.id };
     otherParent.components = [owner]; extraParents.set(otherParent.id, otherParent);
     children.set(ids.owner, { ...makeChild(parent, ids.owner), name: 'Runtime' });
     children.set(owner.id, { ...makeChild(otherParent, owner.id), name: 'Runtime' });
   }
-  const sourceParent = (child: any) => child.scope.parentDiagramId === parent.id ? parent : extraParents.get(child.scope.parentDiagramId);
-  const resolved = (document: any) => {
+  const sourceParent = (child: Domain.DiagramDocument) => child.scope!.parentDiagramId === parent.id ? parent : extraParents.get(child.scope!.parentDiagramId);
+  const resolved = (document: Domain.DiagramDocument) => {
     if (document.kind !== 'container') return document;
-    const p = sourceParent(document), owner = p.components.find((c: any) => c.id === document.scope.softwareSystemId);
-    return { ...document, name: owner.name, scope: { ...document.scope, parentDiagramName: p.name, softwareSystemName: owner.name, softwareSystemDescription: owner.description }, components: document.components.map((c: any) => { const source = p.components.find((s: any) => s.id === c.sourceComponentId); return c.role === 'external' && source ? { ...c, name: source.name, description: source.description, type: source.type } : c; }) };
+    const p = sourceParent(document), owner = p!.components.find((c: Domain.Component) => c.id === document.scope!.softwareSystemId);
+    return { ...document, name: owner!.name, scope: { ...(document.scope as Domain.ContainerScope), parentDiagramName: p!.name, softwareSystemName: owner!.name, softwareSystemDescription: owner!.description }, components: document.components.map((c: Domain.Component) => { const source = p!.components.find((s: Domain.Component) => s.id === c.sourceComponentId); return c.role === 'external' && source ? { ...c, name: source.name, description: source.description, type: source.type } : c; }) };
   };
   if (options.sourceOccurrence) {
     const sourceChild = makeSourceOccurrenceChild(parent);
     children.set(ids.sourceSystem, sourceChild);
     children.set(ids.owner, makeChild(parent, ids.owner));
   }
-  const activeSummaries = () => [parent, ...extraParents.values(), ...children.values()].map(resolved).map((document: any) => ({
+  const activeSummaries = () => [parent, ...extraParents.values(), ...children.values()].map(resolved).map(document => ({
     id: document.id, name: document.name, status: document.status, createdAt: document.createdAt, updatedAt: document.updatedAt,
     kind: document.kind, scope: document.scope,
   }));
@@ -356,27 +357,27 @@ async function mockContainerApi(page: Page, options: { failFirstChildLoad?: bool
     if (entry) {
       const [, diagramId, componentId] = entry;
       const sourceDiagram = diagramId === parent.id ? parent : [...children.values()].find(document => document.id === diagramId);
-      const selected = sourceDiagram?.components.find((component: any) => component.id === componentId);
+      const selected = sourceDiagram?.components.find((component: Domain.Component) => component.id === componentId);
       if (!sourceDiagram || !selected) return fulfill(route, { message: 'Component not found.' }, 404);
       const ownerId = selected.role === 'external' ? selected.sourceComponentId : selected.id;
-      const owner = parent.components.find((component: any) => component.id === ownerId);
+      const owner = parent.components.find((component: Domain.Component) => component.id === ownerId);
       if (!owner) return fulfill(route, { message: 'Owner not found.' }, 404);
-      const existing = children.get(ownerId);
+      const existing = children.get(ownerId!);
       if (method === 'GET' && failFirstAvailability) {
         failFirstAvailability = false;
         return fulfill(route, { message:'Temporary availability failure.' }, 503);
       }
       if (method === 'GET') return fulfill(route, { parentDiagramId: parent.id, softwareSystemId: ownerId, availability: existing ? existing.status === 'trashed' ? 'trashed' : 'active' : 'none', diagram: existing ? { id: existing.id, name: existing.name, status: existing.status, createdAt: existing.createdAt, updatedAt: existing.updatedAt, kind: existing.kind, scope: existing.scope } : null });
       if (method === 'POST') {
-        const child = existing ?? makeChild(parent, ownerId, childId(ownerId));
-        children.set(ownerId, child);
+        const child = existing ?? makeChild(parent, ownerId!, childId(ownerId!));
+        children.set(ownerId!, child);
         return fulfill(route, child, existing ? 200 : 201);
       }
     }
     const contextPath = path.match(/^\/diagrams\/([^/]+)\/container-context$/);
     if (contextPath) {
       const child=[...children.values()].find(d=>d.id===contextPath[1]);
-      return fulfill(route,{scope:resolved(child).scope,sources:sourceParent(child).components.filter((c:any)=>c.id!==child.scope.softwareSystemId).map((c:any)=>({id:c.id,name:c.name,description:c.description,type:c.type})),capturedAt:new Date().toISOString()});
+      return fulfill(route,{scope:resolved(child!).scope,sources:sourceParent(child!)!.components.filter((c: Domain.Component)=>c.id!==child!.scope!.softwareSystemId).map((c: Domain.Component)=>({id:c.id,name:c.name,description:c.description,type:c.type})),capturedAt:new Date().toISOString()});
     }
     const diagramPath = path.match(/^\/diagrams\/([^/]+)$/);
     if (diagramPath) {
@@ -394,11 +395,11 @@ async function mockContainerApi(page: Page, options: { failFirstChildLoad?: bool
         savedPaths.push(id);
         if (failNextSave) { failNextSave = false; return fulfill(route, { message: 'Temporary save failure.' }, 503); }
         const saved = diagramDocumentSchema.parse(JSON.parse(route.request().postData() ?? '{}'));
-        if (id === parent.id) parent = saved as any;
+        if (id === parent.id) parent = saved ;
         else if (extraParents.has(id)) extraParents.set(id, saved);
         else {
-          const ownerId = (saved as any).scope.softwareSystemId;
-          children.set(ownerId, saved as any);
+          const ownerId = ((saved ).scope!).softwareSystemId;
+          children.set(ownerId, saved );
         }
         return fulfill(route, resolved(saved));
       }
@@ -410,13 +411,13 @@ async function mockContainerApi(page: Page, options: { failFirstChildLoad?: bool
 
 test('synchronizes the sidebar immediately on owner rename, undo/redo, save/reload and discard', async ({ page }) => {
   const mock = await mockContainerApi(page, { duplicateParent: true });
-  const child = mock.children.get(ids.owner), otherChild = [...mock.children.values()].find(c => c.id !== child.id);
+  const child = mock.children.get(ids.owner), otherChild = [...mock.children.values()].find(c => c.id !== child!.id);
   await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click();
-  const childRow = page.locator(`.saved-diagram-button[data-diagram-id="${child.id}"]`);
+  const childRow = page.locator(`.saved-diagram-button[data-diagram-id="${child!.id}"]`);
   await page.locator(`.react-flow__node[data-id="${ids.owner}"] .component-node`).click();
   await page.getByLabel('Component name', { exact: true }).fill('aa'); await page.getByRole('button', { name: 'Save component', exact: true }).click();
   await expect(childRow.locator('strong')).toHaveText('aa');
-  await expect(page.locator(`.saved-diagram-button[data-diagram-id="${otherChild.id}"] strong`)).toHaveText('Payments');
+  await expect(page.locator(`.saved-diagram-button[data-diagram-id="${otherChild!.id}"] strong`)).toHaveText('Payments');
   await page.getByRole('button', { name: 'Undo', exact: true }).click(); await expect(childRow.locator('strong')).toHaveText('Payments');
   await page.getByRole('button', { name: 'Redo', exact: true }).click(); await expect(childRow.locator('strong')).toHaveText('aa');
   await page.getByRole('button', { name: 'Save', exact: true }).click(); await expect(page.getByText('Saved', { exact: true }).first()).toBeVisible();
@@ -435,10 +436,10 @@ test('keeps a child under its parent across repeated content saves, guarded retu
   const mock = await mockContainerApi(page, { sourceOccurrence: true });
   const beforeParent = structuredClone(mock.parent);
   const child = mock.children.get(ids.sourceSystem);
-  await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${child.id}"]`).click();
+  await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${child!.id}"]`).click();
   await editChildContainer(page, 'Ledger runtime');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page.locator(`.saved-diagram-children .saved-diagram-button[data-diagram-id="${child.id}"]`)).toContainText('Ledger');
+  await expect(page.locator(`.saved-diagram-children .saved-diagram-button[data-diagram-id="${child!.id}"]`)).toContainText('Ledger');
   await editChildContainer(page, 'Ledger runtime two');
   mock.failSave(); await page.getByRole('button', { name: /Return to .*Payments architecture/ }).click();
   await page.getByRole('button', { name: 'Save and load', exact: true }).click();
@@ -448,23 +449,23 @@ test('keeps a child under its parent across repeated content saves, guarded retu
   await expect(page.locator('#diagram-heading')).toHaveText('Payments architecture');
   await expect(page.locator('#diagram-heading')).toBeFocused();
   await expect(page.locator(`.react-flow__node[data-id="${ids.sourceSystem}"] .component-node`)).toHaveClass(/is-selected/);
-  expect(mock.parent).toEqual(beforeParent); expect(mock.savedPaths).toEqual([child.id, child.id, child.id]);
-  await page.reload(); await page.locator(`.saved-diagram-button[data-diagram-id="${child.id}"]`).click();
+  expect(mock.parent).toEqual(beforeParent); expect(mock.savedPaths).toEqual([child!.id, child!.id, child!.id]);
+  await page.reload(); await page.locator(`.saved-diagram-button[data-diagram-id="${child!.id}"]`).click();
   await expect(page.locator(`.react-flow__node[data-id="${ids.container}"]`)).toContainText('Ledger runtime two');
-  expect(mock.children.get(ids.sourceSystem).scope.parentDiagramId).toBe(ids.parentDiagram);
+  expect((mock.children.get(ids.sourceSystem)!.scope!).parentDiagramId).toBe(ids.parentDiagram);
   await editChildContainer(page, 'Canceled draft');
   await page.getByRole('button', { name: /Return to .*Payments architecture/ }).click(); await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.locator(`.react-flow__node[data-id="${ids.container}"]`)).toContainText('Canceled draft');
   await page.getByRole('button', { name: /Return to .*Payments architecture/ }).click(); await page.getByRole('button', { name: 'Discard and load', exact: true }).click();
   await expect(page.locator('#diagram-heading')).toHaveText('Payments architecture');
-  expect(mock.children.get(ids.sourceSystem).components[0].name).toBe('Ledger runtime two');
+  expect((mock.children.get(ids.sourceSystem)!).components[0].name).toBe('Ledger runtime two');
 });
 
 test('groups identically named children by parent UUID and counts own-field filter matches only', async ({ page }) => {
   const mock = await mockContainerApi(page, { duplicateParent: true }); await page.goto('/');
   const children = [...mock.children.values()];
   await expect(page.locator('.saved-diagram-group')).toHaveCount(2);
-  for (const child of children) await expect(page.locator(`.saved-diagram-group[data-parent-diagram-id="${child.scope.parentDiagramId}"] .saved-diagram-children`)).toContainText('Payments');
+  for (const child of children) await expect(page.locator(`.saved-diagram-group[data-parent-diagram-id="${child.scope!.parentDiagramId}"] .saved-diagram-children`)).toContainText('Payments');
   await page.getByLabel('Filter diagrams by name').fill('^no-match^');
   await expect(page.locator('#saved-diagrams-filter-status')).toHaveText('0 of 4 diagrams match the filters.');
   await page.getByLabel('Filter diagrams by name').fill('Payments');
@@ -489,9 +490,9 @@ test('refreshes source names independently of local edits and guards a dirty ADR
   const mock = await mockContainerApi(page, { sourceOccurrence: true }); await page.goto('/');
   await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click();
   await editChildContainer(page, 'Own container name');
-  mock.parent.name = 'Renamed overview'; mock.parent.components.find((c: any) => c.id === ids.sourceSystem).name = 'Renamed owner'; mock.parent.components.find((c: any) => c.id === ids.owner).name = 'Renamed source';
-  const regroupedIds = [ids.owner, ids.duplicateOwner];
-  mock.parent.groups = [{ ...mock.parent.groups[0], name: 'Regrouped systems', memberComponentIds: regroupedIds, ...calculateGroupBounds(mock.parent.components.filter((c: any) => regroupedIds.includes(c.id))) }];
+  mock.parent.name = 'Renamed overview'; (mock.parent.components.find((c: Domain.Component) => c.id === ids.sourceSystem)!).name = 'Renamed owner'; (mock.parent.components.find((c: Domain.Component) => c.id === ids.owner)!).name = 'Renamed source';
+  const regroupedIds: string[] = [ids.owner, ids.duplicateOwner];
+  mock.parent.groups = [{ ...mock.parent.groups[0], name: 'Regrouped systems', memberComponentIds: regroupedIds, ...calculateGroupBounds(mock.parent.components.filter((c: Domain.Component) => regroupedIds.includes(c.id))) }];
   await page.getByRole('button', { name: 'Refresh source details', exact: true }).click();
   await expect(page.locator('#container-diagram-heading')).toHaveText('Renamed owner'); await expect(page.getByRole('group', { name: 'Component Renamed source, Software System' })).toBeVisible();
   await page.getByRole('button', { name: 'Undo', exact: true }).click(); await expect(page.getByLabel('Diagram name', { exact: true })).toHaveValue('Renamed owner'); await expect(page.locator('#container-diagram-heading')).toHaveText('Renamed owner');
@@ -517,12 +518,12 @@ test('saves both child and decision before navigation and discards both only aft
   for (const [label, value] of [['Title required', 'Keep the decision'], ['Context required', 'Scope context'], ['Decision required', 'Use a boundary'], ['Consequences required', 'Stable scope']]) await page.getByLabel(label, { exact: true }).fill(value);
   await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click(); await page.getByRole('button', { name: 'Save and load', exact: true }).click();
   await expect(page.locator('#diagram-heading')).toHaveText('Payments architecture');
-  expect(mock.children.get(ids.sourceSystem).components[0].name).toBe('Child and decision'); expect([...mock.adrs.values()]).toEqual([expect.objectContaining({ diagramId: ids.populatedChild, title: 'Keep the decision' })]);
+  expect((mock.children.get(ids.sourceSystem)!).components[0].name).toBe('Child and decision'); expect([...mock.adrs.values()]).toEqual([expect.objectContaining({ diagramId: ids.populatedChild, title: 'Keep the decision' })]);
   await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click();
   await editChildContainer(page, 'Discarded diagram'); await page.getByRole('button', { name: 'Decision', exact: true }).click(); await page.getByLabel('Title required', { exact: true }).fill('Discarded ADR');
   await page.getByRole('button', { name: /Return to .*Payments architecture/ }).click(); await page.getByRole('button', { name: 'Discard and load', exact: true }).click();
   await expect(page.locator('#diagram-heading')).toHaveText('Payments architecture');
-  expect(mock.children.get(ids.sourceSystem).components[0].name).toBe('Child and decision'); expect(mock.adrs.size).toBe(1);
+  expect((mock.children.get(ids.sourceSystem)!).components[0].name).toBe('Child and decision'); expect(mock.adrs.size).toBe(1);
   await page.getByRole('button', { name: 'Decision', exact: true }).click(); await expect(page.getByLabel('Title required', { exact: true })).toHaveValue('');
 });
 
@@ -600,9 +601,9 @@ test('authors two container subtypes and external interactions with atomic histo
   await page.getByRole('button',{name:'Connect',exact:true}).click();const inspector=page.getByLabel('Diagram inspector');await inspector.getByLabel('From',{exact:true}).selectOption({label:'Web app'});await inspector.getByLabel('To',{exact:true}).selectOption({label:'Ledger DB'});await inspector.getByLabel('Interaction description',{exact:true}).fill('Stores data');await inspector.getByLabel('Protocol',{exact:true}).fill('SQL');await inspector.getByRole('button',{name:'Connect components',exact:true}).click();
   await page.getByRole('button',{name:'Save',exact:true}).click();
   await expect(page.getByText('Saved',{exact:true}).first()).toBeVisible();
-  const saved=mock.children.get(ids.owner);expect(saved.components.map((c:any)=>c.containerType)).toEqual(['application','application','datastore',null,null]);expect(saved.relationships[0].protocol).toBe('SQL');expect(mock.parent).toEqual(originalParent);
+  const saved=mock.children.get(ids.owner);expect(saved!.components.map((c: Domain.Component)=>c.containerType)).toEqual(['application','application','datastore',null,null]);expect(saved!.relationships[0].protocol).toBe('SQL');expect(mock.parent).toEqual(originalParent);
   await page.getByRole('group',{name:'Component Ledger DB, Datastore'}).click();await page.getByLabel('Application',{exact:true}).check();await inspector.getByRole('button',{name:'Save component',exact:true}).click();await expect(page.getByRole('group',{name:'Component Ledger DB, Application'})).toBeVisible();await page.getByRole('button',{name:'Undo',exact:true}).click();await expect(page.getByRole('group',{name:'Component Ledger DB, Datastore'})).toBeVisible();await page.getByRole('button',{name:'Redo',exact:true}).click();await expect(page.getByRole('group',{name:'Component Ledger DB, Application'})).toBeVisible();
-  await page.getByRole('button',{name:'Save',exact:true}).click();await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click();await page.locator(`.saved-diagram-button[data-diagram-id="${saved.id}"]`).click();await page.getByRole('group',{name:'Component Ledger DB, Application'}).click();await expect(page.getByLabel('Application',{exact:true})).toBeChecked();expect(mock.children.get(ids.owner).id).toBe(saved.id);expect(mock.parent).toEqual(originalParent);
+  await page.getByRole('button',{name:'Save',exact:true}).click();await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click();await page.locator(`.saved-diagram-button[data-diagram-id="${saved!.id}"]`).click();await page.getByRole('group',{name:'Component Ledger DB, Application'}).click();await expect(page.getByLabel('Application',{exact:true})).toBeChecked();expect((mock.children.get(ids.owner)!).id).toBe(saved!.id);expect(mock.parent).toEqual(originalParent);
 });
 
 test('persists keyboard and pointer geometry, rejects external overlap, and undoes boundary displacement in one step',async({page})=>{
@@ -612,17 +613,17 @@ test('persists keyboard and pointer geometry, rejects external overlap, and undo
   const before=structuredClone(mock.children.get(ids.sourceSystem));
   const internal=page.locator(`.react-flow__node[data-id="${ids.container}"]`);
   await internal.focus();await page.keyboard.press('Enter');await page.keyboard.press('ArrowRight');await page.keyboard.press('ArrowRight');await page.getByRole('button',{name:'Save',exact:true}).click();
-  await expect.poll(()=>mock.children.get(ids.sourceSystem).components[0].position.x).toBe(before.components[0].position.x+10);
+  await expect.poll(()=>(mock.children.get(ids.sourceSystem)!).components[0].position.x).toBe(before!.components[0].position.x+10);
   await page.getByRole('button',{name:'Undo',exact:true}).click();
   await page.getByRole('button',{name:'Undo',exact:true}).click();
-  await page.getByRole('button',{name:'Save',exact:true}).click();await expect.poll(()=>mock.children.get(ids.sourceSystem).components[0].position.x).toBe(before.components[0].position.x);
+  await page.getByRole('button',{name:'Save',exact:true}).click();await expect.poll(()=>(mock.children.get(ids.sourceSystem)!).components[0].position.x).toBe(before!.components[0].position.x);
   const box=(await internal.boundingBox())!;await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width/2+270,box.y+box.height/2,{steps:12});await page.mouse.up();
-  await page.getByRole('button',{name:'Save',exact:true}).click();await expect.poll(()=>mock.children.get(ids.sourceSystem).components[1].position.x).not.toBe(before.components[1].position.x);
-  await page.getByRole('button',{name:'Undo',exact:true}).click();await page.getByRole('button',{name:'Save',exact:true}).click();await expect.poll(()=>mock.children.get(ids.sourceSystem).components[1].position.x).toBe(before.components[1].position.x);
+  await page.getByRole('button',{name:'Save',exact:true}).click();await expect.poll(()=>(mock.children.get(ids.sourceSystem)!).components[1].position.x).not.toBe(before!.components[1].position.x);
+  await page.getByRole('button',{name:'Undo',exact:true}).click();await page.getByRole('button',{name:'Save',exact:true}).click();await expect.poll(()=>(mock.children.get(ids.sourceSystem)!).components[1].position.x).toBe(before!.components[1].position.x);
   await page.getByRole('button',{name:'Hide Details panel',exact:true}).click();await page.getByRole('button',{name:'Fit View',exact:true}).click();
   const ext=page.locator(`.react-flow__node[data-id="${ids.externalOccurrence}"]`),extBox=(await ext.boundingBox())!,intBox=(await internal.boundingBox())!;
   await page.mouse.move(extBox.x+extBox.width/2,extBox.y+extBox.height/2);await page.mouse.down();await page.mouse.move(intBox.x+intBox.width/2,intBox.y+intBox.height/2,{steps:12});await page.mouse.up();
-  await expect(page.getByRole('alert').filter({hasText:'clearance'})).toBeVisible();await page.getByRole('button',{name:'Save',exact:true}).click();await expect.poll(()=>mock.children.get(ids.sourceSystem).components[1].position.x).toBe(before.components[1].position.x);
+  await expect(page.getByRole('alert').filter({hasText:'clearance'})).toBeVisible();await page.getByRole('button',{name:'Save',exact:true}).click();await expect.poll(()=>(mock.children.get(ids.sourceSystem)!).components[1].position.x).toBe(before!.components[1].position.x);
 });
 
 test('resizes containers atomically and keeps complete long metadata inside the card',async({page})=>{
@@ -639,8 +640,8 @@ test('resizes containers atomically and keeps complete long metadata inside the 
   await page.getByRole('button',{name:'Hide Details panel',exact:true}).click();await page.getByRole('button',{name:'Fit View',exact:true}).click();
   const handle=page.locator(`.react-flow__node[data-id="${ids.container}"] .react-flow__resize-control.bottom.right.handle`);await expect(handle).toBeVisible();const box=(await handle.boundingBox())!;
   await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width/2+100,box.y+box.height/2+20,{steps:10});await page.mouse.up();
-  await page.getByRole('button',{name:'Save',exact:true}).click();await expect.poll(()=>mock.children.get(ids.sourceSystem).components[0].size.width).toBeGreaterThan(before.components[0].size.width);
-  await page.getByRole('button',{name:'Undo',exact:true}).click();await page.getByRole('button',{name:'Save',exact:true}).click();await expect.poll(()=>mock.children.get(ids.sourceSystem).components[0].size.width).toBe(before.components[0].size.width);await expect.poll(()=>mock.children.get(ids.sourceSystem).boundary).toEqual(before.boundary);
+  await page.getByRole('button',{name:'Save',exact:true}).click();await expect.poll(()=>(mock.children.get(ids.sourceSystem)!).components[0].size.width).toBeGreaterThan(before!.components[0].size.width);
+  await page.getByRole('button',{name:'Undo',exact:true}).click();await page.getByRole('button',{name:'Save',exact:true}).click();await expect.poll(()=>(mock.children.get(ids.sourceSystem)!).components[0].size.width).toBe(before!.components[0].size.width);await expect.poll(()=>(mock.children.get(ids.sourceSystem)!).boundary).toEqual(before!.boundary);
   await page.screenshot({path:'test-results/container-metadata.png'});
 });
 

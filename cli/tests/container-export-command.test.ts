@@ -9,10 +9,10 @@ describe('saved container CLI package', () => {
   it.each(['application', 'datastore', 'empty'] as const)('packages %s without parent requests', async subtype => {
     const diagram = (subtype === 'empty' ? emptyChildFixture() : populatedChildFixture()) as unknown as DiagramDocument;
     diagram.name = 'Saved runtime'; if (subtype !== 'empty') diagram.components[0].containerType = subtype;
-    let bytes: any;
+    let bytes: Buffer | undefined;
     const client = { getDiagram: vi.fn(async () => diagram), listFullAdrs: vi.fn(async () => []) };
-    await exportDiagramCommand(client, diagram.id, 'runtime.zip', { statPath: async () => ({ isDirectory: () => true }), openFile: async () => ({ writeFile: async b => { bytes = b; }, close: async () => {} }) as any, write: () => {} });
-    const zip = await JSZip.loadAsync(bytes), page = await zip.file('index.html')!.async('string');
+    await exportDiagramCommand(client, diagram.id, 'runtime.zip', { statPath: async () => ({ isDirectory: () => true }), openFile: async () => ({ writeFile: async b => { bytes = b as Buffer; }, close: async () => {} }) , write: () => {} });
+    const zip = await JSZip.loadAsync(bytes!), page = await zip.file('index.html')!.async('string');
     expect(page).toContain('Saved runtime'); expect(page).toContain(diagram.scope!.parentDiagramId); expect(page).toContain('system-boundary');
     if (subtype !== 'empty') expect(page).toContain(subtype === 'application' ? 'Application' : 'Datastore');
     if (subtype === 'application') {

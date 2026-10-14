@@ -37,7 +37,7 @@ describe('GET HTML export source', () => {
     const { diagrams, get } = setup(); const legacy = exportDiagramFixture(); diagrams.create(legacy);
     const response = await get(legacy.id); expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ entryDiagramId: legacy.id, diagrams: [{ diagram: { kind: 'general' }, adrs: [] }], sourceContexts: {} });
-    expect(response.json().availability.every((item: any) => item.availability === 'none')).toBe(true);
+    expect(response.json().availability.every((item: { availability: string }) => item.availability === 'none')).toBe(true);
   });
   it('does not read global lists or hydrate unrelated corrupt diagrams', async () => {
     const { get } = setup(repository => ({ listAll: () => { throw new Error('global read'); }, findChildren: () => { throw new Error('filtered discovery'); }, get: id => {

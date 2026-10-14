@@ -3,7 +3,7 @@ import { buildAggregateHtmlPackage, buildHtmlPackage } from '../src/export/html-
 import { assembleHtmlPackageSnapshot } from '../src/export/html-package-snapshot';
 import { validatePackageReferences } from '../src/export/package-links';
 import { aggregateInput } from './html-package-input';
-import { exportAdrFixture, exportAdrsFixture, exportDiagramFixture, exportIds, exportTimestamp } from './html-export-fixtures';
+import { exportAdrsFixture, exportDiagramFixture, exportIds, exportTimestamp } from './html-export-fixtures';
 
 describe('portable HTML package files', () => {
   it('emits exactly one vector per included diagram and one safe Markdown per scoped ADR', () => {

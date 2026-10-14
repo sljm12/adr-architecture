@@ -581,7 +581,7 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
   async create(document: DiagramDocument): Promise<DiagramDocument> {
     document = validatePersistableDocument(document);
     const now = new Date();
-    const insert = async (tx: any) => {
+    const insert = async (tx: NodePgDatabase<typeof schema>) => {
       if (!this.inTransaction) await tx.execute(sql`LOCK TABLE diagrams IN ROW EXCLUSIVE MODE`);
       await tx.insert(schema.diagrams).values({
         id: document.id, name: document.name.trim(), status: 'active',
@@ -608,7 +608,7 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
     const existingComponents = new Map(existing.components.map(component => [component.id, component]));
     const existingRelationships = new Map(existing.relationships.map(relationship => [relationship.id, relationship]));
     const existingGroups = new Map((existing.groups ?? []).map(group => [group.id, group]));
-    const replace = async (tx: any) => {
+    const replace = async (tx: NodePgDatabase<typeof schema>) => {
       await tx.update(schema.diagrams).set({
         name: document.name.trim(), updatedAt: now, kind: document.kind ?? 'general',
         deletionRevision: sql`${schema.diagrams.deletionRevision} + 1`,
@@ -629,7 +629,7 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
     const groupIds = (existing.groups ?? []).filter(group => group.memberComponentIds.includes(componentId)).map(group => group.id);
     if (relationshipCount > 0 || groupIds.length > 0) return { conflict: true, relationshipCount, groupIds };
     const now = new Date();
-    const remove = async (tx: any) => {
+    const remove = async (tx: NodePgDatabase<typeof schema>) => {
       await tx.delete(schema.components).where(eq(schema.components.id, componentId));
       await tx.update(schema.diagrams).set({ updatedAt: now, deletionRevision: sql`${schema.diagrams.deletionRevision} + 1` }).where(eq(schema.diagrams.id, diagramId));
     };
@@ -641,7 +641,7 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
     const existing = await this.get(diagramId);
     if (!existing || existing.status !== 'active' || !existing.relationships.some(relationship => relationship.id === relationshipId)) return undefined;
     const now = new Date();
-    const remove = async (tx: any) => {
+    const remove = async (tx: NodePgDatabase<typeof schema>) => {
       await tx.delete(schema.relationships).where(eq(schema.relationships.id, relationshipId));
       await tx.update(schema.diagrams).set({ updatedAt: now, deletionRevision: sql`${schema.diagrams.deletionRevision} + 1` }).where(eq(schema.diagrams.id, diagramId));
     };
@@ -703,7 +703,7 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
   }
 
   private async insertChildren(
-    tx: any,
+    tx: NodePgDatabase<typeof schema>,
     document: DiagramDocument,
     now: Date,
     existingComponents: Map<string, DiagramDocument['components'][number]>,
@@ -752,7 +752,7 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
   }
 
   private async replaceChildren(
-    tx: any,
+    tx: NodePgDatabase<typeof schema>,
     document: DiagramDocument,
     now: Date,
     existingComponents: Map<string, DiagramDocument['components'][number]>,

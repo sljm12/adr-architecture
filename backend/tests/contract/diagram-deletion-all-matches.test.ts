@@ -1,3 +1,4 @@
+import type * as Domain from '../../../shared/src/index';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/api/app';
 import { DiagramService } from '../../src/services/diagram-service';
@@ -11,7 +12,7 @@ async function setup() {
   const app = buildApp(fixture.repository, fixture.adrs); apps.push(app);
   const service = new DiagramService(fixture.repository, fixture.adrs);
   const preview = (target: unknown) => app.inject({ method: 'POST', url: '/diagrams/deletion-set-preview', payload: { target } });
-  const execute = (impact: any, overrides = {}) => app.inject({ method: 'POST', url: '/diagrams/deletion-set', payload: { target: impact.target, rootDiagramIds: impact.rootDiagramIds, confirmationToken: impact.confirmationToken, ...overrides } });
+  const execute = (impact: Domain.CollectionImpact, overrides = {}) => app.inject({ method: 'POST', url: '/diagrams/deletion-set', payload: { target: impact.target, rootDiagramIds: impact.rootDiagramIds, confirmationToken: impact.confirmationToken, ...overrides } });
   return { ...fixture, app, service, preview, execute };
 }
 
@@ -25,12 +26,12 @@ describe('all exact-name matches HTTP contract', () => {
     const roots = [f.first.context, f.first.parent, f.first.child, f.second.context, f.second.parent, f.second.child].sort();
     expect(impact.rootDiagramIds).toEqual(roots);
     const affected = roots.concat(mode === 'permanent' ? [f.first.datastoreChild, f.second.datastoreChild] : []);
-    expect(impact.affectedDiagrams.map((d: any) => d.id).sort()).toEqual(affected.sort());
+    expect(impact.affectedDiagrams.map((d: Domain.DiagramDocument) => d.id).sort()).toEqual(affected.sort());
     expect(impact.affectedCount).toBe(affected.length);
-    expect(new Set(impact.affectedDiagrams.map((d: any) => d.id)).size).toBe(affected.length);
-    expect(impact.affectedDiagrams.map((d: any) => d.kind)).toEqual(mode === 'trash' ? ['general', 'general', 'container', 'container', 'component', 'component'] : ['general', 'general', 'container', 'container', 'component', 'component', 'component', 'component']);
+    expect(new Set(impact.affectedDiagrams.map((d: Domain.DiagramDocument) => d.id)).size).toBe(affected.length);
+    expect(impact.affectedDiagrams.map((d: Domain.DiagramDocument) => d.kind)).toEqual(mode === 'trash' ? ['general', 'general', 'container', 'container', 'component', 'component'] : ['general', 'general', 'container', 'container', 'component', 'component', 'component', 'component']);
     for (const kind of ['general', 'container', 'component']) {
-      const ids = impact.affectedDiagrams.filter((d: any) => d.kind === kind).map((d: any) => d.id);
+      const ids = impact.affectedDiagrams.filter((d: Domain.DiagramDocument) => d.kind === kind).map((d: Domain.DiagramDocument) => d.id);
       expect(ids).toEqual([...ids].sort());
     }
     expect(await f.snapshot()).toEqual(f.before);
@@ -61,12 +62,12 @@ describe('all exact-name matches HTTP contract', () => {
   it.each([' Équipe 東京! ', '3f85e47c-86c5-4b5a-983b-d95a7a7c2e74'])('preserves literal names including %s', async name => {
     const f = await setup();
     const roots = [await f.service.create(name), await f.service.create(name)];
-    for (const d of roots) (f.repository as any).documents.set(d.id, { ...d, name });
+    for (const d of roots) (f.repository as unknown as { documents: Map<string, Domain.DiagramDocument> }).documents.set(d.id, { ...d, name });
     await f.service.create(name + '!');
     const preview = await f.preview({ kind: 'all-matches', name, mode: 'permanent' });
     expect(preview.statusCode).toBe(200); validate('CollectionImpact', preview.json());
     expect(preview.json().rootDiagramIds).toEqual(roots.map(d => d.id).sort());
-    expect(preview.json().affectedDiagrams.map((d: any) => d.name)).toEqual([name, name]);
+    expect(preview.json().affectedDiagrams.map((d: Domain.DiagramDocument) => d.name)).toEqual([name, name]);
   });
 
   it('uses active roots for Trash and all-status roots for permanent deletion', async () => {
@@ -75,7 +76,7 @@ describe('all exact-name matches HTTP contract', () => {
     const active = await f.preview({ kind: 'all-matches', name: f.name, mode: 'trash' });
     expect(active.statusCode).toBe(200); validate('CollectionImpact', active.json());
     expect(active.json().rootDiagramIds).toEqual([f.second.context, f.second.parent, f.second.child].sort());
-    expect(active.json().affectedDiagrams.every((d: any) => d.status === 'active')).toBe(true);
+    expect(active.json().affectedDiagrams.every((d: Domain.DiagramDocument) => d.status === 'active')).toBe(true);
     const mixed = await f.preview({ kind: 'all-matches', name: f.name, mode: 'permanent' });
     expect(mixed.statusCode).toBe(200); validate('CollectionImpact', mixed.json());
     expect(mixed.json().rootDiagramIds).toHaveLength(6); expect(mixed.json().affectedDiagrams).toHaveLength(8);

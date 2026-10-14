@@ -7,7 +7,7 @@ import { DiagramToolbar } from '../src/components/DiagramToolbar';
 import { useDiagramStore } from '../src/state/diagram-store';
 vi.mock('../src/state/diagram-store', async importOriginal => {
   const actual = await importOriginal<typeof import('../src/state/diagram-store')>();
-  return { ...actual, useDiagramStore: Object.assign((selector: any = (s: any) => s) => selector(actual.useDiagramStore.getState()), actual.useDiagramStore) };
+  return { ...actual, useDiagramStore: Object.assign((selector: (state: ReturnType<typeof actual.useDiagramStore.getState>) => unknown = (state: ReturnType<typeof actual.useDiagramStore.getState>) => state) => selector(actual.useDiagramStore.getState()), actual.useDiagramStore) };
 });
 describe('Component authoring surfaces', () => {
   it('provides Component-only required fields and enables authoring and source refresh controls', () => {

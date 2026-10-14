@@ -46,7 +46,7 @@ test('keyboard-only create/open/edit/save/return/ADR linking and exact recovery 
   const app = buildApp(diagrams);
   await page.route(/\/api\/(?:diagrams|adrs)(?:\/|$|\?)/, async route => {
     const request = route.request(), url = new URL(request.url());
-    const response = await app.inject({ method: request.method() as any, url: url.pathname.replace(/^\/api/, '') + url.search, ...(request.postData() ? { payload: JSON.parse(request.postData()!) } : {}) });
+    const response = await app.inject({ method: request.method() as import('light-my-request').InjectOptions['method'], url: url.pathname.replace(/^\/api/, '') + url.search, ...(request.postData() ? { payload: JSON.parse(request.postData()!) } : {}) });
     await route.fulfill({ status: response.statusCode, contentType: 'application/json', body: response.body });
   });
   const button = (name: string | RegExp) => page.getByRole('button', { name, exact: true });

@@ -1,3 +1,4 @@
+import type * as Domain from '../../shared/src/index';
 import { afterEach, describe, expect, it } from 'vitest';
 import { runCli } from '../src/main';
 import { DiagramService } from '../../backend/src/services/diagram-service';
@@ -15,10 +16,10 @@ describe('all-matches CLI over listening HTTP', () => {
     expect(f.requests).toHaveLength(2);
     expect(f.requests[0].url).toContain('/diagrams/deletion-set-preview');
     expect(f.requests[0].body).toEqual({ target: { kind: 'all-matches', name: f.name, mode } });
-    expect(f.requests[1].body.rootDiagramIds).toHaveLength(6);
+    expect(f.requests[1].body.rootDiagramIds!).toHaveLength(6);
     expect(f.requests[1].body.target).toEqual(f.requests[0].body.target);
     expect(f.output()).toContain('Affected count:');
-    for (const id of f.requests[1].body.rootDiagramIds) expect(f.output()).toContain(id);
+    for (const id of f.requests[1].body.rootDiagramIds!) expect(f.output()).toContain(id);
     expect(f.output()).not.toContain(f.requests[1].body.confirmationToken);
     expect(f.output()).toContain(mode === 'trash' ? 'Moved to Trash' : 'Permanently deleted');
     expect(f.confirm).not.toHaveBeenCalled(); expect(f.errors()).toBe('');
@@ -79,7 +80,7 @@ describe('all-matches CLI over listening HTTP', () => {
       if (fault === 'malformed') return new Response('{}');
       const impact = await response.json();
       if (fault === 'target') impact.target.name = 'Wrong';
-      else impact.affectedDiagrams.find((d: any) => impact.rootDiagramIds.includes(d.id)).name = 'Wrong';
+      else impact.affectedDiagrams.find((d: Domain.DiagramDocument) => impact.rootDiagramIds.includes(d.id)).name = 'Wrong';
       return new Response(JSON.stringify(impact));
     });
     expect(await runCli([...args(f.name), '--yes'], f.io, f.client)).toBe(1); expect(f.requests).toHaveLength(1); expect(f.confirm).not.toHaveBeenCalled();

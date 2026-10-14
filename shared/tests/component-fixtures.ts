@@ -1,4 +1,5 @@
-import type { ArchitectureDecisionRecord, DiagramDocument } from '../src/domain/types';
+import type { ArchitectureDecisionRecord, DiagramDocument, ComponentScope, GroupBoundaryLayout, Component } from '../src/domain/types';
+type ComponentFixture = DiagramDocument & { kind: 'component'; scope: ComponentScope; boundary: GroupBoundaryLayout };
 import { generalParentFixture, populatedChildFixture, containerFixtureIds, containerFixtureTimestamp } from './container-fixtures';
 
 export const componentFixtureIds = {
@@ -34,7 +35,7 @@ export function componentParentFixture(): DiagramDocument {
   parent.boundary = { position: { x: 76, y: 32 }, size: { width: 488, height: 208 } };
   return parent;
 }
-export function emptyComponentFixture(owner: 'application' | 'datastore' = 'application') {
+export function emptyComponentFixture(owner: 'application' | 'datastore' = 'application'): ComponentFixture {
   const parent = componentParentFixture();
   const container = parent.components.find(c => c.id === componentFixtureIds[owner])!;
   return {
@@ -44,11 +45,11 @@ export function emptyComponentFixture(owner: 'application' | 'datastore' = 'appl
     boundary: { position: { x: 0, y: 0 }, size: { width: 480, height: 320 } }, components: [], relationships: [], groups: [],
   };
 }
-export function populatedComponentFixture() {
+export function populatedComponentFixture(): ComponentFixture {
   const child = emptyComponentFixture();
   const parent = componentParentFixture();
-  const internal = { ...parent.components[0], id: componentFixtureIds.internal, diagramId: child.id, name: 'Payment handler', description: 'Validates and records requests', role: 'component', type: 'component', containerType: null, technology: 'TypeScript', position: { x: 24, y: 68 }, size: { width: 180, height: 100 } };
-  const supporting = [componentFixtureIds.datastore, componentFixtureIds.personOccurrence, componentFixtureIds.systemOccurrence].map((id, index) => {
+  const internal: Component = { ...parent.components[0], id: componentFixtureIds.internal, diagramId: child.id, name: 'Payment handler', description: 'Validates and records requests', role: 'component', type: 'component', containerType: null, technology: 'TypeScript', position: { x: 24, y: 68 }, size: { width: 180, height: 100 } };
+  const supporting = [componentFixtureIds.datastore, componentFixtureIds.personOccurrence, componentFixtureIds.systemOccurrence].map((id, index): Component => {
     const source = parent.components.find(c => c.id === id)!;
     return { ...source, id: [componentFixtureIds.siblingOccurrence, componentFixtureIds.childPerson, componentFixtureIds.childSystem][index], diagramId: child.id, role: 'external', sourceComponentId: source.id, position: { x: 504, y: index * 120 }, size: { width: 180, height: 72 } };
   });

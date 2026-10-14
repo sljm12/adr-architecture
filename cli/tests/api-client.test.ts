@@ -56,7 +56,7 @@ describe('API client', () => {
     }
   });
   it.each(['application', 'datastore'])('retains the saved child own name, scope and %s subtype on GET and flat listing', async containerType => {
-    const child = populatedChildFixture(); child.name = 'Runtime'; child.components[0].containerType = containerType;
+    const child = populatedChildFixture(); child.name = 'Runtime'; Object.assign(child.components[0], { containerType: containerType });
     const summary = { id: child.id, name: child.name, kind: child.kind, scope: child.scope, status: child.status, createdAt: child.createdAt, updatedAt: child.updatedAt };
     const client = createApiClient({ fetch: vi.fn().mockResolvedValueOnce(response([summary])).mockResolvedValueOnce(response(child)) });
     expect(await client.listDiagrams()).toEqual([summary]); expect(await client.getDiagram(child.id)).toEqual(child);

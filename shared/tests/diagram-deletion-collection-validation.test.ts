@@ -14,15 +14,15 @@ const result = { target, mode: 'trash', rootDiagramIds: roots, affectedDiagrams,
 describe('strict collection deletion boundaries', () => {
   it('validates parsed boundaries against the OpenAPI collection definitions', () => {
     const path = resolve('specs/012-cli-delete-diagrams/contracts/openapi.json');
-    const dereference = (value: any, source = path): any => {
+    const dereference = (value: unknown, source = path): unknown => {
       if (Array.isArray(value)) return value.map(v => dereference(v, source));
       if (!value || typeof value !== 'object') return value;
-      if (value.$ref) {
+      if ('$ref' in value && typeof value.$ref === 'string') {
         const [file, pointer] = value.$ref.split('#'); const targetPath = file ? resolve(dirname(source), file) : source;
         const text = readFileSync(targetPath, 'utf8');
         const document = targetPath.endsWith('.yaml') ? JSON.parse(readFileSync(resolve('backend/tests/contract/diagram-deletion-summary-contract.json'), 'utf8')) : JSON.parse(text);
         if (targetPath.endsWith('.yaml')) expect(createHash('sha256').update(text).digest('hex')).toBe(document.sourceSha256);
-        return dereference(pointer.split('/').slice(1).reduce((v: any, key: string) => v[key], document), targetPath);
+        return dereference(pointer.split('/').slice(1).reduce((v: unknown, key: string) => (v as Record<string, unknown>)[key], document), targetPath);
       }
       return Object.fromEntries(Object.entries(value).map(([key, v]) => [key, dereference(v, source)]));
     };
@@ -38,7 +38,7 @@ describe('strict collection deletion boundaries', () => {
         CollectionResult: collectionResultSchema.parse(impact),
       };
       for (const [name, boundary] of Object.entries(boundaries)) {
-        const check = ajv.compile(dereference(contract.components.schemas[name]));
+        const check = ajv.compile(dereference(contract.components.schemas[name]) as object);
         expect(check(boundary), JSON.stringify(check.errors)).toBe(true);
       }
     }

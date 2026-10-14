@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { DiagramRepositoryLike } from '../persistence/diagram-repository';
 import { ComponentDependencyConflictError, DiagramConflictError, DiagramNotFoundError, DiagramService } from '../services/diagram-service';
 import { sendError, sendDeletionError } from './errors';
@@ -20,7 +20,7 @@ export function registerRecoveryRoutes(app: FastifyInstance, repository: Diagram
     try { return await service.executeDeletion(uuidSchema.parse(request.params.diagramId), deletionConfirmationSchema.parse(request.body)); }
     catch (error) { return sendDeletionError(reply, error); }
   });
-  const missing = (error: unknown, reply: any) => error instanceof DiagramNotFoundError ? reply.code(404).send({ message: error.message }) : undefined;
+  const missing = (error: unknown, reply: FastifyReply) => error instanceof DiagramNotFoundError ? reply.code(404).send({ message: error.message }) : undefined;
   app.get('/diagrams/trash', async (_request, reply) => {
     try { return await service.listSummaries('trashed'); }
     catch (error) { return sendError(reply, error); }

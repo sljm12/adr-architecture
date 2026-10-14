@@ -7,7 +7,7 @@ export async function collectionCliFixture() {
   const fixture = await collectionDeletionFixture();
   const app = buildApp(fixture.repository, fixture.adrs);
   const baseUrl = await app.listen({ host: '127.0.0.1', port: 0 });
-  const requests: Array<{ url: string; body: any }> = [];
+  const requests: Array<{ url: string; body: { target: { kind: string; name?: string }; rootDiagramIds?: string[]; confirmationToken?: string } }> = [];
   const stdout = vi.fn(), stderr = vi.fn(), confirm = vi.fn<() => Promise<string | null>>().mockResolvedValue('yes');
   let afterPreview: (() => Promise<void>) | undefined;
   let executionResponse: ((response: Response) => Promise<Response>) | undefined;

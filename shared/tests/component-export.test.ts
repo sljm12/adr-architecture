@@ -1,3 +1,4 @@
+import type * as Domain from '../src/index';
 import { describe, expect, it } from 'vitest';
 import { buildHtmlPackage, exportMermaid, renderDiagramSvg, validatePackageReferences, type DiagramDocument } from '../src/index';
 import { componentAdrFixtures, emptyComponentFixture, populatedComponentFixture, componentFixtureIds as ids } from './component-fixtures';
@@ -31,7 +32,7 @@ describe('selected Component exports', () => {
     try { exportMermaid(diagram); } catch (error) { expect(error).toMatchObject({ code: 'EMPTY_COMPONENT_MERMAID' }); }
   });
   it('rejects incomplete metadata, controls in owner scope, endpoints and local ADR references', () => {
-    for (const mutate of [(d: DiagramDocument) => { d.components[0].technology = ''; }, (d: DiagramDocument) => { (d.scope as any).containerName = '\u0001'; }, (d: DiagramDocument) => { d.relationships[0].targetComponentId = crypto.randomUUID(); }]) {
+    for (const mutate of [(d: DiagramDocument) => { d.components[0].technology = ''; }, (d: DiagramDocument) => { (d.scope as Domain.ComponentScope).containerName = '\u0001'; }, (d: DiagramDocument) => { d.relationships[0].targetComponentId = crypto.randomUUID(); }]) {
       const diagram = populatedComponentFixture() as DiagramDocument; mutate(diagram);
       expect(() => buildHtmlPackage({ diagram, adrs: [] })).toThrow();
       expect(() => exportMermaid(diagram)).toThrow();

@@ -30,7 +30,8 @@ export function SavedDiagramList({ onSelect, onDelete, onCreate }: SavedDiagramL
   const [recoveryMessage, setRecoveryMessage] = useState('');
 
   useEffect(() => { void refresh(); }, [refresh]);
-  useEffect(() => { setTrash(recoveredTrash); }, [recoveredTrash]);
+  const [previousRecoveredTrash, setPreviousRecoveredTrash] = useState(recoveredTrash);
+  if (recoveredTrash !== previousRecoveredTrash) { setPreviousRecoveredTrash(recoveredTrash); setTrash(recoveredTrash); }
 
   const list = useMemo(() => deriveDiagramGroups(deriveDiagramLibraryDisplay(documents, currentDocument), { nameQuery, createdFrom, createdTo }, sort), [documents, currentDocument, nameQuery, createdFrom, createdTo, sort]);
   const hasFilters = Boolean(nameQuery.trim() || createdFrom || createdTo);

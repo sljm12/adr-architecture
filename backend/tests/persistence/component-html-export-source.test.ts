@@ -1,3 +1,4 @@
+import type * as Domain from '../../../shared/src/index';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { componentTestDatabase, postgresEnabled } from './component-test-database';
 import { componentPackageInput } from '../../../shared/tests/component-package-input';
@@ -19,7 +20,7 @@ describe.skipIf(!postgresEnabled)('Component PostgreSQL consistent export source
     const context = await gather.gather(root.id); expect(context.diagrams).toHaveLength(4);
     expect((await gather.gather(parent.id)).diagrams).toHaveLength(3);
     const selected = await gather.gather(child.id); expect(selected.diagrams).toHaveLength(1);
-    expect((selected as any).sourceContexts[child.id].scope).toMatchObject({ systemContextDiagramId: root.id, containerId: child.scope!.containerId });
+    expect((selected ).sourceContexts[child.id].scope).toMatchObject({ systemContextDiagramId: root.id, containerId: (child.scope as Domain.ComponentScope).containerId });
     expect(selected.diagrams[0].adrs).toHaveLength(2); selected.diagrams[0].diagram.name = 'Mutated response';
     expect((await db.diagrams.get(child.id))!.name).toBe(child.name);
     expect((await db.pool.query('SELECT id, updated_at FROM diagrams ORDER BY id')).rows).toEqual(before.rows);

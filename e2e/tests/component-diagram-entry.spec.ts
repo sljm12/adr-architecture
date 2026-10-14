@@ -13,7 +13,7 @@ async function harness(page: Page) {
     if (request.method() === 'POST' && path.endsWith('/component-diagram')) behavior.posts++;
     if (behavior.failSave && request.method() === 'PUT') { behavior.failSave = false; return route.fulfill({ status: 503, json: { message: 'Parent save temporarily failed' } }); }
     if (behavior.failLoad && request.method() === 'GET' && repository.get(path.split('/')[2])?.kind === 'component' && path.split('/').length === 3) { behavior.failLoad = false; return route.fulfill({ status: 503, json: { message: 'Child load temporarily failed' } }); }
-    const response = await app.inject({ method: request.method() as any, url: path, ...(request.postData() ? { payload: JSON.parse(request.postData()!) } : {}) });
+    const response = await app.inject({ method: request.method() as import('light-my-request').InjectOptions['method'], url: path, ...(request.postData() ? { payload: JSON.parse(request.postData()!) } : {}) });
     await route.fulfill({ status: response.statusCode, contentType: 'application/json', body: response.body });
   });
   await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parent}"]`).click();

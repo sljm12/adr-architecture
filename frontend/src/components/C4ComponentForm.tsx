@@ -1,11 +1,12 @@
-import { useEffect, useState, type FormEvent, type ChangeEvent } from 'react';
+import { useState, type FormEvent, type ChangeEvent } from 'react';
 import type { Component } from '../../../shared/src/index';
 import { useDiagramStore, type C4ComponentEdit } from '../state/diagram-store';
 
 export function C4ComponentForm({ component, onClose }: { component?: Component; onClose: () => void }) {
   const [details, setDetails] = useState<C4ComponentEdit>({ name: component?.name ?? '', description: component?.description ?? '', technology: component?.technology ?? '' });
   const [errors, setErrors] = useState<Partial<Record<keyof C4ComponentEdit | 'form', string>>>({});
-  useEffect(() => { setDetails({ name: component?.name ?? '', description: component?.description ?? '', technology: component?.technology ?? '' }); setErrors({}); }, [component]);
+  const [previousComponent, setPreviousComponent] = useState(component);
+  if (component !== previousComponent) { setPreviousComponent(component); setDetails({ name: component?.name ?? '', description: component?.description ?? '', technology: component?.technology ?? '' }); setErrors({}); }
   const prefix = component ? 'component-edit' : 'component';
   const submit = (event: FormEvent) => {
     event.preventDefault();

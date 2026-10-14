@@ -8,7 +8,7 @@ import { generalParentFixture, populatedChildFixture, containerFixtureIds as ids
 describe('occurrence dependency contract', () => {
   it.each(['active', 'trashed'] as const)('protects %s occurrences and all their decisions on PUT and DELETE', async status => {
     const diagrams = new DiagramRepository(), adrs = new AdrRepository();
-    diagrams.create(generalParentFixture() as any); diagrams.create(populatedChildFixture() as any);
+    diagrams.create(generalParentFixture() ); diagrams.create(populatedChildFixture() );
     const adr = adrs.create(ids.populatedChild, completeAdrPayload);
     adrs.replaceLinks(adr.id, [ids.externalOccurrence]); adrs.replaceRelationshipLinks(adr.id, [ids.childRelationship]);
     if (status === 'trashed') diagrams.trash(ids.populatedChild);

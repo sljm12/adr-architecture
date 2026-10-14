@@ -3,7 +3,7 @@ import './recovery.css';
 
 export function DiagramSwitchDialog({ onSaveAndLoad, onDiscardAndLoad, onCancel, busy = false, title = 'Save changes before loading?', message = 'Your diagram or decision has unsaved changes.', saveLabel = 'Save and load', discardLabel = 'Discard and load' }: { onSaveAndLoad: () => void; onDiscardAndLoad: () => void; onCancel: () => void; busy?: boolean; title?: string; message?: string; saveLabel?: string; discardLabel?: string }) {
   const dialogRef = useRef<HTMLElement>(null);
-  const actions = useRef({ onCancel, busy }); actions.current = { onCancel, busy };
+  const actions = useRef({ onCancel, busy }); useEffect(() => { actions.current = { onCancel, busy }; }, [onCancel, busy]);
   const titleId = useId(), messageId = useId();
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null;
