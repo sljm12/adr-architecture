@@ -55,6 +55,8 @@ artifacts.
 - Inspect existing files and project conventions before making changes.
 - Preserve unrelated user changes in the working tree.
 - Prefer small, focused changes that satisfy the requested behavior.
+- Run the project linter after finishing all code edits and resolve any lint errors introduced
+  by the changes before reporting completion.
 - Validate changes with the most relevant available checks before reporting completion.
 - Keep user-facing requirements technology-agnostic unless implementation details are explicitly
   requested.
