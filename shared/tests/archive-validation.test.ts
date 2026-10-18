@@ -1,9 +1,37 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { archiveFixture, archiveFieldInventory, emptyArchiveFixture } from './archive-fixtures';
-import { parseArchive, archiveSchema, archiveImportRequestSchema, archiveTimestampSchema, archiveScalarSchema, archiveRevisionSchema } from '../src/archive/validation';
+import { ArchiveValidationError, parseArchive, archiveSchema, archiveImportRequestSchema, archiveTimestampSchema, archiveScalarSchema, archiveRevisionSchema } from '../src/archive/validation';
 
 describe('archive preservation boundary', () => {
+  it('distinguishes the depth boundary from schema rejection and never leaks rejected values', () => {
+    for (const depth of [64, 65]) {
+      try { parseArchive('['.repeat(depth) + '0' + ']'.repeat(depth)); throw new Error('Accepted invalid schema'); }
+      catch (error) {
+        expect(error).toBeInstanceOf(ArchiveValidationError);
+        expect((error as Error).message).toMatch(depth === 65 ? /nesting/i : /structure|field|invalid/i);
+      }
+    }
+    const fixture = emptyArchiveFixture(); fixture.records.diagrams[0].name = '\ud800';
+    expect(() => parseArchive(JSON.stringify(fixture))).toThrow();
+  });
+  it('retains repeated values and escaped keys while rejecting malformed duplicate keys', () => {
+    const fixture = emptyArchiveFixture();
+    fixture.records.diagrams[0].name = 'same';
+    const text = JSON.stringify(fixture).replace('"name"', '"na\\u006de"');
+    expect(parseArchive(text)).toEqual(fixture);
+    for (const duplicate of ['"name":"same","name":"same"', '"name":"same","na\\u006de":"same"']) {
+      expect(() => parseArchive(JSON.stringify(fixture).replace('"name":"same"', duplicate))).toThrow(/duplicate/i);
+    }
+    for (const text of ['{"a":', '{"a":1,}', '{"a":"\\x00"}', '{"a":01}', '{"a":true false}']) expect(() => parseArchive(text)).toThrow();
+  });
+  it('reports field paths without normalizing invalid primitives', () => {
+    for (const [field, value] of [['createdAt', '2023-02-29T00:00:00.000000Z'], ['deletionRevision', '9223372036854775808'], ['scopeX', 'Infinity']] as const) {
+      const fixture = emptyArchiveFixture(); Object.assign(fixture.records.diagrams[0], { [field]: value });
+      try { parseArchive(JSON.stringify(fixture)); throw new Error('Accepted invalid primitive'); }
+      catch (error) { expect(error).toBeInstanceOf(ArchiveValidationError); expect((error as ArchiveValidationError).issues?.some(issue => issue.path.includes(field))).toBe(true); }
+    }
+  });
   it('covers exactly the 69 contract fields without an encoder-derived expectation', () => {
     const contract = JSON.parse(readFileSync('specs/013-diagram-archive-transfer/contracts/archive.schema.json', 'utf8'));
     const names = ['diagram','component','relationship','systemGroup','systemGroupMember','adr','adrComponentLink','adrRelationshipLink'];

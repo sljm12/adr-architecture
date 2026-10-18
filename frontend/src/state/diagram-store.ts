@@ -105,7 +105,7 @@ export function getRetainedExportDiagrams(): Record<string, DiagramDocument> {
 }
 export function invalidateArchiveDiagrams(ids: string[]): void {
   for (const id of ids) retained.delete(id);
-  if (ids.length) loadRequest++;
+  if (ids.length) { loadRequest++; useDiagramStore.setState({ navigationStatus: 'idle', loadError: null }); }
   if (savedMetadata && ids.includes(savedMetadata.id)) savedMetadata = null;
   if (ids.includes(useDiagramStore.getState().document?.id ?? '')) {
     session++; loadRequest++;

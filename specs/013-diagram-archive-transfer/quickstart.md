@@ -174,6 +174,16 @@ Cover mouse and keyboard file selection, expanded scope, full impact review, rec
 
 After a known commit, verify affected undo/history and caches cannot reapply old state, in-flight stale responses are ignored, and active/Trash lists reload. Force refresh failure: show committed success with a refresh retry, without another import. Run the existing saved-list, three-level navigation, recovery, ADR, Mermaid and HTML export regressions through the repository's established harnesses.
 
+### Phase 5 execution evidence (2026-10-19)
+
+The archive browser matrix now covers rejected files, stale file/destination review, canceled
+out-of-order previews, failed draft saves, lost commit responses, refresh-only retries and a
+keyboard export/import/override/recovery/cancel journey. Refused/canceled operations compare
+saved state before and after. Two browser workflows use actual isolated PostgreSQL schemas for
+round-trip/re-export and replacement/recovery. Memory-backed browser checks establish coordinator
+behavior; they do not substitute for database durability. See [validation.md](validation.md) for
+field/state comparisons, race/rollback evidence, measurements and pending usability trials.
+
 ## 7. Scale, regression and evidence
 
 Measure a valid selected hierarchy with 1,000 components, 1,000 relationships and 100 ADRs inside a 100-diagram collection, including relevant group/link/provenance data. Use two warmups then 20 independent valid samples per operation. Recreate or recover fixtures outside timed intervals. Measure export, preview and committed apply separately; p95 nearest-rank must be <5,000 ms each, with file/recovery <=8 MiB. Include lock wait, hardware, Node/PostgreSQL versions and raw timings; these are plan targets until measured.

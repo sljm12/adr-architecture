@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDiagramStore } from '../state/diagram-store';
 import { diagramClient } from '../api/diagram-client';
 import { getComponentScope, type DiagramSummary } from '../../../shared/src/index';
@@ -28,10 +28,19 @@ export function SavedDiagramList({ onSelect, onDelete, onCreate }: SavedDiagramL
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [trash, setTrash] = useState<DiagramSummary[]>([]);
   const [recoveryMessage, setRecoveryMessage] = useState('');
+  const trashRequest = useRef(0);
 
   useEffect(() => { void refresh(); }, [refresh]);
   const [previousRecoveredTrash, setPreviousRecoveredTrash] = useState(recoveredTrash);
-  if (recoveredTrash !== previousRecoveredTrash) { setPreviousRecoveredTrash(recoveredTrash); setTrash(recoveredTrash); }
+  if (recoveredTrash !== previousRecoveredTrash) { setPreviousRecoveredTrash(recoveredTrash); setTrash(recoveredTrash); setRecoveryMessage(''); }
+  useEffect(() => () => { trashRequest.current++; }, []);
+  const toggleRecovery = () => {
+    setRecoveryOpen(value => !value);
+    if (recoveryOpen) return;
+    const request = ++trashRequest.current;
+    const current = () => request === trashRequest.current && useDiagramStore.getState().trashedDocuments === recoveredTrash;
+    void diagramClient.listTrash().then(items => { if (current()) { setTrash(items); setRecoveryMessage(''); } }).catch(error => { if (current()) setRecoveryMessage(error instanceof Error ? error.message : 'Could not load trash.'); });
+  };
 
   const list = useMemo(() => deriveDiagramGroups(deriveDiagramLibraryDisplay(documents, currentDocument), { nameQuery, createdFrom, createdTo }, sort), [documents, currentDocument, nameQuery, createdFrom, createdTo, sort]);
   const hasFilters = Boolean(nameQuery.trim() || createdFrom || createdTo);
@@ -56,7 +65,7 @@ export function SavedDiagramList({ onSelect, onDelete, onCreate }: SavedDiagramL
         {currentDocument?.id === document.id && <small className="saved-diagram-current">Current diagram</small>}
         <span>Created {created} - Last saved {lastSaved}</span><i aria-hidden="true">&gt;</i>
       </button>
-      <button className="text-action" type="button" onClick={() => window.dispatchEvent(new CustomEvent('adr:archive-transfer', { detail: { id: document.id } }))} aria-label={`Export archive for ${scopeLabel(document)}`}>Archive</button>
+      <button className="text-action" type="button" onClick={() => window.dispatchEvent(new CustomEvent('adr:archive-transfer', { detail: { id: document.id } }))} aria-label={`Export archive for ${scopeLabel(document)}; active diagram ${document.id}`}>Archive</button>
       <button className="saved-diagram-delete" type="button" onClick={() => onDelete(document.id)} disabled={deleteStatus === 'deleting'} aria-label={`Delete ${scopeLabel(document)}`} title={`Delete ${scopeLabel(document)}`}>
         <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-3 6h12l-.8 11.2a2 2 0 0 1-2 1.8H8.8a2 2 0 0 1-2-1.8L6 9Zm3 2v8h2v-8H9Zm4 0v8h2v-8h-2Z" /></svg>
       </button>
@@ -99,6 +108,6 @@ export function SavedDiagramList({ onSelect, onDelete, onCreate }: SavedDiagramL
         </li>)}</ul>}
       </li>)}</ul>}
     </>}
-    <footer className="saved-diagrams-recovery"><button className="text-action" type="button" onClick={() => { setRecoveryOpen(value => !value); if (!recoveryOpen) void diagramClient.listTrash().then(setTrash).catch(error => setRecoveryMessage(error instanceof Error ? error.message : 'Could not load trash.')); }} aria-expanded={recoveryOpen}> {recoveryOpen ? 'Hide recovery' : 'Open recovery'} </button>{recoveryOpen && <div className="saved-diagrams-trash" aria-label="Recoverable diagrams">{recoveryMessage && <p className="saved-diagrams-feedback saved-diagrams-error" role="alert">{recoveryMessage}</p>}{trash.length === 0 && !recoveryMessage && <p className="saved-diagrams-feedback">No diagrams in trash.</p>}{trash.map(item => <div className="saved-diagram-trash-row" data-diagram-id={item.id} key={item.id}><span><strong>{item.name}</strong><small>{item.kind === 'component' ? scopeLabel(item) : item.kind === 'container' ? `Container diagram · ${item.scope?.softwareSystemName}; parent ${item.scope?.parentDiagramName}; ${item.id}` : 'General diagram'} · Created {formatCreatedDate(item.createdAt)}</small></span><button className="text-action" type="button" onClick={() => window.dispatchEvent(new CustomEvent('adr:archive-transfer', { detail: { id: item.id } }))} aria-label={`Export archive for trashed ${item.name}`}>Archive</button><button className="text-action" type="button" onClick={() => window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind: 'restore', id: item.id } }))}>Restore</button></div>)}</div>}</footer>
+    <footer className="saved-diagrams-recovery"><button className="text-action" type="button" onClick={toggleRecovery} aria-expanded={recoveryOpen}> {recoveryOpen ? 'Hide recovery' : 'Open recovery'} </button>{recoveryOpen && <div className="saved-diagrams-trash" aria-label="Recoverable diagrams">{recoveryMessage && <p className="saved-diagrams-feedback saved-diagrams-error" role="alert">{recoveryMessage}</p>}{trash.length === 0 && !recoveryMessage && <p className="saved-diagrams-feedback">No diagrams in trash.</p>}{trash.map(item => <div className="saved-diagram-trash-row" data-diagram-id={item.id} key={item.id}><span><strong>{item.name}</strong><small>{item.kind === 'component' ? scopeLabel(item) : item.kind === 'container' ? `Container diagram · ${item.scope?.softwareSystemName}; parent ${item.scope?.parentDiagramName}; ${item.id}` : 'General diagram'} · Created {formatCreatedDate(item.createdAt)}</small></span><button className="text-action" type="button" onClick={() => window.dispatchEvent(new CustomEvent('adr:archive-transfer', { detail: { id: item.id } }))} aria-label={`Export archive for trashed ${scopeLabel(item)}; diagram ${item.id}`}>Archive</button><button className="text-action" type="button" onClick={() => window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind: 'restore', id: item.id } }))}>Restore</button></div>)}</div>}</footer>
   </section>;
 }

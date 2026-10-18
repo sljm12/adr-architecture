@@ -211,7 +211,118 @@ test('coordinator: a lost import response reports uncertainty without resubmitti
     await page.getByRole('button', { name: 'Import archive', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('uncertain'); expect(api.imports).toBe(1);
     expect((await destination.graph.readArchiveSnapshot()).diagrams).toHaveLength(1);
+    await page.getByRole('button', { name: 'Refresh saved diagrams', exact: true }).click();
+    await expect(row(page, archiveId(1))).toBeVisible(); expect(api.imports).toBe(1);
   } finally { await destination.app.close(); }
+});
+
+test('refusals: invalid files, stale destination and changed bytes preserve all saved rows', async ({ page }) => {
+  const destination = memoryInstallation();
+  try {
+    const api = await browserApi(page, destination.app); await page.goto('/');
+    const before = await destination.graph.readArchiveSnapshot();
+    for (const text of ['{"version":', JSON.stringify({ ...emptyArchiveFixture(), version: 2 })]) {
+      await chooseFile(page, text); await expect(page.getByRole('alert')).toBeVisible();
+      expect(await destination.graph.readArchiveSnapshot()).toEqual(before); expect(api.imports).toBe(0);
+    }
+    const fixture = emptyArchiveFixture(), text = JSON.stringify(fixture);
+    await chooseFile(page, text); await expect(page.getByRole('dialog')).toBeVisible();
+    await destination.graph.applyArchiveRows(parseArchive(text).records);
+    const changed = await destination.graph.readArchiveSnapshot();
+    await page.getByRole('button', { name: 'Import archive', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('fresh review'); expect(await destination.graph.readArchiveSnapshot()).toEqual(changed);
+    await chooseFile(page, text); await expect(page.getByRole('dialog')).toBeVisible();
+    await page.route('**/api/diagram-archives/import', async route => {
+      const body = route.request().postDataJSON(); body.archiveText += '\n';
+      const response = await destination.app.inject({ method: 'POST', url: '/diagram-archives/import', payload: body });
+      await route.fulfill({ status: response.statusCode, contentType: 'application/json', body: response.body });
+    });
+    await approveReplacement(page); await expect(page.getByRole('alert')).toContainText('fresh review');
+    expect(await destination.graph.readArchiveSnapshot()).toEqual(changed);
+  } finally { await destination.app.close(); }
+});
+
+test('coordinator: canceled preview cannot replace a later review and failed saves retain drafts', async ({ page }) => {
+  const destination = memoryInstallation();
+  try {
+    const api = await browserApi(page, destination.app); await page.goto('/');
+    let release!: () => void, entered!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; }), started = new Promise<void>(resolve => { entered = resolve; });
+    let first = true;
+    await page.route('**/api/diagram-archives/preview', async route => {
+      if (!first) return route.fallback(); first = false; entered(); await gate; await route.fallback();
+    });
+    const text = JSON.stringify(emptyArchiveFixture()); await chooseFile(page, text); await started;
+    await page.getByRole('button', { name: 'Cancel archive review', exact: true }).click();
+    const other = emptyArchiveFixture(); other.records.diagrams[0].name = 'Latest selected file';
+    await chooseFile(page, JSON.stringify(other)); await expect(page.getByRole('dialog')).toContainText('Latest selected file');
+    release(); await expect(page.getByRole('dialog')).toContainText('Latest selected file');
+    await page.getByRole('button', { name: 'Import archive', exact: true }).click();
+    await expect(row(page, archiveId(1))).toBeVisible(); await row(page, archiveId(1)).click();
+    await page.getByLabel('Diagram name', { exact: true }).fill('Keep failed draft');
+    await chooseFile(page, text); await approveReplacement(page); api.failSave = true;
+    const before = await destination.graph.readArchiveSnapshot(), imports = api.imports;
+    await page.getByRole('button', { name: 'Save and review again', exact: true }).click();
+    await expect(page.locator('.archive-transfer-notice[role="alert"]')).toBeVisible(); await expect(page.getByRole('alertdialog')).toBeVisible();
+    await expect(page.getByLabel('Diagram name', { exact: true })).toHaveValue('Keep failed draft');
+    expect(await destination.graph.readArchiveSnapshot()).toEqual(before); expect(api.imports).toBe(imports);
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  } finally { await destination.app.close(); }
+});
+
+test('keyboard: safe cancellation, trapped review, conflict acknowledgement, export and recovery', async ({ page }) => {
+  const destination = memoryInstallation();
+  try {
+    await browserApi(page, destination.app); await page.goto('/');
+    const open = async (text: string) => {
+      await page.getByRole('button', { name: 'Import diagram archive', exact: true }).focus();
+      const chooser = page.waitForEvent('filechooser'); await page.keyboard.press('Enter');
+      await (await chooser).setFiles({ name: 'keyboard.adr.json', mimeType: 'application/json', buffer: Buffer.from(text) });
+      await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+    };
+    const original = JSON.stringify(emptyArchiveFixture()); await open(original);
+    await page.keyboard.press('Shift+Tab'); await expect(page.getByLabel('Included diagrams and record counts')).toBeFocused();
+    await page.keyboard.press('Tab'); await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+    await page.keyboard.press('Escape'); await expect(page.getByRole('button', { name: 'Import diagram archive', exact: true })).toBeFocused();
+    await open(original); await page.keyboard.press('Tab'); await page.keyboard.press('Enter'); await expect(row(page, archiveId(1))).toBeVisible();
+    const changed = emptyArchiveFixture(); changed.records.diagrams[0].name = 'Keyboard replacement';
+    await open(JSON.stringify(changed));
+    await page.keyboard.press('Tab'); await page.keyboard.press('Space');
+    await page.keyboard.press('Tab'); const download = page.waitForEvent('download'); await page.keyboard.press('Enter');
+    const recovery = await readFile((await (await download).path())!, 'utf8');
+    await page.keyboard.press('Tab'); await page.keyboard.press('Space');
+    await page.keyboard.press('Tab'); await page.keyboard.press('Tab'); await page.keyboard.press('Tab'); await page.keyboard.press('Enter');
+    await expect(row(page, archiveId(1))).toContainText('Keyboard replacement');
+    await open(recovery);
+    await page.getByLabel('Approve override', { exact: false }).focus(); await page.keyboard.press('Space');
+    await page.keyboard.press('Tab'); const recoveryDownload = page.waitForEvent('download'); await page.keyboard.press('Enter'); await recoveryDownload;
+    await page.keyboard.press('Tab'); await page.keyboard.press('Space');
+    await page.getByRole('button', { name: 'Import archive', exact: true }).focus(); await page.keyboard.press('Enter');
+    await expect(row(page, archiveId(1))).not.toContainText('Keyboard replacement');
+    await row(page, archiveId(1)).focus(); await page.keyboard.press('Enter');
+    await page.getByRole('button', { name: 'Export diagram archive', exact: true }).focus(); await page.keyboard.press('Enter');
+    await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+    await page.keyboard.press('Tab'); const exported = page.waitForEvent('download'); await page.keyboard.press('Enter'); await exported;
+  } finally { await destination.app.close(); }
+});
+
+test('coordinator: late Trash list responses cannot revive pre-import cache contents', async ({ page }) => {
+  const destination = memoryInstallation(); let release!: () => void;
+  try {
+    await browserApi(page, destination.app); await page.goto('/');
+    let entered!: () => void; const started = new Promise<void>(resolve => { entered = resolve; });
+    const gate = new Promise<void>(resolve => { release = resolve; }); let first = true;
+    await page.route('**/api/diagrams/trash', async route => {
+      if (!first) return route.fallback(); first = false; entered(); await gate;
+      await route.fulfill({ json: [] });
+    });
+    await page.getByRole('button', { name: 'Open recovery', exact: true }).click(); await started;
+    await chooseFile(page, JSON.stringify(archiveFixture())); await page.getByRole('button', { name: 'Import archive', exact: true }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Import succeeded:' })).toBeVisible();
+    await expect(page.locator('.saved-diagram-trash-row')).toHaveCount(2);
+    const response = page.waitForResponse('**/api/diagrams/trash'); release(); await response;
+    await expect(page.locator('.saved-diagram-trash-row')).toHaveCount(2);
+  } finally { release?.(); await destination.app.close(); }
 });
 
 test('coordinator: decision drafts require a saved-only choice or a save with fresh review', async ({ page }) => {

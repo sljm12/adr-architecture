@@ -21,6 +21,7 @@ export function DiagramArchiveTransfer({ onActiveChange, onImported }: { onActiv
   const [review, setReview] = useState<Review | null>(null), [guard, setGuard] = useState(false), [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(''), [failed, setFailed] = useState(false), [completed, setCompleted] = useState<ArchiveImportResult | null>(null);
   const [transferActive, setTransferActive] = useState(false);
+  const [uncertain, setUncertain] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null), sequence = useRef(0), mutating = useRef(false), active = useRef(false);
   const origin = useRef<HTMLElement | null>(null);
   const refreshTarget = useRef<string | null>(null);
@@ -36,7 +37,7 @@ export function DiagramArchiveTransfer({ onActiveChange, onImported }: { onActiv
   const start = () => {
     if (active.current || operationPending() || document.querySelector('[aria-modal="true"]')) return false;
     origin.current = document.activeElement as HTMLElement | null;
-    activate(true); setCompleted(null); setFailed(false); setNotice('Preparing archive review…'); setBusy(true); return true;
+    activate(true); setCompleted(null); setUncertain(false); setFailed(false); setNotice('Preparing archive review…'); setBusy(true); return true;
   };
   const prepare = async (id: string, alreadyActive = false) => {
     if (!alreadyActive && !start()) return;
@@ -94,7 +95,7 @@ export function DiagramArchiveTransfer({ onActiveChange, onImported }: { onActiv
     } catch (error) {
       setFailed(true);
       if (result) { setCompleted(result); setNotice(`Import succeeded; refresh failed. ${error instanceof Error ? error.message : 'Retry refreshing the library.'}`); }
-      else { setReview(null); setNotice(error instanceof Error ? error.message : 'Import outcome is uncertain. Inspect saved data before retrying.'); }
+      else { setReview(null); setUncertain(!(error instanceof ArchiveApiError)); setNotice(error instanceof Error ? error.message : 'Import outcome is uncertain. Inspect saved data before retrying.'); }
       if (error instanceof ArchiveApiError && error.detail.code === 'ARCHIVE_PREVIEW_CHANGED') setNotice(`${error.message} Select the file again for a fresh review.`);
     } finally { mutating.current = false; setBusy(false); activate(false); }
   };
@@ -124,7 +125,9 @@ export function DiagramArchiveTransfer({ onActiveChange, onImported }: { onActiv
       catch (error) { setFailed(true); setNotice(error instanceof Error ? error.message : 'Download failed. Retry the approved download.'); }
     }} />}
     {review && guard && <DiagramSwitchDialog title={review.kind === 'export' ? 'Export saved data or save your drafts?' : 'Save changes before importing?'} message={review.kind === 'export' ? 'Included diagrams or decisions have unsaved changes. Save and review a fresh snapshot, continue with saved data, or cancel.' : 'This import affects an open diagram or decision draft. Save and review again, discard affected drafts after successful import, or cancel.'} saveLabel="Save and review again" discardLabel={review.kind === 'export' ? 'Continue with saved data' : 'Discard and import'} busy={busy} onSaveAndLoad={() => void saveAndReview()} onDiscardAndLoad={() => { if (review.kind === 'export') setGuard(false); else void commit(true); }} onCancel={cancel} />}
-    {notice && <div className="archive-transfer-notice" role={failed ? 'alert' : 'status'} aria-live="polite">{notice}{transferActive && !review && !completed && <button type="button" className="text-action" onClick={cancel}>Cancel archive review</button>}{completed && <button type="button" className="text-action" disabled={busy} onClick={() => {
+    {notice && <div className="archive-transfer-notice" role={failed ? 'alert' : 'status'} aria-live={failed ? 'assertive' : 'polite'} aria-busy={busy}>{notice}{uncertain && <button type="button" className="text-action" disabled={busy} onClick={() => {
+      setBusy(true); activate(true); void useDiagramStore.getState().refreshRecoveryLists().then(() => setNotice('Import outcome is uncertain. Saved lists refreshed; inspect saved diagrams before reviewing another import.')).catch(() => setNotice('Import outcome is uncertain. Saved lists could not refresh. Retry refresh and inspect saved data before importing again.')).finally(() => { setBusy(false); activate(false); });
+    }}>Refresh saved diagrams</button>}{transferActive && !review && !completed && !uncertain && <button type="button" className="text-action" onClick={cancel}>Cancel archive review</button>}{completed && <button type="button" className="text-action" disabled={busy} onClick={() => {
       setBusy(true); activate(true); void refresh(completed).catch(error => { setFailed(true); setNotice(`Import succeeded; refresh failed. ${error instanceof Error ? error.message : 'Retry refresh.'}`); }).finally(() => { setBusy(false); activate(false); });
     }}>Retry import refresh</button>}{!transferActive && !completed && <button type="button" className="text-action" onClick={() => setNotice('')}>Dismiss archive message</button>}</div>}
   </>;

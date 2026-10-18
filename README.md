@@ -55,6 +55,7 @@ psql "$DATABASE_URL" -f backend/drizzle/0005_c4_container_diagrams.sql
 psql "$DATABASE_URL" -f backend/drizzle/0006_container_component_types.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/drizzle/0007_c4_component_diagrams.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/drizzle/0008_diagram_deletion_revision.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/drizzle/0009_diagram_archive.sql
 ```
 
 Migration `0003_system_groups.sql` adds `system_groups` and normalized
@@ -77,6 +78,44 @@ Apply migration `0008_diagram_deletion_revision.sql` after 0007 and **before sta
 API runtime**. It adds an internal saved-state revision counter with a zero default, preserving
 existing artifacts and identities. The counter detects edits made after a deletion preview,
 including ADR-only edits and edits subsequently reverted; it is not an editable document field.
+
+Apply only pending migration `0009_diagram_archive.sql` to an installation already at 0008,
+before starting the updated API. It preserves artifact values, adds durable local confirmation
+epochs, and keeps source uniqueness immediate for ordinary writes while allowing atomic import swaps.
+Do not replay applied migrations. Epochs remain local and survive permanent deletion.
+
+## Diagram archives
+
+Choose **Export diagram archive** in the workspace, or **Archive** on a saved or Trash row.
+Review the expanded scope before downloading the `.adr.json` file: selecting any child includes
+its complete top-level hierarchy, every active and trashed descendant, and required dependency
+hierarchies. The file contains saved data; unsaved diagram or decision edits offer Save and review
+again, Continue with saved data, or Cancel.
+
+Choose **Import diagram archive**, also available in an empty library, to review the exact file
+and all additions, UUID matches, replacements and removals. Matching identities require explicit
+whole-file override, even for an unchanged reimport. Changed existing contents additionally require
+downloading the recovery archive and acknowledging that you saved it. Import replaces the included
+diagrams' complete owned contents atomically; destination-only diagrams remain. Affected drafts
+offer Save and review again, Discard and import, or Cancel. Unrelated drafts stay available.
+
+Import the recovery file through the same workflow to restore overwritten contents and metadata.
+Recovery keeps diagrams added by the original import. References from retained diagrams can block
+replacement or recovery; resolve the reported dependencies before reviewing again. Changed file
+bytes or relevant saved state invalidate consent and require a new review.
+
+Version 1 archives retain all eight artifact collections and 69 fields, original UUIDs, raw text,
+microsecond UTC timestamps, exact bigint revisions, and finite binary64 layout including negative
+zero. Files are UTF-8 JSON without BOM, at most 8 MiB with nesting at most 64; unsupported versions,
+unknown fields, duplicate keys/identities and invalid references are refused without saved changes.
+Generated recovery files have the same size boundary. Deployment settings, credentials and browser
+undo/viewport state are excluded.
+
+If an import response is lost, its outcome is uncertain: refresh saved diagrams and inspect saved
+data before reviewing another import. The application never retries a commit automatically. If
+import success was confirmed but refresh failed, **Retry import refresh** refreshes the view without
+importing again. Archives complement the existing Mermaid/HTML presentation exports; the CLI scope
+is unchanged. See [Spec 013 validation](specs/013-diagram-archive-transfer/validation.md).
 
 ## Tests
 

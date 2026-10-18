@@ -3,6 +3,24 @@ import { archiveFixture, archiveId, emptyArchiveFixture, dependencyArchiveFixtur
 import { parseArchive } from '../src/archive/validation';
 
 describe('archive standalone graph', () => {
+  it('rejects identical and case-variant duplicates in every identity namespace', () => {
+    for (const collection of Object.keys(archiveFixture().records) as Array<keyof ReturnType<typeof archiveFixture>['records']>) {
+      for (const uppercase of [false, true]) {
+        const fixture = archiveFixture(), rows = fixture.records[collection] as Array<Record<string, unknown>>;
+        const row = structuredClone(rows[0]);
+        if (uppercase) for (const key of Object.keys(row)) if ((key === 'id' || key.endsWith('Id')) && typeof row[key] === 'string') row[key] = row[key].toUpperCase();
+        rows.push(row);
+        expect(() => parseArchive(JSON.stringify(fixture)), collection).toThrow(/duplicate/i);
+      }
+    }
+  });
+  it('rejects a declared but unrelated extra root and cross-diagram ADR links', () => {
+    const fixture = archiveFixture();
+    fixture.records.diagrams.push({ ...fixture.records.diagrams[0], id: archiveId(999) }); fixture.includedDiagramIds.push(archiveId(999));
+    expect(() => parseArchive(JSON.stringify(fixture))).toThrow(/scope|closure|unrelated/i);
+    const links = archiveFixture(); links.records.adrComponentLinks[0].componentId = archiveId(21);
+    expect(() => parseArchive(JSON.stringify(links))).toThrow(/component/i);
+  });
   it('validates without rewriting raw caches, text, microseconds or signed zero', () => {
     const raw = archiveFixture(); const copy = structuredClone(raw);
     expect(parseArchive(JSON.stringify(raw))).toEqual(copy); expect(raw).toEqual(copy);

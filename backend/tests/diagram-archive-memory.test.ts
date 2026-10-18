@@ -3,6 +3,8 @@ import { archiveFixture, archiveId } from '../../shared/tests/archive-fixtures';
 import { DiagramRepository } from '../src/persistence/diagram-repository';
 import { AdrRepository } from '../src/persistence/adr-repository';
 import { GraphTransaction } from '../src/persistence/graph-transaction';
+import { ArchiveService } from '../src/services/archive-service';
+import { scopedRepository } from './html-export-source-fixtures';
 
 async function setup() {
   const diagrams = new DiagramRepository(), adrs = new AdrRepository(), graph = new GraphTransaction(diagrams, adrs);
@@ -14,6 +16,30 @@ async function setup() {
   return { diagrams, adrs, graph, records };
 }
 describe('memory archive parity', () => {
+  it('refuses unsupported raw memory writes without substituting regenerated values', async () => {
+    const { diagrams, adrs, graph, records } = await setup();
+    const before = await graph.readArchiveSnapshot();
+    await expect(graph.runCollection(() => diagrams.upsertArchiveRows('components', [{ ...records.components[0], x: 'Infinity' }]))).rejects.toThrow('canonical');
+    expect(await graph.readArchiveSnapshot()).toEqual(before);
+    expect(JSON.parse((await new ArchiveService(diagrams, adrs).prepare(archiveId(1))).archiveText).records).toEqual(before);
+  });
+  it('restores service-level removal, registration and epoch changes after a late failure, then accepts recovery', async () => {
+    const { diagrams, adrs, graph } = await setup(), service = new ArchiveService(diagrams, adrs);
+    const fixture = archiveFixture(); fixture.records.systemGroups = []; fixture.records.systemGroupMembers = [];
+    fixture.records.adrComponentLinks = []; fixture.records.adrRelationshipLinks = [];
+    fixture.records.components[0].description = 'Replacement';
+    const text = JSON.stringify(fixture), preview = await service.preview(text);
+    const request = { archiveText: text, previewedAt: preview.previewedAt, previewToken: preview.previewToken, overrideExisting: true, recoverySaved: true, recoveryFileSha256: preview.recovery!.fileSha256 };
+    const before = await graph.readArchiveSnapshot(), registrations = adrs.snapshotGraph();
+    const wrapped = scopedRepository(diagrams, scoped => ({ advanceConfirmationEpochs: async ids => { await scoped.advanceConfirmationEpochs(ids); throw new Error('After epochs'); } }));
+    await expect(new ArchiveService(wrapped, adrs).import(request)).rejects.toThrow('After epochs');
+    expect(await graph.readArchiveSnapshot()).toEqual(before); expect(adrs.snapshotGraph()).toEqual(registrations); expect(await diagrams.getConfirmationEpoch(archiveId(1))).toBe('0');
+    await service.import(request);
+    await expect(service.import(request)).rejects.toMatchObject({ code: 'ARCHIVE_PREVIEW_CHANGED' });
+    const recoveryText = preview.recovery!.archiveText, recovery = await service.preview(recoveryText);
+    await service.import({ archiveText: recoveryText, previewedAt: recovery.previewedAt, previewToken: recovery.previewToken, overrideExisting: true, recoverySaved: true, recoveryFileSha256: recovery.recovery!.fileSha256 });
+    expect(await graph.readArchiveSnapshot()).toEqual(before);
+  });
   it('retains all raw values instead of hydrated names and maintains ordinary membership/link timestamps', async () => {
     const { diagrams, adrs, graph, records } = await setup();
     expect(await graph.readArchiveSnapshot()).toEqual(records);

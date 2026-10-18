@@ -96,7 +96,7 @@ export function parseArchive(text: string): Archive {
   try { value = JSON.parse(text); } catch { throw new ArchiveValidationError('ARCHIVE_JSON_INVALID', 'Malformed archive JSON'); }
   if (value && typeof value === 'object' && 'version' in value && value.version !== 1) throw new ArchiveValidationError('ARCHIVE_VERSION_UNSUPPORTED', 'Unsupported archive version');
   const parsed = archiveSchema.safeParse(value);
-  if (!parsed.success) throw new ArchiveValidationError('ARCHIVE_INVALID', 'Invalid archive fields', parsed.error.issues.map(issue => ({ path: issue.path.join('.'), message: issue.message })));
+  if (!parsed.success) throw new ArchiveValidationError('ARCHIVE_INVALID', 'Invalid archive fields', parsed.error.issues.map(issue => ({ path: issue.path.join('.'), message: ['invalid_enum_value', 'invalid_literal', 'invalid_type', 'unrecognized_keys'].includes(issue.code) ? 'Invalid or unexpected archive field; use the version-1 schema.' : issue.message })));
   validateArchiveGraph(parsed.data.records);
   const archive = parsed.data;
   const uniqueIds = (ids: string[], path: string) => { const result = ids.map(lower); if (new Set(result).size !== result.length) invalid(path, 'Duplicate diagram identity'); return result; };
