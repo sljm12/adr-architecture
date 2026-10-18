@@ -1,0 +1,168 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ADR Diagram Archive API",
+    "version": "1.0.0",
+    "description": "Lossless selected-hierarchy transfer. Exact file schema: archive.schema.json. Semantics, legacy Trash/restore impact-token extensions, and UI: http-and-ui.md. No automatic commit retries. Confirmation tokens establish reviewed consistency, not authorization."
+  },
+  "servers": [{ "url": "http://localhost:3000" }],
+  "paths": {
+    "/diagrams/{diagramId}/archive": {
+      "post": {
+        "operationId": "prepareDiagramArchive",
+        "summary": "Prepare a coherent archive for scope approval and download",
+        "parameters": [{ "name": "diagramId", "in": "path", "required": true, "schema": { "$ref": "./archive.schema.json#/$defs/uuid" } }],
+        "responses": {
+          "200": { "description": "Prepared exact text, scope, and digest; download these bytes after scope approval", "headers": { "Cache-Control": { "schema": { "const": "no-store" } } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PreparedArchive" } } } },
+          "400": { "$ref": "#/components/responses/Error" }, "404": { "$ref": "#/components/responses/Error" },
+          "413": { "$ref": "#/components/responses/Error" }, "422": { "$ref": "#/components/responses/Error" }, "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/diagram-archives/preview": {
+      "post": {
+        "operationId": "previewDiagramArchiveImport",
+        "summary": "Validate exact file text and review its complete destination impact",
+        "description": "Maximum request body 24 MiB; archive UTF-8 text maximum 8 MiB. Capture recovery from the same pre-import state; no durable artifact mutation or server file cache. Return no commit token on a blocker.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PreviewRequest" } } } },
+        "responses": {
+          "200": { "description": "Complete reviewed impact and optional recovery file", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ImportPreview" } } } },
+          "400": { "$ref": "#/components/responses/Error" }, "409": { "$ref": "#/components/responses/Error" },
+          "413": { "$ref": "#/components/responses/Error" }, "415": { "$ref": "#/components/responses/Error" },
+          "422": { "$ref": "#/components/responses/Error" }, "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/diagram-archives/import": {
+      "post": {
+        "operationId": "commitDiagramArchiveImport",
+        "summary": "Atomically apply the exact reviewed archive after explicit confirmation",
+        "description": "Recompute impact, epochs, and recovery digest under existing collection coordination. Reject stale or absent decisions before mutation. Exact reimport requires override but changes no rows or epochs. Recovery retains newly added diagrams and blocks invalid retained dependencies. Interrupted response means uncertain outcome; do not retry automatically.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ImportRequest" } } } },
+        "responses": {
+          "200": { "description": "Durably committed change or confirmed unchanged no-op", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ImportResult" } } } },
+          "400": { "$ref": "#/components/responses/Error" }, "409": { "$ref": "#/components/responses/Error" },
+          "413": { "$ref": "#/components/responses/Error" }, "415": { "$ref": "#/components/responses/Error" },
+          "422": { "$ref": "#/components/responses/Error" }, "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    }
+  },
+  "components": {
+    "responses": {
+      "Error": { "description": "Actionable archive error; inspect code and remedy. No partial artifact mutation.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ArchiveError" } } } }
+    },
+    "schemas": {
+      "ArchiveText": { "type": "string", "description": "Exact UTF-8 JSON text conforming to archive.schema.json; maximum 8,388,608 UTF-8 bytes, no BOM, duplicate JSON object keys or invalid Unicode." },
+      "ScopeItem": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "name", "kind", "status", "reason"],
+        "properties": {
+          "id": { "$ref": "./archive.schema.json#/$defs/uuid" }, "name": { "type": "string" },
+          "kind": { "enum": ["general", "container", "component"] }, "status": { "enum": ["active", "trashed"] },
+          "reason": { "enum": ["selected-hierarchy", "reference-dependency", "recovery-seed"] }
+        }
+      },
+      "RecordCounts": {
+        "type": "object", "additionalProperties": false,
+        "required": ["diagrams", "components", "relationships", "systemGroups", "systemGroupMembers", "adrs", "adrComponentLinks", "adrRelationshipLinks"],
+        "properties": {
+          "diagrams": { "type": "integer", "minimum": 0 }, "components": { "type": "integer", "minimum": 0 },
+          "relationships": { "type": "integer", "minimum": 0 }, "systemGroups": { "type": "integer", "minimum": 0 },
+          "systemGroupMembers": { "type": "integer", "minimum": 0 }, "adrs": { "type": "integer", "minimum": 0 },
+          "adrComponentLinks": { "type": "integer", "minimum": 0 }, "adrRelationshipLinks": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "PreparedArchive": {
+        "type": "object", "additionalProperties": false,
+        "required": ["archiveText", "fileSha256", "byteLength", "scope", "counts"],
+        "properties": {
+          "archiveText": { "$ref": "#/components/schemas/ArchiveText" }, "fileSha256": { "$ref": "./archive.schema.json#/$defs/sha256" },
+          "byteLength": { "type": "integer", "minimum": 1, "maximum": 8388608 },
+          "scope": { "type": "array", "minItems": 1, "items": { "$ref": "#/components/schemas/ScopeItem" } },
+          "counts": { "$ref": "#/components/schemas/RecordCounts" }
+        }
+      },
+      "PreviewRequest": {
+        "type": "object", "additionalProperties": false, "required": ["archiveText"],
+        "properties": { "archiveText": { "$ref": "#/components/schemas/ArchiveText" } }
+      },
+      "DeltaCounts": {
+        "type": "object", "additionalProperties": false, "required": ["added", "replaced", "removed", "unchanged"],
+        "properties": {
+          "added": { "type": "integer", "minimum": 0 }, "replaced": { "type": "integer", "minimum": 0 },
+          "removed": { "type": "integer", "minimum": 0 }, "unchanged": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "CollectionDeltas": {
+        "type": "object", "additionalProperties": false,
+        "required": ["diagrams", "components", "relationships", "systemGroups", "systemGroupMembers", "adrs", "adrComponentLinks", "adrRelationshipLinks"],
+        "properties": {
+          "diagrams": { "$ref": "#/components/schemas/DeltaCounts" }, "components": { "$ref": "#/components/schemas/DeltaCounts" },
+          "relationships": { "$ref": "#/components/schemas/DeltaCounts" }, "systemGroups": { "$ref": "#/components/schemas/DeltaCounts" },
+          "systemGroupMembers": { "$ref": "#/components/schemas/DeltaCounts" }, "adrs": { "$ref": "#/components/schemas/DeltaCounts" },
+          "adrComponentLinks": { "$ref": "#/components/schemas/DeltaCounts" }, "adrRelationshipLinks": { "$ref": "#/components/schemas/DeltaCounts" }
+        }
+      },
+      "RecordChange": {
+        "type": "object", "additionalProperties": false,
+        "required": ["collection", "identity", "diagramId", "name", "action", "collision"],
+        "properties": {
+          "collection": { "enum": ["diagrams", "components", "relationships", "systemGroups", "systemGroupMembers", "adrs", "adrComponentLinks", "adrRelationshipLinks"] },
+          "identity": { "type": "array", "minItems": 1, "maxItems": 2, "items": { "$ref": "./archive.schema.json#/$defs/uuid" } },
+          "diagramId": { "$ref": "./archive.schema.json#/$defs/uuid" }, "name": { "type": ["string", "null"] },
+          "action": { "enum": ["added", "replaced", "removed", "unchanged"] }, "collision": { "type": "boolean" }
+        }
+      },
+      "ImportPreview": {
+        "type": "object", "additionalProperties": false,
+        "required": ["fileSha256", "previewedAt", "previewToken", "includedDiagrams", "changes", "totals", "byCollection", "requiresOverride", "requiresRecovery", "recovery"],
+        "properties": {
+          "fileSha256": { "$ref": "./archive.schema.json#/$defs/sha256" }, "previewedAt": { "$ref": "./archive.schema.json#/$defs/timestamp" },
+          "previewToken": { "$ref": "./archive.schema.json#/$defs/sha256" },
+          "includedDiagrams": { "type": "array", "minItems": 1, "items": { "$ref": "#/components/schemas/ScopeItem" } },
+          "changes": { "type": "array", "minItems": 1, "items": { "$ref": "#/components/schemas/RecordChange" } },
+          "totals": { "$ref": "#/components/schemas/DeltaCounts" }, "byCollection": { "$ref": "#/components/schemas/CollectionDeltas" },
+          "requiresOverride": { "type": "boolean" }, "requiresRecovery": { "type": "boolean" },
+          "recovery": { "oneOf": [{ "type": "null" }, { "$ref": "#/components/schemas/PreparedArchive" }] }
+        }
+      },
+      "ImportRequest": {
+        "type": "object", "additionalProperties": false,
+        "required": ["archiveText", "previewedAt", "previewToken", "overrideExisting", "recoverySaved", "recoveryFileSha256"],
+        "properties": {
+          "archiveText": { "$ref": "#/components/schemas/ArchiveText" }, "previewedAt": { "$ref": "./archive.schema.json#/$defs/timestamp" },
+          "previewToken": { "$ref": "./archive.schema.json#/$defs/sha256" }, "overrideExisting": { "type": "boolean" }, "recoverySaved": { "type": "boolean" },
+          "recoveryFileSha256": { "oneOf": [{ "type": "null" }, { "$ref": "./archive.schema.json#/$defs/sha256" }] }
+        }
+      },
+      "ImportResult": {
+        "type": "object", "additionalProperties": false,
+        "required": ["committed", "fileSha256", "affectedDiagramIds", "includedDiagrams", "totals", "byCollection"],
+        "properties": {
+          "committed": { "const": true }, "fileSha256": { "$ref": "./archive.schema.json#/$defs/sha256" },
+          "affectedDiagramIds": { "type": "array", "uniqueItems": true, "items": { "$ref": "./archive.schema.json#/$defs/uuid" } },
+          "includedDiagrams": { "type": "array", "minItems": 1, "items": { "$ref": "#/components/schemas/ScopeItem" } },
+          "totals": { "$ref": "#/components/schemas/DeltaCounts" }, "byCollection": { "$ref": "#/components/schemas/CollectionDeltas" }
+        }
+      },
+      "ArchiveError": {
+        "type": "object", "additionalProperties": false, "required": ["code", "message", "remedy"],
+        "properties": {
+          "code": { "enum": ["ARCHIVE_REQUEST_INVALID", "ARCHIVE_JSON_INVALID", "ARCHIVE_NOT_FOUND", "ARCHIVE_PREVIEW_CHANGED", "ARCHIVE_DEPENDENCY", "ARCHIVE_OWNERSHIP", "ARCHIVE_CONFIRMATION_REQUIRED", "ARCHIVE_TOO_LARGE", "ARCHIVE_MEDIA_TYPE", "ARCHIVE_VERSION_UNSUPPORTED", "ARCHIVE_INVALID", "ARCHIVE_FAILED"] },
+          "message": { "type": "string" }, "remedy": { "type": "string" },
+          "issues": {
+            "type": "array", "items": {
+              "type": "object", "additionalProperties": false, "required": ["path", "message"],
+              "properties": {
+                "path": { "type": "string" }, "message": { "type": "string" },
+                "diagramId": { "$ref": "./archive.schema.json#/$defs/uuid" },
+                "artifactIdentity": { "type": "array", "minItems": 1, "maxItems": 2, "items": { "$ref": "./archive.schema.json#/$defs/uuid" } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

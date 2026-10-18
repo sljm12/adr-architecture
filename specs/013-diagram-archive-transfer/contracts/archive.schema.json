@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:adr-diagram:archive:1",
+  "title": "ADR Diagram Archive version 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "version", "purpose", "exportedAt", "selectedDiagramId", "seedDiagramIds", "includedDiagramIds", "recoveryForFileSha256", "records"],
+  "properties": {
+    "format": { "const": "adr-diagram-archive" },
+    "version": { "const": 1 },
+    "purpose": { "enum": ["diagram", "recovery"] },
+    "exportedAt": { "$ref": "#/$defs/timestamp" },
+    "selectedDiagramId": { "$ref": "#/$defs/uuid" },
+    "seedDiagramIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/uuid" } },
+    "includedDiagramIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/uuid" } },
+    "recoveryForFileSha256": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
+    "records": {
+      "type": "object", "additionalProperties": false,
+      "required": ["diagrams", "components", "relationships", "systemGroups", "systemGroupMembers", "adrs", "adrComponentLinks", "adrRelationshipLinks"],
+      "properties": {
+        "diagrams": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/diagram" } },
+        "components": { "type": "array", "items": { "$ref": "#/$defs/component" } },
+        "relationships": { "type": "array", "items": { "$ref": "#/$defs/relationship" } },
+        "systemGroups": { "type": "array", "items": { "$ref": "#/$defs/systemGroup" } },
+        "systemGroupMembers": { "type": "array", "items": { "$ref": "#/$defs/systemGroupMember" } },
+        "adrs": { "type": "array", "items": { "$ref": "#/$defs/adr" } },
+        "adrComponentLinks": { "type": "array", "items": { "$ref": "#/$defs/adrComponentLink" } },
+        "adrRelationshipLinks": { "type": "array", "items": { "$ref": "#/$defs/adrRelationshipLink" } }
+      }
+    }
+  },
+  "allOf": [
+    { "if": { "properties": { "purpose": { "const": "diagram" } } }, "then": { "properties": { "seedDiagramIds": { "maxItems": 1 }, "recoveryForFileSha256": { "type": "null" } } } },
+    { "if": { "properties": { "purpose": { "const": "recovery" } } }, "then": { "properties": { "recoveryForFileSha256": { "$ref": "#/$defs/sha256" } } } }
+  ],
+  "$comment": "Semantic validation also enforces calendar dates, finite canonical binary64 scalars, bigint range, case-insensitive identities, graph/scope/manifest equality, all existing invariants, and destination union safety. Reject duplicate object keys before parsing and duplicate record identities after parsing.",
+  "$defs": {
+    "uuid": { "type": "string", "format": "uuid", "pattern": "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$" },
+    "nullableUuid": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/uuid" }] },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "timestamp": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$" },
+    "nullableTimestamp": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/timestamp" }] },
+    "revision": { "type": "string", "pattern": "^(0|[1-9][0-9]*)$", "maxLength": 19 },
+    "scalar": { "type": "string", "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?(e[+-]?[0-9]+)?$", "maxLength": 32 },
+    "nullableScalar": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/scalar" }] },
+    "nullableText": { "type": ["string", "null"] },
+    "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "diagram": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "name", "status", "kind", "createdAt", "updatedAt", "trashedAt", "parentDiagramId", "ownerComponentId", "scopeX", "scopeY", "scopeWidth", "scopeHeight", "trashBatchId", "trashRootDiagramId", "deletionRevision"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" }, "name": { "$ref": "#/$defs/name" },
+        "status": { "enum": ["active", "trashed"] }, "kind": { "enum": ["general", "container", "component"] },
+        "createdAt": { "$ref": "#/$defs/timestamp" }, "updatedAt": { "$ref": "#/$defs/timestamp" }, "trashedAt": { "$ref": "#/$defs/nullableTimestamp" },
+        "parentDiagramId": { "$ref": "#/$defs/nullableUuid" }, "ownerComponentId": { "$ref": "#/$defs/nullableUuid" },
+        "scopeX": { "$ref": "#/$defs/nullableScalar" }, "scopeY": { "$ref": "#/$defs/nullableScalar" },
+        "scopeWidth": { "$ref": "#/$defs/nullableScalar" }, "scopeHeight": { "$ref": "#/$defs/nullableScalar" },
+        "trashBatchId": { "$ref": "#/$defs/nullableUuid" }, "trashRootDiagramId": { "$ref": "#/$defs/nullableUuid" },
+        "deletionRevision": { "$ref": "#/$defs/revision" }
+      }
+    },
+    "component": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "diagramId", "name", "description", "type", "role", "containerType", "technology", "sourceComponentId", "x", "y", "width", "height", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" }, "diagramId": { "$ref": "#/$defs/uuid" }, "name": { "$ref": "#/$defs/name" },
+        "description": { "$ref": "#/$defs/nullableText" }, "type": { "type": ["string", "null"], "maxLength": 100 },
+        "role": { "enum": ["element", "container", "component", "external"] },
+        "containerType": { "enum": [null, "application", "datastore"] },
+        "technology": { "type": ["string", "null"], "maxLength": 200 }, "sourceComponentId": { "$ref": "#/$defs/nullableUuid" },
+        "x": { "$ref": "#/$defs/scalar" }, "y": { "$ref": "#/$defs/scalar" }, "width": { "$ref": "#/$defs/scalar" }, "height": { "$ref": "#/$defs/scalar" },
+        "createdAt": { "$ref": "#/$defs/timestamp" }, "updatedAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "relationship": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "diagramId", "sourceComponentId", "targetComponentId", "direction", "label", "protocol", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" }, "diagramId": { "$ref": "#/$defs/uuid" },
+        "sourceComponentId": { "$ref": "#/$defs/uuid" }, "targetComponentId": { "$ref": "#/$defs/uuid" },
+        "direction": { "enum": ["directed", "undirected"] }, "label": { "$ref": "#/$defs/nullableText" },
+        "protocol": { "type": ["string", "null"], "maxLength": 200 },
+        "createdAt": { "$ref": "#/$defs/timestamp" }, "updatedAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "systemGroup": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "diagramId", "name", "x", "y", "width", "height", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" }, "diagramId": { "$ref": "#/$defs/uuid" }, "name": { "$ref": "#/$defs/name" },
+        "x": { "$ref": "#/$defs/scalar" }, "y": { "$ref": "#/$defs/scalar" }, "width": { "$ref": "#/$defs/scalar" }, "height": { "$ref": "#/$defs/scalar" },
+        "createdAt": { "$ref": "#/$defs/timestamp" }, "updatedAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "systemGroupMember": {
+      "type": "object", "additionalProperties": false, "required": ["groupId", "componentId", "createdAt"],
+      "properties": { "groupId": { "$ref": "#/$defs/uuid" }, "componentId": { "$ref": "#/$defs/uuid" }, "createdAt": { "$ref": "#/$defs/timestamp" } }
+    },
+    "adr": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "diagramId", "title", "context", "decision", "consequences", "alternativesOrConstraints", "status", "replacementAdrId", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" }, "diagramId": { "$ref": "#/$defs/uuid" }, "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "context": { "type": "string" }, "decision": { "type": "string" }, "consequences": { "type": "string" },
+        "alternativesOrConstraints": { "$ref": "#/$defs/nullableText" }, "status": { "enum": ["draft", "accepted", "superseded", "rejected"] },
+        "replacementAdrId": { "$ref": "#/$defs/nullableUuid" }, "createdAt": { "$ref": "#/$defs/timestamp" }, "updatedAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "adrComponentLink": {
+      "type": "object", "additionalProperties": false, "required": ["adrId", "componentId", "createdAt"],
+      "properties": { "adrId": { "$ref": "#/$defs/uuid" }, "componentId": { "$ref": "#/$defs/uuid" }, "createdAt": { "$ref": "#/$defs/timestamp" } }
+    },
+    "adrRelationshipLink": {
+      "type": "object", "additionalProperties": false, "required": ["adrId", "relationshipId", "createdAt"],
+      "properties": { "adrId": { "$ref": "#/$defs/uuid" }, "relationshipId": { "$ref": "#/$defs/uuid" }, "createdAt": { "$ref": "#/$defs/timestamp" } }
+    }
+  }
+}
