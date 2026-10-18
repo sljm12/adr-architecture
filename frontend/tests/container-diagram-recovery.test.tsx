@@ -55,7 +55,7 @@ describe('confirmed recovery UI and reconciliation', () => {
   });
   it('names the canonical parent batch and explains a child excluded from restoration', () => {
     const parent = generalParentFixture() as unknown as DiagramDocument;
-    const impact: RestoreImpact = { requestedDiagramId: ids.emptyChild, restoreRootDiagramId: parent.id, trashBatchId: crypto.randomUUID(), affectedDiagramIds: [parent.id, ids.populatedChild], affectedDiagrams: [row(parent), row(child())], requestedDiagramIncluded: false };
+    const impact: RestoreImpact = { requestedDiagramId: ids.emptyChild, restoreRootDiagramId: parent.id, trashBatchId: crypto.randomUUID(), affectedDiagramIds: [parent.id, ids.populatedChild], affectedDiagrams: [row(parent), row(child())], requestedDiagramIncluded: false, impactToken: 'a'.repeat(64) };
     const html = renderToStaticMarkup(<RecoveryImpactDialog kind="restore" impact={impact} onConfirm={() => {}} onCancel={() => {}} />);
     expect(html).toContain(parent.name); expect(html).toContain('Payments'); expect(html).toMatch(/independently|separate/i); expect(html).toContain('Cancel'); expect(html).toContain('Restore');
   });

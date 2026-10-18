@@ -7,7 +7,7 @@ import { ContainerContextService, resolveContainerScope, findPostgresError } fro
 import { ComponentContextService } from './component-context';
 import { GraphTransaction } from '../persistence/graph-transaction';
 import { ApiConflictError } from '../api/errors';
-import type { RestoreConfirmation, RestoreImpact, TrashImpact } from '../../../shared/src/index';
+import type { RestoreConfirmation, RestoreImpact, TrashImpact, TrashConfirmation } from '../../../shared/src/index';
 import { createHash } from 'node:crypto';
 import { deletionPreviewSchema, deletionConfirmationSchema, deletionImpactSchema, deletionResultSchema, uuidSchema, type DeletionPreview, type DeletionConfirmation, type DeletionImpact, type DeletionResult } from '../../../shared/src/index';
 import { DeletionRequestError } from '../api/errors';
@@ -192,7 +192,7 @@ export class DiagramService {
   private async deletionSavedState(document: DiagramDocument, { diagrams, adrs }: CollectionTransactionContext) {
     return {
       document: { ...document, components: byIdentity(document.components), relationships: byIdentity(document.relationships), groups: byIdentity(document.groups).map(g => ({ ...g, memberComponentIds: [...g.memberComponentIds].sort() })) },
-      revision: await diagrams.getDeletionRevision(document.id), provenance: await diagrams.getTrashProvenance(document.id),
+      revision: await diagrams.getDeletionRevision(document.id), epoch: await diagrams.getConfirmationEpoch(document.id), provenance: await diagrams.getTrashProvenance(document.id),
       adrs: byIdentity(await adrs?.listFull(document.id) ?? []).map(adr => ({ ...adr, componentIds: [...adr.componentIds].sort(), relationshipIds: [...adr.relationshipIds].sort() })),
     };
   }
@@ -206,6 +206,7 @@ export class DiagramService {
     const requiredAncestors = [];
     for (const ancestor of ancestors) { const document = await diagrams.get(ancestor.id); if (!document) throw new ApiConflictError('Required ancestor is unavailable.', 'DIAGRAM_REFERENCE_BROKEN'); requiredAncestors.push(await savedState(document)); }
     const snapshot = { version: 1, rootDiagramId: id, mode, affectedDiagrams,
+      raw: await this.confirmationState([...membership.map(d => d.id),...ancestors.map(d => d.id)], context),
       membership: await Promise.all(membership.map(async member => ({ ...member, provenance: await diagrams.getTrashProvenance(member.id), revision: await diagrams.getDeletionRevision(member.id) }))),
       affected: await Promise.all(documents.map(savedState)), requiredAncestors,
     };
@@ -240,6 +241,7 @@ export class DiagramService {
     }
     const affectedDiagrams = affected.map(summary);
     const snapshot = { version: 2, target, mode, rootDiagramIds, eligibleMembership: eligible.map(d => d.id), affectedDiagrams,
+      raw: await this.confirmationState([...membership.keys(),...ancestors.keys()], context),
       membership: await Promise.all(byIdentity([...membership.values()]).map(async member => ({ ...member, provenance: await diagrams.getTrashProvenance(member.id), revision: await diagrams.getDeletionRevision(member.id) }))),
       affected: await Promise.all(affected.map(d => this.deletionSavedState(d, context))), requiredAncestors,
     };
@@ -523,13 +525,27 @@ export class DiagramService {
     });
   }
 
-  private async recoveryTransaction<T>(id: string, action: (repository: DiagramRepositoryLike) => Promise<T>): Promise<T> {
-    const initial = await this.repository.get(id);
-    if (!initial) throw new DiagramNotFoundError('Diagram not found');
-    return this.graph.run(id, [], ({ diagrams }) => action(diagrams));
+  private async confirmationState(ids: string[], context: CollectionTransactionContext) {
+    return { records: await this.graph.readArchiveRows(context,ids), epochs: await Promise.all([...new Set(ids)].sort().map(async id => ({ id, epoch: await context.diagrams.getConfirmationEpoch(id) }))) };
   }
 
-  private async trashSnapshot(id: string, repository: DiagramRepositoryLike): Promise<TrashImpact> {
+  private async recoveryScopeIds(id: string, repository: DiagramRepositoryLike): Promise<string[]> {
+    const root = (await repository.findAncestors(id)).at(-1)?.id ?? id;
+    return [root,...(await repository.findDescendants(root)).map(d => d.id)];
+  }
+
+  private async checkRecoveryToken(id: string, repository: DiagramRepositoryLike, supplied: string | undefined, expected: string, code: string) {
+    const changed = supplied !== undefined ? supplied !== expected : (await Promise.all((await this.recoveryScopeIds(id,repository)).map(id => repository.getConfirmationEpoch(id)))).some(epoch => epoch !== '0');
+    if (changed) throw new ApiConflictError('The saved recovery impact changed. Request a fresh preview and confirm it again.', code);
+  }
+
+  private async recoveryTransaction<T>(id: string, action: (repository: DiagramRepositoryLike, adrs?: AdrRepositoryLike) => Promise<T>): Promise<T> {
+    const initial = await this.repository.get(id);
+    if (!initial) throw new DiagramNotFoundError('Diagram not found');
+    return this.graph.run(id, [], ({ diagrams, adrs }) => action(diagrams, adrs));
+  }
+
+  private async trashSnapshot(id: string, repository: DiagramRepositoryLike, adrs?: AdrRepositoryLike): Promise<TrashImpact> {
     const root = await repository.get(id);
     if (!root || root.status !== 'active') throw new DiagramNotFoundError('Active diagram not found');
     const children = await Promise.all((await repository.findDescendants(id)).filter(child => child.status === 'active').map(async child => {
@@ -538,14 +554,17 @@ export class DiagramService {
       return document;
     }));
     const affected = [root, ...children].sort((a, b) => a.id.localeCompare(b.id));
-    return { diagramId: id, affectedDiagramIds: affected.map(d => d.id), affectedDiagrams: affected.map(summary) };
+    const impact = { diagramId: id, affectedDiagramIds: affected.map(d => d.id), affectedDiagrams: affected.map(summary) };
+    return { ...impact, impactToken: snapshotToken({ kind: 'trash', impact, state: await this.confirmationState(await this.recoveryScopeIds(id,repository), { diagrams:repository, adrs }) }) };
   }
 
-  trashImpact(id: string): Promise<TrashImpact> { return this.recoveryTransaction(id, repository => this.trashSnapshot(id, repository)); }
+  trashImpact(id: string): Promise<TrashImpact> { return this.recoveryTransaction(id, (repository, adrs) => this.trashSnapshot(id, repository, adrs)); }
 
-  async trash(id: string, confirmedDiagramIds?: string[]): Promise<DiagramDocument> {
-    return this.recoveryTransaction(id, async repository => {
-      const impact = await this.trashSnapshot(id, repository);
+  async trash(id: string, confirmation?: TrashConfirmation | string[]): Promise<DiagramDocument> {
+    const confirmedDiagramIds = Array.isArray(confirmation) ? confirmation : confirmation?.confirmedDiagramIds;
+    return this.recoveryTransaction(id, async (repository, adrs) => {
+      const impact = await this.trashSnapshot(id, repository, adrs);
+      await this.checkRecoveryToken(id,repository,Array.isArray(confirmation) ? undefined : confirmation?.impactToken,impact.impactToken,'TRASH_IMPACT_CHANGED');
       if ((confirmedDiagramIds && !sameIds(confirmedDiagramIds, impact.affectedDiagramIds)) || (!confirmedDiagramIds && impact.affectedDiagramIds.length > 1)) throw new ApiConflictError('The affected diagrams changed or require confirmation. Preview and confirm the full named set again.', 'TRASH_IMPACT_CHANGED');
       const provenance = { trashBatchId: crypto.randomUUID(), trashRootDiagramId: id };
       for (const affectedId of impact.affectedDiagramIds) {
@@ -555,7 +574,7 @@ export class DiagramService {
     });
   }
 
-  private async restoreSnapshot(id: string, repository: DiagramRepositoryLike): Promise<RestoreImpact> {
+  private async restoreSnapshot(id: string, repository: DiagramRepositoryLike, adrs?: AdrRepositoryLike): Promise<RestoreImpact> {
     const requested = await repository.get(id);
     if (!requested) throw new DiagramNotFoundError('Diagram not found');
     if (requested.status !== 'trashed') throw new DiagramConflictError('Diagram is not trashed');
@@ -580,14 +599,17 @@ export class DiagramService {
       }
     }
     affected.sort((a, b) => a.id.localeCompare(b.id));
-    return { requestedDiagramId: id, restoreRootDiagramId: root.id, trashBatchId: provenance.trashBatchId, affectedDiagramIds: affected.map(d => d.id), affectedDiagrams: affected.map(summary), requestedDiagramIncluded: affected.some(d => d.id === id) };
+    const impact = { requestedDiagramId: id, restoreRootDiagramId: root.id, trashBatchId: provenance.trashBatchId, affectedDiagramIds: affected.map(d => d.id), affectedDiagrams: affected.map(summary), requestedDiagramIncluded: affected.some(d => d.id === id) };
+    // A child preview submits the canonical root; request-specific display fields cannot bind consent.
+    return { ...impact, impactToken: snapshotToken({ kind: 'restore', rootDiagramId: root.id, trashBatchId: provenance.trashBatchId, affectedDiagrams: impact.affectedDiagrams, state: await this.confirmationState(await this.recoveryScopeIds(id,repository), { diagrams:repository, adrs }) }) };
   }
 
-  restoreImpact(id: string): Promise<RestoreImpact> { return this.recoveryTransaction(id, repository => this.restoreSnapshot(id, repository)); }
+  restoreImpact(id: string): Promise<RestoreImpact> { return this.recoveryTransaction(id, (repository, adrs) => this.restoreSnapshot(id, repository, adrs)); }
 
   async restore(id: string, confirmation?: RestoreConfirmation): Promise<DiagramDocument> {
-    return this.recoveryTransaction(id, async repository => {
-      const impact = await this.restoreSnapshot(id, repository);
+    return this.recoveryTransaction(id, async (repository, adrs) => {
+      const impact = await this.restoreSnapshot(id, repository, adrs);
+      await this.checkRecoveryToken(id,repository,confirmation?.impactToken,impact.impactToken,'RESTORE_IMPACT_CHANGED');
       if (impact.restoreRootDiagramId !== id) throw new ApiConflictError('Restore the parent and its confirmed trash batch before restoring this child.', 'PARENT_INACTIVE', undefined, undefined, undefined, impact.restoreRootDiagramId);
       if (!confirmation && impact.affectedDiagramIds.length > 1) throw new ApiConflictError('Preview and confirm every diagram in this restoration batch.', 'RESTORE_CONFIRMATION_REQUIRED', undefined, undefined, undefined, id);
       if (confirmation && (!sameIds(confirmation.confirmedDiagramIds, impact.affectedDiagramIds) || confirmation.confirmedTrashBatchId !== impact.trashBatchId)) throw new ApiConflictError('The restoration set or trash batch changed. Preview and confirm again.', 'RESTORE_IMPACT_CHANGED', undefined, undefined, undefined, id);

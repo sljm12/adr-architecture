@@ -1,5 +1,6 @@
 import { containerAvailabilitySchema, containerContextSchema, diagramDocumentSchema, diagramSummaryListSchema, trashImpactSchema, restoreImpactSchema, type RestoreConfirmation, type RestoreImpact, type TrashImpact, type ContainerAvailability, type ContainerContext, type DiagramDocument, type DiagramSummary } from '../../../shared/src/index';
 import { componentAvailabilitySchema, componentContextSchema, type ComponentAvailability, type ComponentContext } from '../../../shared/src/index';
+import type { TrashConfirmation } from '../../../shared/src/index';
 export class DiagramApiError extends Error { constructor(message: string, readonly status: number, readonly details: Record<string, unknown> = {}) { super(message); this.name = 'DiagramApiError'; } }
 export function formatDiagramApiError(error: unknown): string {
   if (!(error instanceof DiagramApiError)) return error instanceof Error ? error.message : 'Request failed';
@@ -25,8 +26,9 @@ export const diagramClient = {
   removeRelationship: async (diagramId: string, relationshipId: string): Promise<{ document: DiagramDocument }> => { const body = await json(await fetch(`/api/diagrams/${diagramId}/relationships/${relationshipId}`, { method: 'DELETE' })); return { document: diagramDocumentSchema.parse(body.document) as DiagramDocument }; },
   trashImpact: async (id: string): Promise<TrashImpact> => trashImpactSchema.parse(await json(await fetch(`/api/diagrams/${id}/trash-impact`))),
   restoreImpact: async (id: string): Promise<RestoreImpact> => restoreImpactSchema.parse(await json(await fetch(`/api/diagrams/${id}/restore-impact`))),
-  trash: async (id: string, confirmedDiagramIds?: string[]): Promise<void> => {
-    const response = await fetch(`/api/diagrams/${id}`, { method: 'DELETE', ...(confirmedDiagramIds ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify({ confirmedDiagramIds }) } : {}) });
+  trash: async (id: string, confirmation?: TrashConfirmation | string[]): Promise<void> => {
+    const body = Array.isArray(confirmation) ? { confirmedDiagramIds: confirmation } : confirmation;
+    const response = await fetch(`/api/diagrams/${id}`, { method: 'DELETE', ...(body ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}) });
     if (!response.ok) await json(response);
   },
   listTrash: () => fetch('/api/diagrams/trash').then(summaries),

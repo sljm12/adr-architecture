@@ -26,7 +26,8 @@ export const components=pgTable('components',{
   x:doublePrecision('x').notNull(),y:doublePrecision('y').notNull(),width:doublePrecision('width').notNull().default(180),height:doublePrecision('height').notNull().default(72),createdAt:timestamp('created_at',{withTimezone:true}).notNull(),updatedAt:timestamp('updated_at',{withTimezone:true}).notNull()
 }, table => ({
   diagramIdx:index('components_diagram_idx').on(table.diagramId),
-  diagramSourceUnique:uniqueIndex('components_diagram_source_unique').on(table.diagramId,table.sourceComponentId),
+  // Deferrable initially immediate in migration 0009; Drizzle has no deferrability builder.
+  diagramSourceUnique:unique('components_diagram_source_unique').on(table.diagramId,table.sourceComponentId),
   sourceIdx:index('components_source_component_idx').on(table.sourceComponentId),
   identityUnique:unique('components_id_diagram_unique').on(table.id,table.diagramId),
   roleCheck:check('components_c4_role_check',sql`(${table.role} = 'element' AND ${table.containerType} IS NULL AND ${table.technology} IS NULL AND ${table.sourceComponentId} IS NULL) OR (${table.role} = 'container' AND ${table.type} IS NOT NULL AND ${table.type} = 'container' AND ${table.containerType} IS NOT NULL AND ${table.containerType} IN ('application','datastore') AND ${table.description} IS NOT NULL AND length(btrim(${table.description})) > 0 AND ${table.technology} IS NOT NULL AND length(btrim(${table.technology})) > 0 AND ${table.sourceComponentId} IS NULL) OR (${table.role} = 'component' AND ${table.type} IS NOT NULL AND ${table.type} = 'component' AND ${table.containerType} IS NULL AND ${table.description} IS NOT NULL AND length(btrim(${table.description})) > 0 AND ${table.technology} IS NOT NULL AND length(btrim(${table.technology})) > 0 AND ${table.sourceComponentId} IS NULL) OR (${table.role} = 'external' AND ${table.sourceComponentId} IS NOT NULL AND ${table.type} IS NOT NULL AND ((${table.type} IN ('person','software-system') AND ${table.containerType} IS NULL AND ${table.technology} IS NULL) OR (${table.type} = 'container' AND ${table.containerType} IS NOT NULL AND ${table.containerType} IN ('application','datastore') AND ${table.description} IS NOT NULL AND length(btrim(${table.description})) > 0 AND ${table.technology} IS NOT NULL AND length(btrim(${table.technology})) > 0)))`),
@@ -39,7 +40,7 @@ export const adrs=pgTable('adrs',{
   id:uuid('id').primaryKey(), diagramId:uuid('diagram_id').notNull().references(()=>diagrams.id),
   title:varchar('title',{length:300}).notNull(), context:text('context').notNull(), decision:text('decision').notNull(),
   consequences:text('consequences').notNull(), alternativesOrConstraints:text('alternatives_or_constraints'),
-  status:adrStatus('status').notNull().default('draft'), replacementAdrId:uuid('replacement_adr_id'),
+  status:adrStatus('status').notNull().default('draft'), replacementAdrId:uuid('replacement_adr_id').references(():AnyPgColumn=>adrs.id),
   createdAt:timestamp('created_at',{withTimezone:true}).notNull(), updatedAt:timestamp('updated_at',{withTimezone:true}).notNull(),
 }, table => ({ diagramIdx:index('adrs_diagram_idx').on(table.diagramId), replacementIdx:index('adrs_replacement_idx').on(table.replacementAdrId) }));
 export const adrComponentLinks=pgTable('adr_component_links',{
@@ -60,3 +61,6 @@ export const systemGroupMembers=pgTable('system_group_members',{
   groupId:uuid('group_id').notNull().references(()=>systemGroups.id), componentId:uuid('component_id').notNull().references(()=>components.id),
   createdAt:timestamp('created_at',{withTimezone:true}).notNull(),
 }, table => ({ pk:primaryKey({ columns:[table.groupId, table.componentId] }), groupIdx:index('system_group_members_group_idx').on(table.groupId), componentIdx:index('system_group_members_component_idx').on(table.componentId) }));
+export const diagramConfirmationEpochs=pgTable('diagram_confirmation_epochs',{
+  diagramId:uuid('diagram_id').primaryKey(), epoch:bigint('epoch',{mode:'bigint'}).notNull().default(0n),
+}, table => ({ nonnegative:check('diagram_confirmation_epochs_epoch_check',sql`${table.epoch} >= 0`) }));

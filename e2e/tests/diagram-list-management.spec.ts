@@ -17,7 +17,7 @@ export async function mockActiveDiagramSummaries(page: Page, summaries: DiagramS
   await page.route('**/api/diagrams/*/trash-impact', route => {
     const id = route.request().url().split('/').at(-2)!;
     const document = summaries.find(row => row.id === id);
-    return document ? fulfillJson(route, { diagramId: id, affectedDiagramIds: [id], affectedDiagrams: [document] }) : route.fallback();
+    return document ? fulfillJson(route, { diagramId: id, affectedDiagramIds: [id], affectedDiagrams: [document], impactToken: 'a'.repeat(64) }) : route.fallback();
   });
 }
 
@@ -27,7 +27,7 @@ export async function mockTrashAndRestore(page: Page, trash: DiagramSummary[], r
   await page.route('**/api/diagrams/*/restore-impact', route => {
     const id = route.request().url().split('/').at(-2)!;
     const document = trash.find(row => row.id === id);
-    return document ? fulfillJson(route, { requestedDiagramId: id, restoreRootDiagramId: id, trashBatchId: null, affectedDiagramIds: [id], affectedDiagrams: [document], requestedDiagramIncluded: true }) : route.fallback();
+    return document ? fulfillJson(route, { requestedDiagramId: id, restoreRootDiagramId: id, trashBatchId: null, affectedDiagramIds: [id], affectedDiagrams: [document], impactToken: 'a'.repeat(64), requestedDiagramIncluded: true }) : route.fallback();
   });
   await page.route('**/api/diagrams/*/restore', route => {
     if (route.request().method() !== 'POST') return route.fallback();
@@ -184,7 +184,7 @@ test.describe('delete diagrams safely', () => {
 
   test('requires resolving unsaved current work before deletion can proceed', async ({ page }) => {
     const current = { ...recoverableDiagramFixture, id: '00000000-0000-4000-8000-000000000420', name: 'Current draft', status: 'active' as const, trashedAt: null };
-    await page.route(`**/api/diagrams/${current.id}/trash-impact`, route => fulfillJson(route, { diagramId: current.id, affectedDiagramIds: [current.id], affectedDiagrams: [current] }));
+    await page.route(`**/api/diagrams/${current.id}/trash-impact`, route => fulfillJson(route, { diagramId: current.id, affectedDiagramIds: [current.id], affectedDiagrams: [current], impactToken: 'a'.repeat(64) }));
     await page.route('**/api/diagrams', route => {
       if (route.request().method() === 'GET') return fulfillJson(route, []);
       if (route.request().method() === 'POST') return fulfillJson(route, current);

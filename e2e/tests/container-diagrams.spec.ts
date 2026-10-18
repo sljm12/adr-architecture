@@ -59,6 +59,9 @@ test('protects dirty child and ADR work before named parent trash and restores s
     await expect(page.getByRole('alertdialog')).toContainText('Resolve unsaved'); await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     await expect(page.locator(`.react-flow__node[data-id="${ids.container}"]`)).toContainText('Dirty runtime'); await expect(page.getByLabel('Title required', { exact: true })).toHaveValue('Dirty local decision'); expect(repository.get(ids.parentDiagram)?.status).toBe('active');
     await parentDelete.click(); await page.getByRole('button', { name: 'Move to trash', exact: true }).click(); await page.getByRole('button', { name: 'Save and delete', exact: true }).click();
+    await expect(page.getByRole('alertdialog')).toContainText('Affected diagrams');
+    expect(repository.get(ids.parentDiagram)?.status).toBe('active');
+    await page.getByRole('button', { name: 'Move to trash', exact: true }).click();
     await expect.poll(() => repository.get(ids.parentDiagram)?.status).toBe('trashed'); expect(repository.get(ids.populatedChild)?.components[0].name).toBe('Dirty runtime'); expect(adrs.get(decision.id)?.title).toBe('Dirty local decision'); expect(adrs.get(decision.id)?.componentIds).toEqual([ids.container, ids.externalOccurrence]);
     await page.getByRole('button', { name: 'Open recovery' }).click(); await page.locator(`.saved-diagram-trash-row[data-diagram-id="${ids.populatedChild}"]`).getByRole('button', { name: 'Restore' }).click(); await page.getByRole('button', { name: 'Restore diagrams' }).click();
     await expect(page.locator(`.react-flow__node[data-id="${ids.container}"]`)).toContainText('Dirty runtime'); expect(adrs.get(decision.id)?.relationshipIds).toEqual([ids.childRelationship]);
@@ -343,7 +346,7 @@ async function mockContainerApi(page: Page, options: { failFirstChildLoad?: bool
       const target = [parent, ...extraParents.values(), ...children.values()].find(d => d.id === trashImpactPath[1]);
       if (!target) return fulfill(route, { message: 'Diagram not found' }, 404);
       const affected = [target, ...[...children.values()].filter(d => d.scope?.parentDiagramId === target.id && d.status === 'active')];
-      return fulfill(route, { diagramId: target.id, affectedDiagramIds: affected.map(d => d.id), affectedDiagrams: affected.map(d => ({ id: d.id, name: d.name, status: d.status, kind: d.kind, scope: d.scope, createdAt: d.createdAt, updatedAt: d.updatedAt })) });
+      return fulfill(route, { diagramId: target.id, impactToken: 'a'.repeat(64), affectedDiagramIds: affected.map(d => d.id), affectedDiagrams: affected.map(d => ({ id: d.id, name: d.name, status: d.status, kind: d.kind, scope: d.scope, createdAt: d.createdAt, updatedAt: d.updatedAt })) });
     }
     const adrPath = path.match(/^\/diagrams\/([^/]+)\/adrs(?:\/full)?$/);
     if (adrPath && method === 'GET') return fulfill(route, [...adrs.values()].filter(adr => adr.diagramId === adrPath[1]));

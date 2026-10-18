@@ -61,7 +61,7 @@ describe('saved deletion revisions and memory rollback', () => {
       await diagrams.create(added); a.registerDiagram(added.id);
       internals.documents.delete(added.id);
       for (const id of [ids.child, ids.parent, ids.context]) { internals.documents.delete(id); internals.provenance.delete(id); internals.revisions.delete(id); }
-      a.restoreGraphSnapshot({ diagramIds: [ids.context, ids.parent, ids.child, ids.datastoreChild, added.id], records: new Map(), diagrams: new Set(), components: new Map(), relationships: new Map() });
+      a.restoreGraphSnapshot({ diagramIds: [ids.context, ids.parent, ids.child, ids.datastoreChild, added.id], records: new Map(), diagrams: new Set(), components: new Map(), relationships: new Map(), componentLinkTimes: new Map(), relationshipLinkTimes: new Map() });
       throw new Error('Injected failure');
     })).rejects.toThrow('Injected failure');
     expect(r.getDeletionRevision(ids.context)).toBe('9007199254740994');

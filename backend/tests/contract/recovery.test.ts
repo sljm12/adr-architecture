@@ -22,6 +22,16 @@ const document: DiagramDocument = {
 };
 
 describe('recovery API', () => {
+  it('forwards a complete current confirmation to Trash and restore', async () => {
+    const repository = new DiagramRepository(); repository.create(document);
+    const app = buildApp(repository); await app.ready();
+    try {
+      const impact = (await app.inject(`/diagrams/${ids.diagram}/trash-impact`)).json();
+      expect((await app.inject({ method: 'DELETE', url: `/diagrams/${ids.diagram}`, payload: { confirmedDiagramIds: impact.affectedDiagramIds, impactToken: impact.impactToken } })).statusCode).toBe(204);
+      const restore = (await app.inject(`/diagrams/${ids.diagram}/restore-impact`)).json();
+      expect((await app.inject({ method: 'POST', url: `/diagrams/${ids.diagram}/restore`, payload: { confirmedDiagramIds: restore.affectedDiagramIds, confirmedTrashBatchId: restore.trashBatchId, impactToken: restore.impactToken } })).statusCode).toBe(200);
+    } finally { await app.close(); }
+  });
   it('returns dependency count and blocks connected component deletion', async () => {
     const repository = new DiagramRepository(); repository.create(document);
     const app = buildApp(repository); await app.ready();

@@ -3,7 +3,7 @@
   "info": {
     "title": "ADR Diagram Archive API",
     "version": "1.0.0",
-    "description": "Lossless selected-hierarchy transfer. Exact file schema: archive.schema.json. Semantics, legacy Trash/restore impact-token extensions, and UI: http-and-ui.md. No automatic commit retries. Confirmation tokens establish reviewed consistency, not authorization."
+    "description": "Lossless selected-hierarchy transfer. Exact file schema: archive.schema.json. Semantics and UI: http-and-ui.md. Existing TrashImpact and RestoreImpact responses require a SHA-256 impactToken. Trash confirmations accept {confirmedDiagramIds, impactToken?}; restore confirmations accept {confirmedDiagramIds, confirmedTrashBatchId, impactToken?}, with strict optional lowercase 64-hex tokens. Supplied tokens must always match. Legacy bodies and body-less single-diagram calls are accepted only while all relevant local epochs are zero; otherwise return TRASH_IMPACT_CHANGED or RESTORE_IMPACT_CHANGED and require a fresh preview. A restore token from a child preview confirms the canonical restoreRootDiagramId batch. Single and collection deletion payload shapes are unchanged; their fingerprints also bind epochs. No automatic commit retries. Confirmation tokens establish reviewed consistency, not authorization."
   },
   "servers": [{ "url": "http://localhost:3000" }],
   "paths": {

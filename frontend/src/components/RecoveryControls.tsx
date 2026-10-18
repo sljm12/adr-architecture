@@ -54,6 +54,7 @@ export function RecoveryControls({ selection, onSelectionClear }: { selection: S
     catch (error) { setNotice(`Cannot remove relationship: ${formatDiagramApiError(error)}`); }
     finally { setRemovingRelationship(false); }
   };
+  // Both legacy controls use the coordinator's fresh preview and complete impact-token confirmation.
   const moveToTrash = () => window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind: 'trash', id: document.id } }));
   const restore = (id: string) => window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind: 'restore', id } }));
   const endpointName = (id: string) => document.components.find(item => item.id === id)?.name ?? 'Unknown component';

@@ -66,7 +66,7 @@ describe.skipIf(!enabled)('PostgreSQL exact recovery', () => {
   beforeAll(async () => {
     admin = new Pool({ connectionString: process.env.DATABASE_URL }); await admin.query(`CREATE SCHEMA ${name}`);
     pool = new Pool({ connectionString: process.env.DATABASE_URL, options: `-c search_path=${name}` });
-    for (const migration of ['0001_initial.sql', '0002_adrs.sql', '0003_system_groups.sql', '0004_component_dimensions.sql', '0005_c4_container_diagrams.sql', '0006_container_component_types.sql', '0007_c4_component_diagrams.sql', '0008_diagram_deletion_revision.sql']) await pool.query(await readFile(new URL(`../../drizzle/${migration}`, import.meta.url), 'utf8'));
+    for (const migration of ['0001_initial.sql', '0002_adrs.sql', '0003_system_groups.sql', '0004_component_dimensions.sql', '0005_c4_container_diagrams.sql', '0006_container_component_types.sql', '0007_c4_component_diagrams.sql', '0008_diagram_deletion_revision.sql', '0009_diagram_archive.sql']) await pool.query(await readFile(new URL(`../../drizzle/${migration}`, import.meta.url), 'utf8'));
     repository = new PostgresDiagramRepository(drizzle(pool, { schema }));
   });
   afterAll(async () => { await pool?.end(); if (admin) { await admin.query(`DROP SCHEMA IF EXISTS ${name} CASCADE`); await admin.end(); } });

@@ -1,0 +1,25 @@
+import type { z } from 'zod';
+import type * as schemas from './validation';
+
+export type Archive = z.infer<typeof schemas.archiveSchema>;
+export type ArchiveRecords = z.infer<typeof schemas.archiveRecordsSchema>;
+export type ArchiveCollection = keyof ArchiveRecords;
+export type ArchiveDiagram = ArchiveRecords['diagrams'][number];
+export type ArchiveComponent = ArchiveRecords['components'][number];
+export type ArchiveRelationship = ArchiveRecords['relationships'][number];
+export type ArchiveSystemGroup = ArchiveRecords['systemGroups'][number];
+export type ArchiveSystemGroupMember = ArchiveRecords['systemGroupMembers'][number];
+export type ArchiveAdr = ArchiveRecords['adrs'][number];
+export type ArchiveAdrComponentLink = ArchiveRecords['adrComponentLinks'][number];
+export type ArchiveAdrRelationshipLink = ArchiveRecords['adrRelationshipLinks'][number];
+export type ArchiveRow = ArchiveRecords[ArchiveCollection][number];
+export type PreparedArchive = z.infer<typeof schemas.preparedArchiveSchema>;
+export type ArchiveScopeItem = z.infer<typeof schemas.archiveScopeItemSchema>;
+export type ArchiveRecordCounts = z.infer<typeof schemas.archiveRecordCountsSchema>;
+export type ArchiveDeltaCounts = z.infer<typeof schemas.archiveDeltaCountsSchema>;
+export type ArchiveRecordChange = z.infer<typeof schemas.archiveRecordChangeSchema>;
+export type ArchivePreviewRequest = z.infer<typeof schemas.archivePreviewRequestSchema>;
+export type ArchiveImportRequest = z.infer<typeof schemas.archiveImportRequestSchema>;
+export type ArchiveImportPreview = z.infer<typeof schemas.archiveImportPreviewSchema>;
+export type ArchiveImportResult = z.infer<typeof schemas.archiveImportResultSchema>;
+export type ArchiveErrorBody = z.infer<typeof schemas.archiveErrorSchema>;

@@ -1,6 +1,25 @@
 # Quickstart Validation: Lossless Diagram Export and Import
 
-This guide specifies checks to run after implementation. The routes, migration and new test files named here are planned work; this planning run does not claim they exist or pass. See [data-model.md](data-model.md), [file schema](contracts/archive.schema.json), and [HTTP/UI contract](contracts/http-and-ui.md) for exact rules.
+This guide covers the complete feature. Phases 1–2 (T001–T017) are implemented; the archive routes and browser transfer workflows in phases 3 onward remain planned. See [data-model.md](data-model.md), [file schema](contracts/archive.schema.json), and [HTTP/UI contract](contracts/http-and-ui.md) for exact rules.
+
+## Foundation evidence — 2026-10-18
+
+- All 17 setup/foundation tasks are checked in `tasks.md`; the requirements checklist remains unchanged (16/16 checked). No extension hooks are configured.
+- The independent fixture inventory covers all 69 fields in the eight contract collections. Shared tests cover strict primitives, duplicate decoded keys, byte/depth limits, identity namespaces, scope closure, graph rules, raw caches, legacy null Trash provenance and supported ADR replacement cycles.
+- Eight migration/codec tests executed against PostgreSQL 17.4 without skips. Evidence includes populated-0008 preservation, actual migration failure rollback, immediate/deferred source uniqueness, the existing ADR replacement FK, exact raw values, no-op row versions, source-chain removal, epoch overflow rollback, repeatable-read consistency during a concurrent commit, and epoch tombstones after purge/reintroduction.
+- Memory tests cover all eight collections, ordinary membership/link timestamp maintenance, full rollback including registration indexes and queued writers, case-insensitive identity, no-op apply and late epoch failure. Confirmation tests cover legacy epoch-zero compatibility, current tokens, historical apply/revert invalidation, and unrelated-review validity.
+- The final broad Vitest run passed **1,122 tests, zero failures and zero skips**, with PostgreSQL enabled. It excluded only the long existing deletion scale test, which passed in the preceding full run. Shared-database consumers were redirected with `PGOPTIONS` into an additional verified isolated schema; the existing helper cleaned it afterward. Initial regression failures were corrected and their focused reruns passed before this final run.
+- Recovery/library browser regressions passed, including both library and inspector entry paths after a nonzero epoch, canonical-parent restoration from a child preview, and fresh review after saving diagram/ADR drafts. The expanded four-file browser run passed 37 cases; its dirty-save case was updated for fresh review and passed on focused rerun. The final three-file recovery/list rerun passed **16/16 cases**.
+- `npm.cmd run lint`, `npm.cmd run build`, and `git diff --check` passed. Vite still reports its existing large-chunk warning. Existing PostgreSQL concurrency suites emit node-postgres queued-query deprecation warnings.
+
+Focused foundation entry point:
+
+```powershell
+$env:RUN_POSTGRES_TESTS = '1'
+npm.cmd test -- shared/tests/archive-validation.test.ts shared/tests/archive-graph.test.ts backend/tests/persistence/diagram-archive-migration.test.ts backend/tests/diagram-archive-memory.test.ts backend/tests/contract/diagram-archive-confirmations.test.ts frontend/tests/archive-recovery-confirmations.test.tsx
+```
+
+Migration 0009 was applied only inside disposable test schemas in this implementation run. Apply the pending migration before deploying the updated API. Archive endpoint round trips, archive performance targets and first-time-author usability evidence remain pending the later phases; the foundation results do not establish SC-001–SC-006 for the complete product workflow.
 
 ## Prerequisites and setup
 

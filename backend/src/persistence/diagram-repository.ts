@@ -1,4 +1,4 @@
-import { asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { z } from 'zod';
@@ -6,6 +6,8 @@ import type { DiagramDocument, ComponentScope, DiagramKind, DeletionError } from
 import { assertDiagramInvariants, diagramDocumentSchema, getDiagramName, getDiagramOwnerId, getComponentScope } from '../../../shared/src/index';
 import { ApiConflictError } from '../api/errors';
 import * as schema from './schema';
+import { archiveTimestamp, archiveGeometry, sortArchiveRows, readArchiveTable, upsertArchiveTable, removeArchiveTable, archiveRowIdentity, archiveFields, normalizeArchiveRows, type DiagramArchiveCollection } from './archive-repository';
+import { canonicalArchiveScalar, ARCHIVE_MAX_REVISION, type ArchiveRecords, type ArchiveDiagram } from '../../../shared/src/index';
 
 export type MaybePromise<T> = T | Promise<T>;
 export interface TrashProvenance { trashBatchId: string | null; trashRootDiagramId: string | null }
@@ -16,6 +18,14 @@ export type DeletionBlocker = NonNullable<DeletionError['blockers']>[number];
 export const deletionBlocker = (diagramId: string, artifactId: string, reason: string): DeletionBlocker => ({ diagramId, artifactId, reason, nextAction: `Resolve this reference in diagram ${diagramId}, artifact ${artifactId}, then request a new deletion preview.` });
 
 export interface DiagramRepositoryLike {
+  readArchiveRows(diagramIds?: string[]): MaybePromise<Pick<ArchiveRecords, DiagramArchiveCollection>>;
+  upsertArchiveRows<C extends DiagramArchiveCollection>(collection: C, rows: ArchiveRecords[C]): MaybePromise<void>;
+  removeArchiveRows(collection: DiagramArchiveCollection, identities: string[][]): MaybePromise<void>;
+  getConfirmationEpoch(id: string): MaybePromise<string>;
+  advanceConfirmationEpochs(ids: string[]): MaybePromise<void>;
+  withArchiveSnapshot<T>(action: (repository: DiagramRepositoryLike, transaction?: unknown) => MaybePromise<T>): Promise<T>;
+  deferArchiveSources(): MaybePromise<void>;
+  checkArchiveSources(): MaybePromise<void>;
   deletionBlockers(scope: DeletionScope): MaybePromise<DeletionBlocker[]>;
   /** Transaction-scoped removal; IDs must be validated and ordered deepest-first. */
   purge(diagramIds: string[]): MaybePromise<void>;
@@ -132,10 +142,74 @@ export class DiagramRepository implements DiagramRepositoryLike {
   private documents = new Map<string, DiagramDocument>();
   private revisions = new Map<string, bigint>();
   private provenance = new Map<string, TrashProvenance>();
+  private membershipTimes = new Map<string, string>();
+  private epochs = new Map<string, bigint>();
   private writerTail?: Promise<void>;
   private readonly writerScope = new AsyncLocalStorage<{ active: boolean; collection: boolean }>();
   private transactionMembers = new Map<string, Set<string>>();
   transactionDiagramIds(rootId: string) { return [...(this.transactionMembers.get(rootId) ?? [])]; }
+
+  getConfirmationEpoch(id: string) { return (this.epochs.get(id.toLowerCase()) ?? 0n).toString(); }
+  advanceConfirmationEpochs(ids: string[]) {
+    if (!this.writerScope.getStore()?.collection) throw new Error('Epoch writes require collection coordination');
+    for (const id of new Set(ids.map(id => id.toLowerCase()))) {
+      const next = BigInt(this.getConfirmationEpoch(id)) + 1n;
+      if (next > ARCHIVE_MAX_REVISION) throw new Error('Confirmation epoch overflow');
+      this.epochs.set(id, next);
+    }
+  }
+  deferArchiveSources() {}
+  checkArchiveSources() {}
+  withArchiveSnapshot<T>(action: (repository: DiagramRepositoryLike, transaction?: unknown) => MaybePromise<T>): Promise<T> { return this.withCollectionTransaction(action); }
+  readArchiveRows(diagramIds?: string[]): Pick<ArchiveRecords, DiagramArchiveCollection> {
+    const ids = diagramIds && new Set(diagramIds.map(id => id.toLowerCase()));
+    const documents = [...this.documents.values()].filter(d => !ids || ids.has(d.id.toLowerCase()));
+    const diagrams: ArchiveDiagram[] = documents.map(d => ({ id: d.id, name: d.name, kind: d.kind ?? 'general', status: d.status, createdAt: archiveTimestamp(d.createdAt), updatedAt: archiveTimestamp(d.updatedAt), trashedAt: d.trashedAt && archiveTimestamp(d.trashedAt), parentDiagramId: d.scope?.parentDiagramId ?? null, ownerComponentId: getDiagramOwnerId(d), scopeX: d.boundary ? canonicalArchiveScalar(d.boundary.position.x) : null, scopeY: d.boundary ? canonicalArchiveScalar(d.boundary.position.y) : null, scopeWidth: d.boundary ? canonicalArchiveScalar(d.boundary.size.width) : null, scopeHeight: d.boundary ? canonicalArchiveScalar(d.boundary.size.height) : null, ...this.getTrashProvenance(d.id), deletionRevision: this.getDeletionRevision(d.id) ?? '0' }));
+    return {
+      diagrams: sortArchiveRows('diagrams', diagrams),
+      components: sortArchiveRows('components', documents.flatMap(d => d.components.map(c => ({ id: c.id, diagramId: c.diagramId, name: c.name, description: c.description, type: c.type, role: c.role ?? 'element', containerType: c.containerType ?? null, technology: c.technology ?? null, sourceComponentId: c.sourceComponentId ?? null, ...archiveGeometry(c), createdAt: archiveTimestamp(c.createdAt), updatedAt: archiveTimestamp(c.updatedAt) })))),
+      relationships: sortArchiveRows('relationships', documents.flatMap(d => d.relationships.map(r => ({ ...r, protocol: r.protocol ?? null, createdAt: archiveTimestamp(r.createdAt), updatedAt: archiveTimestamp(r.updatedAt) })))),
+      systemGroups: sortArchiveRows('systemGroups', documents.flatMap(d => d.groups.map(g => ({ id: g.id, diagramId: g.diagramId, name: g.name, ...archiveGeometry(g), createdAt: archiveTimestamp(g.createdAt), updatedAt: archiveTimestamp(g.updatedAt) })))),
+      systemGroupMembers: sortArchiveRows('systemGroupMembers', documents.flatMap(d => d.groups.flatMap(g => g.memberComponentIds.map(componentId => ({ groupId: g.id, componentId, createdAt: this.membershipTimes.get(`${g.id}/${componentId}`)! }))))),
+    };
+  }
+  private syncMembershipTimes(document: DiagramDocument, timestamp: string) {
+    const old = this.documents.get(document.id);
+    const pairs = new Set(document.groups.flatMap(g => g.memberComponentIds.map(id => `${g.id}/${id}`)));
+    for (const group of old?.groups ?? []) for (const id of group.memberComponentIds) if (!pairs.has(`${group.id}/${id}`)) this.membershipTimes.delete(`${group.id}/${id}`);
+    for (const key of pairs) if (!this.membershipTimes.has(key)) this.membershipTimes.set(key, archiveTimestamp(timestamp));
+  }
+  upsertArchiveRows<C extends DiagramArchiveCollection>(collection: C, incoming: ArchiveRecords[C]) {
+    if (!this.writerScope.getStore()?.collection) throw new Error('Raw writes require collection coordination');
+    const rows = this.readArchiveRows();
+    const merged = new Map(rows[collection].map(row => [archiveRowIdentity(collection,row).join('/'), row]));
+    const affected = new Set<string>();
+    for (const row of normalizeArchiveRows(collection,incoming)) {
+      const key = archiveRowIdentity(collection,row).join('/'), previous = merged.get(key);
+      if (previous && archiveFields[collection].every(field => (previous as unknown as Record<string,unknown>)[field] === (row as unknown as Record<string,unknown>)[field])) continue;
+      affected.add('diagramId' in row ? row.diagramId : 'groupId' in row ? rows.systemGroups.find(g => g.id === row.groupId)!.diagramId : row.id);
+      merged.set(key, row);
+    }
+    (rows[collection] as unknown[]) = [...merged.values()];
+    this.setArchiveRows(rows,affected);
+  }
+  removeArchiveRows(collection: DiagramArchiveCollection, identities: string[][]) {
+    if (!this.writerScope.getStore()?.collection || collection === 'diagrams') throw new Error('Raw removal requires collection coordination and cannot remove diagrams');
+    const rows = this.readArchiveRows(), removed = new Set(identities.map(id => id.map(v => v.toLowerCase()).join('/')));
+    const affected = new Set(rows[collection].filter(row => removed.has(archiveRowIdentity(collection,row).join('/'))).map(row => 'diagramId' in row ? row.diagramId : rows.systemGroups.find(g => g.id === row.groupId)!.diagramId));
+    (rows[collection] as unknown[]) = rows[collection].filter(row => !removed.has(archiveRowIdentity(collection,row).join('/')));
+    this.setArchiveRows(rows,affected);
+  }
+  private setArchiveRows(rows: Pick<ArchiveRecords, DiagramArchiveCollection>, affected: Set<string>) {
+    const layout = (r: { x: string; y: string; width: string; height: string }) => ({ position: { x: Number(r.x), y: Number(r.y) }, size: { width: Number(r.width), height: Number(r.height) } });
+    this.membershipTimes = new Map(rows.systemGroupMembers.map(m => [`${m.groupId}/${m.componentId}`, m.createdAt]));
+    for (const d of rows.diagrams.filter(d => affected.has(d.id))) {
+      const scope = d.parentDiagramId && d.ownerComponentId ? d.kind === 'component' ? { parentDiagramId: d.parentDiagramId, containerId: d.ownerComponentId } as ComponentScope : { parentDiagramId: d.parentDiagramId, softwareSystemId: d.ownerComponentId, parentDiagramName: '', softwareSystemName: '', softwareSystemDescription: null } : null;
+      this.documents.set(d.id, { id: d.id, name: d.name, kind: d.kind, status: d.status, createdAt: d.createdAt, updatedAt: d.updatedAt, trashedAt: d.trashedAt, scope, boundary: d.kind === 'general' ? null : { position: { x: Number(d.scopeX), y: Number(d.scopeY) }, size: { width: Number(d.scopeWidth), height: Number(d.scopeHeight) } }, components: rows.components.filter(c => c.diagramId === d.id).map(c => ({ ...c, ...layout(c) })), relationships: rows.relationships.filter(r => r.diagramId === d.id), groups: rows.systemGroups.filter(g => g.diagramId === d.id).map(g => ({ ...g, ...layout(g), memberComponentIds: rows.systemGroupMembers.filter(m => m.groupId === g.id).map(m => m.componentId) })) });
+      this.revisions.set(d.id, BigInt(d.deletionRevision));
+      this.provenance.set(d.id, { trashBatchId: d.trashBatchId, trashRootDiagramId: d.trashRootDiagramId });
+    }
+  }
 
   private async coordinateWrite<T>(action: () => MaybePromise<T>, collection = false): Promise<T> {
     if (this.writerScope.getStore()?.active) return action();
@@ -158,8 +232,9 @@ export class DiagramRepository implements DiagramRepositoryLike {
       const documents = new Map([...this.documents].map(([id, d]) => [id, clone(d)]));
       const provenance = new Map([...this.provenance].map(([id, p]) => [id, { ...p }]));
       const revisions = new Map(this.revisions);
+      const membershipTimes = new Map(this.membershipTimes), epochs = new Map(this.epochs);
       try { return await action(this, this); }
-      catch (error) { this.documents = documents; this.provenance = provenance; this.revisions = revisions; throw error; }
+      catch (error) { this.documents = documents; this.provenance = provenance; this.revisions = revisions; this.membershipTimes = membershipTimes; this.epochs = epochs; throw error; }
     }, true);
   }
 
@@ -172,7 +247,7 @@ export class DiagramRepository implements DiagramRepositoryLike {
     );
   }
   purge(diagramIds: string[]) {
-    for (const id of diagramIds) { this.documents.delete(id); this.provenance.delete(id); this.revisions.delete(id); }
+    for (const id of diagramIds) { const d = this.documents.get(id); for (const g of d?.groups ?? []) for (const c of g.memberComponentIds) this.membershipTimes.delete(`${g.id}/${c}`); this.documents.delete(id); this.provenance.delete(id); this.revisions.delete(id); }
   }
 
   getDeletionRevision(id: string) { return this.revisions.get(id)?.toString(); }
@@ -211,6 +286,7 @@ export class DiagramRepository implements DiagramRepositoryLike {
         const snapshot = new Map([...this.documents].filter(([id]) => ids.has(id)).map(([id, document]) => [id, clone(document)]));
         const provenanceSnapshot = new Map([...this.provenance].filter(([id]) => ids.has(id)).map(([id, value]) => [id, { ...value }]));
         const revisionSnapshot = new Map([...this.revisions].filter(([id]) => ids.has(id)));
+        const membershipSnapshot = new Map(this.membershipTimes);
         this.transactionMembers.set(root.id, ids);
         try { return await action(this, this); }
         catch (error) {
@@ -219,6 +295,7 @@ export class DiagramRepository implements DiagramRepositoryLike {
           for (const [id, document] of snapshot) this.documents.set(id, document);
           for (const [id, value] of provenanceSnapshot) this.provenance.set(id, value);
           for (const [id, value] of revisionSnapshot) this.revisions.set(id, value);
+          this.membershipTimes = membershipSnapshot;
           throw error;
         }
       }
@@ -234,6 +311,7 @@ export class DiagramRepository implements DiagramRepositoryLike {
     assertDiagramInvariants(document);
     if (document.scope && this.findContainerForOwner(getDiagramOwnerId(document)!)) throw new Error('diagrams_owner_component_unique');
     const normalized = { ...document, groups: normalizedGroups(document) };
+    this.syncMembershipTimes(normalized, document.createdAt);
     this.documents.set(document.id, clone(normalized));
     this.revisions.set(document.id, 0n);
     for (const members of this.transactionMembers.values()) if (document.scope && members.has(document.scope.parentDiagramId)) members.add(document.id);
@@ -262,6 +340,7 @@ export class DiagramRepository implements DiagramRepositoryLike {
         return { ...group, name: group.name.trim(), memberComponentIds: [...group.memberComponentIds], createdAt: prior?.createdAt ?? group.createdAt, updatedAt };
       }),
     };
+    this.syncMembershipTimes(updated, updatedAt);
     this.documents.set(document.id, clone(updated));
     this.incrementDeletionRevision(document.id);
     return this.resolve(updated);
@@ -437,6 +516,24 @@ function mapDocument(
 /** PostgreSQL/Drizzle repository used by the API server. */
 export class PostgresDiagramRepository implements DiagramRepositoryLike {
   constructor(private readonly db: PostgresExecutor, private readonly inTransaction = false, private readonly collectionTransaction = false) {}
+
+  async readArchiveRows(diagramIds?: string[]): Promise<Pick<ArchiveRecords, DiagramArchiveCollection>> {
+    if (!this.inTransaction) return this.withArchiveSnapshot(repository => repository.readArchiveRows(diagramIds));
+    return { diagrams: await readArchiveTable(this.db,'diagrams',diagramIds), components: await readArchiveTable(this.db,'components',diagramIds), relationships: await readArchiveTable(this.db,'relationships',diagramIds), systemGroups: await readArchiveTable(this.db,'systemGroups',diagramIds), systemGroupMembers: await readArchiveTable(this.db,'systemGroupMembers',diagramIds) };
+  }
+  async upsertArchiveRows<C extends DiagramArchiveCollection>(collection: C, rows: ArchiveRecords[C]) { if (!this.collectionTransaction) throw new Error('Raw writes require collection coordination'); await upsertArchiveTable(this.db,collection,rows); }
+  async removeArchiveRows(collection: DiagramArchiveCollection, identities: string[][]) { if (!this.collectionTransaction) throw new Error('Raw removal requires collection coordination'); await removeArchiveTable(this.db,collection,identities); }
+  async getConfirmationEpoch(id: string) { const result = await this.db.execute(sql`SELECT epoch::text FROM diagram_confirmation_epochs WHERE diagram_id = ${id}::uuid`); return result.rows[0]?.epoch as string ?? '0'; }
+  async advanceConfirmationEpochs(ids: string[]) {
+    if (!this.collectionTransaction) throw new Error('Epoch writes require collection coordination');
+    for (const id of new Set(ids.map(id => id.toLowerCase()))) await this.db.execute(sql`INSERT INTO diagram_confirmation_epochs (diagram_id, epoch) VALUES (${id}::uuid, 1) ON CONFLICT (diagram_id) DO UPDATE SET epoch = diagram_confirmation_epochs.epoch + 1`);
+  }
+  async deferArchiveSources() { if (!this.collectionTransaction) throw new Error('Source deferral requires collection coordination'); await this.db.execute(sql`SET CONSTRAINTS components_diagram_source_unique DEFERRED`); }
+  async checkArchiveSources() { if (!this.collectionTransaction) throw new Error('Constraint check requires collection coordination'); await this.db.execute(sql`SET CONSTRAINTS components_diagram_source_unique IMMEDIATE`); }
+  async withArchiveSnapshot<T>(action: (repository: DiagramRepositoryLike, transaction?: unknown) => MaybePromise<T>): Promise<T> {
+    if (this.inTransaction) return action(this,this.db);
+    return this.db.transaction(async tx => action(new PostgresDiagramRepository(tx,true),tx), { isolationLevel: 'repeatable read', accessMode: 'read only' });
+  }
 
   async withCollectionTransaction<T>(action: (repository: DiagramRepositoryLike, transaction?: unknown) => MaybePromise<T>): Promise<T> {
     if (this.inTransaction) {
@@ -766,7 +863,8 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
       if (!relationshipIds.has(id)) await tx.delete(schema.relationships).where(eq(schema.relationships.id, id));
     }
     for (const id of existingGroups.keys()) {
-      await tx.delete(schema.systemGroupMembers).where(eq(schema.systemGroupMembers.groupId, id));
+      const retained = document.groups.find(g => g.id === id)?.memberComponentIds ?? [];
+      await tx.delete(schema.systemGroupMembers).where(retained.length ? and(eq(schema.systemGroupMembers.groupId,id), notInArray(schema.systemGroupMembers.componentId,retained)) : eq(schema.systemGroupMembers.groupId,id));
       if (!groupIds.has(id)) await tx.delete(schema.systemGroups).where(eq(schema.systemGroups.id, id));
     }
     for (const id of existingComponents.keys()) {
@@ -798,7 +896,7 @@ export class PostgresDiagramRepository implements DiagramRepositoryLike {
       const values = { diagramId: document.id, name: group.name.trim(), x: group.position.x, y: group.position.y, width: group.size.width, height: group.size.height, updatedAt: now };
       if (previous) await tx.update(schema.systemGroups).set(values).where(eq(schema.systemGroups.id, group.id));
       else await tx.insert(schema.systemGroups).values({ id: group.id, ...values, createdAt: dateValue(group.createdAt, `groups.${group.id}.createdAt`) });
-      if (group.memberComponentIds.length > 0) await tx.insert(schema.systemGroupMembers).values(group.memberComponentIds.map(componentId => ({ groupId: group.id, componentId, createdAt: now })));
+      if (group.memberComponentIds.length > 0) await tx.insert(schema.systemGroupMembers).values(group.memberComponentIds.map(componentId => ({ groupId: group.id, componentId, createdAt: now }))).onConflictDoNothing();
     }
   }
 }

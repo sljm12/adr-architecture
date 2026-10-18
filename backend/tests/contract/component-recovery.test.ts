@@ -12,7 +12,7 @@ describe('three-level confirmed recovery', () => {
       expect(impact.affectedDiagramIds.sort()).toEqual([ids.context, ids.parent, ids.child].sort());
       expect((await app.inject({ method: 'DELETE', url: `/diagrams/${ids.context}`, payload: { confirmedDiagramIds: [ids.context, ids.parent] } })).json().code).toBe('TRASH_IMPACT_CHANGED');
       expect(repository.get(ids.context)?.status).toBe('active');
-      expect((await app.inject({ method: 'DELETE', url: `/diagrams/${ids.context}`, payload: { confirmedDiagramIds: impact.affectedDiagramIds } })).statusCode).toBe(204);
+      expect((await app.inject({ method: 'DELETE', url: `/diagrams/${ids.context}`, payload: { confirmedDiagramIds: impact.affectedDiagramIds, impactToken: impact.impactToken } })).statusCode).toBe(204);
       const before = repository.listAll();
       const preview = (await app.inject(`/diagrams/${ids.datastoreChild}/restore-impact`)).json();
       expect(preview).toMatchObject({ restoreRootDiagramId: ids.context, requestedDiagramIncluded: false });
@@ -20,7 +20,7 @@ describe('three-level confirmed recovery', () => {
       expect((await app.inject({ method: 'POST', url: `/diagrams/${ids.datastoreChild}/restore` })).json()).toMatchObject({ code: 'PARENT_INACTIVE', restoreRootDiagramId: ids.context });
       expect((await app.inject({ method: 'POST', url: `/diagrams/${ids.context}/restore`, payload: { confirmedDiagramIds: preview.affectedDiagramIds, confirmedTrashBatchId: crypto.randomUUID() } })).json().code).toBe('RESTORE_IMPACT_CHANGED');
       expect(repository.listAll()).toEqual(before);
-      expect((await app.inject({ method: 'POST', url: `/diagrams/${ids.context}/restore`, payload: { confirmedDiagramIds: preview.affectedDiagramIds, confirmedTrashBatchId: preview.trashBatchId } })).statusCode).toBe(200);
+      expect((await app.inject({ method: 'POST', url: `/diagrams/${ids.context}/restore`, payload: { confirmedDiagramIds: preview.affectedDiagramIds, confirmedTrashBatchId: preview.trashBatchId, impactToken: preview.impactToken } })).statusCode).toBe(200);
       expect(repository.get(ids.child)?.status).toBe('active');
       expect(repository.get(ids.datastoreChild)?.status).toBe('trashed');
       expect(repository.getTrashProvenance(ids.datastoreChild)).toEqual(independent);

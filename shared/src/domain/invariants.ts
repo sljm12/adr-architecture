@@ -146,7 +146,7 @@ export function assertDiagramInvariants(document: DiagramDocument): void {
       assertUuid(memberId, 'Group member component ID');
       if (members.has(memberId)) throw new Error(`Group ${group.id} contains duplicate member ${memberId}`);
       members.add(memberId);
-      if (groupIds.has(memberId)) throw new Error(`Group ${group.id} cannot contain another group`);
+      if (groupIds.has(memberId) && !componentIds.has(memberId)) throw new Error(`Group ${group.id} cannot contain another group`);
       const member = document.components.find(component => component.id === memberId);
       if (!member) throw new Error(`Group ${group.id} references missing component ${memberId}`);
       if (member.diagramId !== document.id) throw new Error(`Group member ${memberId} must belong to diagram ${document.id}`);

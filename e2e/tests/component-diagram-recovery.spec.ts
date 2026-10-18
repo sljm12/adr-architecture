@@ -4,6 +4,37 @@ import { componentRecoveryFixture } from '../../backend/tests/component-recovery
 import { componentFixtureIds as ids } from '../../shared/tests/component-fixtures';
 import { DiagramService } from '../../backend/src/services/diagram-service';
 
+for (const entry of ['library','inspector'] as const) test(`forwards current recovery tokens from the ${entry} controls after an archive epoch advance`, async ({ page }) => {
+  const repository = componentRecoveryFixture(), app = buildApp(repository);
+  await repository.withCollectionTransaction(d => d.advanceConfirmationEpochs([ids.child]));
+  const confirmations: Array<Record<string, unknown>> = [];
+  await page.route(/\/api\/(?:diagrams|adrs)(?:\/|$|\?)/, async route => {
+    const request = route.request(), path = new URL(request.url()).pathname.replace(/^\/api/, '');
+    const payload = request.postData() ? JSON.parse(request.postData()!) : undefined;
+    if (request.method() === 'DELETE' || path.endsWith('/restore')) confirmations.push(payload);
+    const response = await app.inject({ method: request.method() as import('light-my-request').InjectOptions['method'], url: path, ...(payload ? { payload } : {}) });
+    await route.fulfill({ status: response.statusCode, contentType: 'application/json', body: response.body });
+  });
+  try {
+    await page.goto('/');
+    if (entry === 'library') await page.locator('.saved-diagram-row').filter({ has: page.locator(`.saved-diagram-button[data-diagram-id="${ids.child}"]`) }).getByRole('button', { name: /^Delete / }).click();
+    else {
+      await page.locator(`.saved-diagram-button[data-diagram-id="${ids.child}"]`).click();
+      await page.getByRole('button', { name: 'Show Details panel', exact: true }).click();
+      await page.getByText('Diagram management', { exact: true }).click();
+      await page.getByRole('button', { name: 'Move diagram to trash', exact: true }).click();
+    }
+    await page.getByRole('button', { name: 'Move to trash', exact: true }).click();
+    await expect.poll(() => repository.get(ids.child)?.status).toBe('trashed');
+    await page.getByRole('button', { name: 'Open recovery', exact: true }).click();
+    await page.locator(`.saved-diagram-trash-row[data-diagram-id="${ids.child}"]`).getByRole('button', { name: 'Restore', exact: true }).click();
+    await page.getByRole('button', { name: 'Restore diagrams', exact: true }).click();
+    await expect.poll(() => repository.get(ids.child)?.status).toBe('active');
+    expect(confirmations).toHaveLength(2);
+    for (const confirmation of confirmations) expect(confirmation.impactToken).toMatch(/^[0-9a-f]{64}$/);
+  } finally { await app.close(); }
+});
+
 for (const mode of ['trash', 'permanent'] as const) test(`keeps the local draft when ${mode} deletion rejects an open diagram's stale save`, async ({ page }) => {
   const repository = componentRecoveryFixture(), app = buildApp(repository), service = new DiagramService(repository);
   await page.route(/\/api\/(?:diagrams|adrs)(?:\/|$|\?)/, async route => {

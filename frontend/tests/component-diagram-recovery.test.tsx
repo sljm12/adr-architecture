@@ -10,7 +10,7 @@ afterEach(() => vi.restoreAllMocks());
 describe('Component recovery presentation and refresh', () => {
   it('names Component, owner and immediate parent in the exact staged set', () => {
     const affected = [componentContextFixture(), componentParentFixture(), populatedComponentFixture() as DiagramDocument].map(summary);
-    const html = renderToStaticMarkup(<RecoveryImpactDialog kind="restore" impact={{ requestedDiagramId: ids.datastoreChild, restoreRootDiagramId: ids.context, trashBatchId: ids.rootBatch, affectedDiagramIds: affected.map(d => d.id), affectedDiagrams: affected, requestedDiagramIncluded: false }} onConfirm={() => {}} onCancel={() => {}} />);
+    const html = renderToStaticMarkup(<RecoveryImpactDialog kind="restore" impact={{ requestedDiagramId: ids.datastoreChild, restoreRootDiagramId: ids.context, trashBatchId: ids.rootBatch, affectedDiagramIds: affected.map(d => d.id), affectedDiagrams: affected, requestedDiagramIncluded: false, impactToken: 'a'.repeat(64) }} onConfirm={() => {}} onCancel={() => {}} />);
     expect(html).toContain('Component diagram'); expect(html).toContain('owner Payment API'); expect(html).toContain(ids.child);
     expect(html).toContain('separate child restore'); expect(html).toContain('Cancel');
   });

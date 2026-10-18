@@ -80,7 +80,7 @@ export interface DiagramDependencyBlocker {
   nextAction: string;
 }
 
-export interface TrashImpact { diagramId: UUID; affectedDiagramIds: UUID[]; affectedDiagrams: DiagramSummary[] }
+export interface TrashImpact { diagramId: UUID; affectedDiagramIds: UUID[]; affectedDiagrams: DiagramSummary[]; impactToken: string }
 export interface RestoreImpact {
   requestedDiagramId: UUID;
   restoreRootDiagramId: UUID;
@@ -88,8 +88,10 @@ export interface RestoreImpact {
   affectedDiagramIds: UUID[];
   affectedDiagrams: DiagramSummary[];
   requestedDiagramIncluded: boolean;
+  impactToken: string;
 }
-export interface RestoreConfirmation { confirmedDiagramIds: UUID[]; confirmedTrashBatchId: UUID | null }
+export interface TrashConfirmation { confirmedDiagramIds: UUID[]; impactToken?: string }
+export interface RestoreConfirmation { confirmedDiagramIds: UUID[]; confirmedTrashBatchId: UUID | null; impactToken?: string }
 
 export type AdrStatus = 'draft' | 'accepted' | 'superseded' | 'rejected';
 

@@ -28,7 +28,7 @@ describe.skipIf(!enabled)('C4 container graph PostgreSQL concurrency', () => {
     admin = new Pool({ connectionString: process.env.DATABASE_URL });
     await admin.query(`CREATE SCHEMA ${schemaName}`);
     pool = new Pool({ connectionString: process.env.DATABASE_URL, options: `-c search_path=${schemaName}` });
-    for (const name of ['0001_initial.sql', '0002_adrs.sql', '0003_system_groups.sql', '0004_component_dimensions.sql', '0005_c4_container_diagrams.sql', '0006_container_component_types.sql', '0007_c4_component_diagrams.sql', '0008_diagram_deletion_revision.sql']) {
+    for (const name of ['0001_initial.sql', '0002_adrs.sql', '0003_system_groups.sql', '0004_component_dimensions.sql', '0005_c4_container_diagrams.sql', '0006_container_component_types.sql', '0007_c4_component_diagrams.sql', '0008_diagram_deletion_revision.sql', '0009_diagram_archive.sql']) {
       const sql = await readFile(fileURLToPath(new URL(`../../drizzle/${name}`, import.meta.url)), 'utf8');
       await pool.query(sql);
     }

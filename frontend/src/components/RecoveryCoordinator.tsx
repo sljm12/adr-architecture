@@ -62,8 +62,8 @@ export function RecoveryCoordinator({ onLoad, onExitAffected }: { onLoad: (id: s
     mutating.current = true; setBusy(true); setGuard(false); setNotice(intent.kind === 'trash' ? 'Moving confirmed diagrams to trash…' : 'Restoring confirmed diagrams…');
     let mutationSucceeded = false;
     try {
-      if (intent.kind === 'trash') await diagramClient.trash(intent.id, intent.impact.affectedDiagramIds);
-      else await diagramClient.restore(intent.impact.restoreRootDiagramId, { confirmedDiagramIds: intent.impact.affectedDiagramIds, confirmedTrashBatchId: intent.impact.trashBatchId });
+      if (intent.kind === 'trash') await diagramClient.trash(intent.id, { confirmedDiagramIds: intent.impact.affectedDiagramIds, impactToken: intent.impact.impactToken });
+      else await diagramClient.restore(intent.impact.restoreRootDiagramId, { confirmedDiagramIds: intent.impact.affectedDiagramIds, confirmedTrashBatchId: intent.impact.trashBatchId, impactToken: intent.impact.impactToken });
       mutationSucceeded = true; setIntent(null);
       if (intent.kind === 'trash' && affectsEditor) callbacks.current.onExitAffected();
       await finishRecovery(intent);
@@ -80,7 +80,7 @@ export function RecoveryCoordinator({ onLoad, onExitAffected }: { onLoad: (id: s
     if (useDiagramStore.getState().status !== 'saved') return;
     const adr = useAdrStore.getState(); if (['unsaved', 'failed'].includes(adr.status) && !await adr.save()) return;
     if (!['idle', 'saved'].includes(useAdrStore.getState().status)) return;
-    await confirm();
+    if (intent) await previewRef.current(intent.kind, intent.id);
   };
   const cancel = () => { if (mutating.current) return; request.current++; setIntent(null); setGuard(false); setErrorNotice(false); setNotice('Recovery canceled.'); };
   return <>

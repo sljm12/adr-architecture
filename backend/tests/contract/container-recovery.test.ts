@@ -26,7 +26,7 @@ describe('confirmed exact recovery contract', () => {
       const impact = (await app.inject(`/diagrams/${ids.parentDiagram}/trash-impact`)).json();
       expect(impact.affectedDiagramIds.sort()).toEqual([ids.parentDiagram, ids.populatedChild].sort());
       expect((await app.inject({ method: 'DELETE', url: `/diagrams/${ids.parentDiagram}`, payload: { confirmedDiagramIds: [ids.parentDiagram] } })).json().code).toBe('TRASH_IMPACT_CHANGED');
-      expect((await app.inject({ method: 'DELETE', url: `/diagrams/${ids.parentDiagram}`, payload: { confirmedDiagramIds: impact.affectedDiagramIds } })).statusCode).toBe(204);
+      expect((await app.inject({ method: 'DELETE', url: `/diagrams/${ids.parentDiagram}`, payload: { confirmedDiagramIds: impact.affectedDiagramIds, impactToken: impact.impactToken } })).statusCode).toBe(204);
       const before = repository.listAll();
       const preview = (await app.inject(`/diagrams/${ids.populatedChild}/restore-impact`)).json();
       expect(preview).toMatchObject({ requestedDiagramId: ids.populatedChild, restoreRootDiagramId: ids.parentDiagram, trashBatchId: expect.any(String), requestedDiagramIncluded: true });
@@ -35,7 +35,7 @@ describe('confirmed exact recovery contract', () => {
       expect(excluded.requestedDiagramIncluded).toBe(false);
       expect((await app.inject({ method: 'POST', url: `/diagrams/${ids.populatedChild}/restore` })).json()).toMatchObject({ code: 'PARENT_INACTIVE', restoreRootDiagramId: ids.parentDiagram });
       expect((await app.inject({ method: 'POST', url: `/diagrams/${ids.parentDiagram}/restore` })).json().code).toBe('RESTORE_CONFIRMATION_REQUIRED');
-      const body = { confirmedDiagramIds: preview.affectedDiagramIds, confirmedTrashBatchId: preview.trashBatchId };
+      const body = { confirmedDiagramIds: preview.affectedDiagramIds, confirmedTrashBatchId: preview.trashBatchId, impactToken: preview.impactToken };
       expect((await app.inject({ method: 'POST', url: `/diagrams/${ids.parentDiagram}/restore`, payload: { ...body, confirmedTrashBatchId: crypto.randomUUID() } })).json().code).toBe('RESTORE_IMPACT_CHANGED');
       expect((await app.inject({ method: 'POST', url: `/diagrams/${ids.parentDiagram}/restore`, payload: { confirmedDiagramIds: body.confirmedDiagramIds } })).statusCode).toBe(422);
       expect(repository.listAll()).toEqual(before);
