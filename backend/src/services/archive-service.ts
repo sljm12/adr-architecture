@@ -68,27 +68,47 @@ export class ArchiveService {
 
   private async review(archiveText: string, archive: Archive, previewedAt: string, context: CollectionTransactionContext) {
     const incoming = ordered(archive.records), saved = ordered(await this.graph.readArchiveRows(context));
+    const included = new Set(incoming.diagrams.map(d => d.id));
+    const changed = new Set<string>();
     const changes = archiveCollections.flatMap(collection => {
       const existing = new Map(saved[collection].map(row => [archiveRowIdentity(collection, row).join('/'), row]));
-      return incoming[collection].map(row => {
+      const identities = new Set(incoming[collection].map(row => archiveRowIdentity(collection, row).join('/')));
+      const describe = (row: ArchiveRow, action: 'added' | 'replaced' | 'removed' | 'unchanged', collision: boolean, records: ArchiveRecords) => {
+        const diagramId = owner(collection, row, records);
+        if (action !== 'unchanged') changed.add(diagramId);
+        return { collection, identity: archiveRowIdentity(collection, row), diagramId, name: 'name' in row ? row.name : 'title' in row ? row.title : null, action, collision };
+      };
+      return [...incoming[collection].map(row => {
         const identity = archiveRowIdentity(collection, row), prior = existing.get(identity.join('/'));
-        if (prior) throw new ArchiveOperationError(409, 'ARCHIVE_CONFIRMATION_REQUIRED', `An identity already exists in ${collection}: ${identity.join('/')}.`, 'Import into an empty installation. Replacement review is not available yet.');
-        return { collection, identity, diagramId: owner(collection, row, incoming), name: 'name' in row ? row.name : 'title' in row ? row.title : null, action: 'added' as const, collision: false };
-      });
+        if (prior && (owner(collection, prior, saved) !== owner(collection, row, incoming) || collection === 'diagrams' && ['kind', 'parentDiagramId', 'ownerComponentId'].some(key => (prior as unknown as Record<string, unknown>)[key] !== (row as unknown as Record<string, unknown>)[key]))) {
+          throw new ArchiveOperationError(409, 'ARCHIVE_OWNERSHIP', `Incompatible ownership in ${collection}: ${identity.join('/')}.`, 'Use the original diagram kind, parent and owner; resolve the conflicting identity before reviewing again.');
+        }
+        return describe(row, !prior ? 'added' : JSON.stringify(prior) === JSON.stringify(row) ? 'unchanged' : 'replaced', Boolean(prior), incoming);
+      }), ...saved[collection].filter(row => included.has(owner(collection, row, saved)) && !identities.has(archiveRowIdentity(collection, row).join('/'))).map(row => describe(row, 'removed', false, saved))];
     });
-    const union = Object.fromEntries(archiveCollections.map(c => [c, [...saved[c], ...incoming[c]]])) as ArchiveRecords;
+    const union = Object.fromEntries(archiveCollections.map(c => [c, [...saved[c].filter(row => !included.has(owner(c, row, saved))), ...incoming[c]]])) as ArchiveRecords;
     try { validateArchiveGraph(union); }
     catch (error) {
-      if (error instanceof ArchiveValidationError) throw new ArchiveOperationError(409, 'ARCHIVE_DEPENDENCY', 'The file conflicts with retained destination references.', 'Resolve the destination dependency and review the file again.');
+      if (error instanceof ArchiveValidationError) throw new ArchiveOperationError(409, 'ARCHIVE_DEPENDENCY', `The file conflicts with retained destination references at ${error.issues?.map(issue => issue.path).join(', ') ?? 'records'}.`, 'Keep the referenced owners, components, ADRs and Trash roots, or resolve the retained dependency before reviewing again.');
       throw error;
     }
+    const recoverySeeds = saved.diagrams.filter(d => changed.has(d.id)).map(d => d.id);
+    const recovery = recoverySeeds.length ? this.prepareRows(saved, recoverySeeds, previewedAt, sha256(archiveText)) : null;
+    // Include retained reverse dependencies, but leave unrelated destination graphs out of consent.
+    const relevant = new Set(included);
+    if (recovery) for (const item of recovery.scope) relevant.add(item.id);
+    for (const diagram of saved.diagrams) {
+      if ([...discoverArchiveScope(saved, [diagram.id])].some(id => included.has(id))) relevant.add(diagram.id);
+    }
+    const relevantRows = Object.fromEntries(archiveCollections.map(c => [c, saved[c].filter(row => relevant.has(owner(c, row, saved)))]));
     const epochs: string[][] = [];
-    for (const diagram of incoming.diagrams) epochs.push([diagram.id, await context.diagrams.getConfirmationEpoch(diagram.id)]);
-    const byCollection = Object.fromEntries(archiveCollections.map(c => [c, { ...emptyDelta(), added: incoming[c].length }]));
-    const totals = { ...emptyDelta(), added: changes.length };
-    // Standalone closure plus new-only identities makes the relevant destination state their absence and tombstones.
-    const previewToken = sha256(JSON.stringify({ fileSha256: sha256(archiveText), previewedAt, epochs, changes }));
-    return archiveImportPreviewSchema.parse({ fileSha256: sha256(archiveText), previewedAt, previewToken, includedDiagrams: scope(incoming, archive.seedDiagramIds, archive.purpose), changes, totals, byCollection, requiresOverride: false, requiresRecovery: false, recovery: null });
+    for (const id of [...relevant].sort()) epochs.push([id, await context.diagrams.getConfirmationEpoch(id)]);
+    const byCollection = Object.fromEntries(archiveCollections.map(c => [c, emptyDelta()]));
+    const totals = emptyDelta();
+    for (const change of changes) { byCollection[change.collection][change.action]++; totals[change.action]++; }
+    const requiresOverride = changes.some(change => change.collision), requiresRecovery = Boolean(recovery);
+    const previewToken = sha256(JSON.stringify({ fileSha256: sha256(archiveText), previewedAt, epochs, relevantRows, changes, recovery: recovery?.fileSha256 ?? null }));
+    return archiveImportPreviewSchema.parse({ fileSha256: sha256(archiveText), previewedAt, previewToken, includedDiagrams: scope(incoming, archive.seedDiagramIds, archive.purpose), changes, totals, byCollection, requiresOverride, requiresRecovery, recovery });
   }
 
   async import(input: ArchiveImportRequest) {
@@ -96,7 +116,7 @@ export class ArchiveService {
     return this.graph.runCollection(async context => {
       const reviewed = await this.review(request.archiveText, archive, request.previewedAt, context);
       if (request.previewToken !== reviewed.previewToken) throw new ArchiveOperationError(409, 'ARCHIVE_PREVIEW_CHANGED', 'The reviewed file or destination changed.', 'Preview the exact file again before importing.');
-      if (request.overrideExisting || request.recoverySaved || request.recoveryFileSha256 !== null) throw new ArchiveOperationError(409, 'ARCHIVE_CONFIRMATION_REQUIRED', 'New-only import requires false override/recovery flags and a null recovery digest.', 'Review this file again and explicitly choose Import.');
+      if (request.overrideExisting !== reviewed.requiresOverride || request.recoverySaved !== reviewed.requiresRecovery || request.recoveryFileSha256 !== (reviewed.recovery?.fileSha256 ?? null)) throw new ArchiveOperationError(409, 'ARCHIVE_CONFIRMATION_REQUIRED', 'Override or recovery confirmation does not match the reviewed changes.', 'Review the whole file, explicitly approve matching identities and save and acknowledge the exact recovery file when required.');
       const affectedDiagramIds = await new GraphTransaction(context.diagrams, context.adrs).applyArchiveRows(archive.records);
       return archiveImportResultSchema.parse({ committed: true, fileSha256: reviewed.fileSha256, affectedDiagramIds, includedDiagrams: reviewed.includedDiagrams, totals: reviewed.totals, byCollection: reviewed.byCollection });
     });

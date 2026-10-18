@@ -3,7 +3,7 @@ import type { ArchiveImportPreview, ArchiveImportResult, PreparedArchive } from 
 import { ArchiveApiError, archiveClient, downloadArchive, readArchiveFile } from '../api/archive-client';
 import { invalidateArchiveDiagrams, useDiagramStore } from '../state/diagram-store';
 import { invalidateArchiveAdrs, useAdrStore } from '../state/adr-store';
-import { ArchiveReviewDialog } from './ArchiveReviewDialog';
+import { ArchiveReviewDialog, type ArchiveConsent } from './ArchiveReviewDialog';
 import { DiagramSwitchDialog } from './DiagramSwitchDialog';
 
 type Review = { kind: 'export'; id: string; prepared: PreparedArchive } | { kind: 'import'; text: string; preview: ArchiveImportPreview };
@@ -24,6 +24,7 @@ export function DiagramArchiveTransfer({ onActiveChange, onImported }: { onActiv
   const fileInput = useRef<HTMLInputElement>(null), sequence = useRef(0), mutating = useRef(false), active = useRef(false);
   const origin = useRef<HTMLElement | null>(null);
   const refreshTarget = useRef<string | null>(null);
+  const consent = useRef<ArchiveConsent>({ overrideExisting: false, recoverySaved: false });
   const callbacks = useRef({ onActiveChange, onImported });
   useEffect(() => { callbacks.current = { onActiveChange, onImported }; }, [onActiveChange, onImported]);
   const activate = (value: boolean) => {
@@ -48,6 +49,7 @@ export function DiagramArchiveTransfer({ onActiveChange, onImported }: { onActiv
     finally { if (token === sequence.current) setBusy(false); }
   };
   const preview = async (text: string) => {
+    consent.current = { overrideExisting: false, recoverySaved: false };
     const token = ++sequence.current; setBusy(true); setReview(null); setGuard(false); setFailed(false);
     try {
       const result = await archiveClient.preview(text);
@@ -84,7 +86,7 @@ export function DiagramArchiveTransfer({ onActiveChange, onImported }: { onActiv
     mutating.current = true; setBusy(true); setGuard(false); setFailed(false); setNotice('Importing reviewed saved records…');
     let result: ArchiveImportResult | null = null;
     try {
-      result = await archiveClient.import({ archiveText: review.text, previewedAt: review.preview.previewedAt, previewToken: review.preview.previewToken, overrideExisting: false, recoverySaved: false, recoveryFileSha256: null });
+      result = await archiveClient.import({ archiveText: review.text, previewedAt: review.preview.previewedAt, previewToken: review.preview.previewToken, ...consent.current, recoveryFileSha256: review.preview.recovery?.fileSha256 ?? null });
       const currentId = useDiagramStore.getState().document?.id;
       refreshTarget.current = currentId && result.affectedDiagramIds.includes(currentId) ? currentId : null;
       setReview(null); invalidateArchiveDiagrams(result.affectedDiagramIds); invalidateArchiveAdrs(result.affectedDiagramIds);
@@ -116,8 +118,8 @@ export function DiagramArchiveTransfer({ onActiveChange, onImported }: { onActiv
       const token = ++sequence.current;
       void readArchiveFile(file).then(text => { if (token === sequence.current) return preview(text); }).catch(error => { if (token === sequence.current) { setFailed(true); setNotice(error instanceof Error ? error.message : 'Could not read archive. Select the file again.'); setBusy(false); activate(false); } });
     }} />
-    {review && !guard && <ArchiveReviewDialog prepared={review.kind === 'export' ? review.prepared : undefined} preview={review.kind === 'import' ? review.preview : undefined} busy={busy} onCancel={cancel} onConfirm={() => {
-      if (review.kind === 'import') { void commit(); return; }
+    {review && !guard && <ArchiveReviewDialog prepared={review.kind === 'export' ? review.prepared : undefined} preview={review.kind === 'import' ? review.preview : undefined} busy={busy} onCancel={cancel} onConfirm={approval => {
+      if (review.kind === 'import') { consent.current = approval; void commit(); return; }
       try { downloadArchive(review.prepared, review.id); setReview(null); setNotice('Archive download started from the approved saved snapshot.'); setFailed(false); activate(false); }
       catch (error) { setFailed(true); setNotice(error instanceof Error ? error.message : 'Download failed. Retry the approved download.'); }
     }} />}

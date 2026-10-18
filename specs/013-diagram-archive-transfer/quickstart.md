@@ -1,6 +1,26 @@
 # Quickstart Validation: Lossless Diagram Export and Import
 
-This guide covers the complete feature. Phases 1–3 (T001–T029) are implemented, including saved archive export and new-only import. Replacement/recovery review and the remaining adversarial/polish tasks in phases 4 onward remain planned. See [data-model.md](data-model.md), [file schema](contracts/archive.schema.json), and [HTTP/UI contract](contracts/http-and-ui.md) for exact rules.
+This guide covers the complete feature. Phases 1–4 (T001–T040) are implemented, including saved archive export, authoritative replacement and recovery. The adversarial/polish tasks in phases 5–6 remain planned. See [data-model.md](data-model.md), [file schema](contracts/archive.schema.json), and [HTTP/UI contract](contracts/http-and-ui.md) for exact rules.
+
+## Phase 4 evidence — 2026-10-18
+
+T030–T040 add whole-file replacement consent, complete collision/delta review, deterministic recovery files and acknowledgements, exact-state fingerprints, and affected cache/history invalidation. Existing raw authoritative transaction operations were reused; no dependency or migration was added. Requirements checklist markers remain unchanged; `.specify/feature.json` still selects this feature and no extension hooks are configured.
+
+- The HTTP contract suite passes 20 cases, including collisions and timestamp-only differences in all eight collections, case-insensitive UUID matches, additions-only recovery, strict override/recovery flags and digest, preview/cancel without mutation, ownership refusal and exact no-op reimport.
+- Four actual PostgreSQL replacement cases pass without skips. Independent raw SQL snapshots and the paired raw reader establish SC-002 replacement/removal, SC-003 unchanged rows/timestamps/epochs on exact reimport, and SC-005 recovery of prior values while preserving newly added and unrelated diagrams. Coverage includes all seven owned collections, original metadata, signed zero, real source swaps, cyclic ADR replacements under actual FKs, incompatible owners, and recovery blocked by newly retained child dependencies without intervening edits.
+- The browser archive suite passes 7/7 cases with PostgreSQL enabled. It compares raw before/after database state for cancel, mixed override, owned removals, no-op reimport and recovery retaining additions. Browser interaction verifies safe default focus/Escape, actual recovery download with separate initially unchecked acknowledgement, draft save forcing a fresh review and fresh consent, explicit discard, dependency-blocked recovery, unrelated draft preservation, normal navigation, and refresh-only retry.
+- Focused frontend tests verify record-level review, recovery filenames/bytes, unchecked consent, affected history clearing, preservation of unrelated drafts, and rejection of an old in-flight ADR selection after invalidation. Existing memory raw apply/rollback and PostgreSQL round-trip suites also pass.
+- The broad PostgreSQL-enabled run finished with **1,154 passing tests and one five-second timeout** in the existing deletion collection transaction suite under concurrent scale load. Its standalone one-worker rerun passed **22/22**, including the timed-out case (about two seconds); the broad run is not claimed as all-green. The existing deletion scale benchmark passed. The final replacement persistence suite, including the extra all-collections addition/removal case, passes **4/4**. Lint, all-package production build and `git diff --check` pass. Existing Vite large-chunk and node-postgres queued-query warnings remain.
+
+Run the Phase 4 checks with:
+
+```powershell
+$env:RUN_POSTGRES_TESTS = '1'
+node node_modules/vitest/vitest.mjs run backend/tests/contract/diagram-archive.test.ts backend/tests/persistence/diagram-archive-replacement.test.ts frontend/tests/diagram-archive-replacement.test.tsx frontend/tests/diagram-archive-transfer.test.tsx
+node node_modules/@playwright/test/cli.js test e2e/tests/diagram-archive-transfer.spec.ts --workers=1
+```
+
+The later failure/race matrix, archive performance measurements and first-time-author usability trials remain pending in phases 5–6. The historical Phase 3 evidence below describes the earlier new-only checkpoint; existing identities are now supported through explicit replacement review.
 
 ## Foundation evidence — 2026-10-18
 

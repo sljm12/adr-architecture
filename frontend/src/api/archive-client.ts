@@ -44,8 +44,9 @@ export async function readArchiveFile(file: File): Promise<string> {
 
 export function downloadArchive(prepared: PreparedArchive, selectedDiagramId: string): void {
   const id = archiveUuidSchema.parse(selectedDiagramId);
+  const purpose = parseArchive(prepared.archiveText).purpose;
   const url = URL.createObjectURL(new Blob([prepared.archiveText], { type: 'application/json;charset=utf-8' }));
-  const anchor = document.createElement('a'); anchor.href = url; anchor.download = `diagram-${id.toLowerCase()}.adr.json`;
+  const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${purpose === 'recovery' ? 'recovery' : 'diagram'}-${id.toLowerCase()}.adr.json`;
   try { document.body.append(anchor); anchor.click(); }
   finally { anchor.remove(); URL.revokeObjectURL(url); }
 }

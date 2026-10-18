@@ -5,7 +5,7 @@ import { buildApp } from '../../src/api/app';
 import { DiagramRepository } from '../../src/persistence/diagram-repository';
 import { AdrRepository } from '../../src/persistence/adr-repository';
 import { GraphTransaction } from '../../src/persistence/graph-transaction';
-import { archiveImportPreviewSchema, archiveImportResultSchema, preparedArchiveSchema, parseArchive } from '../../../shared/src/index';
+import { archiveCollections, archiveImportPreviewSchema, archiveImportResultSchema, preparedArchiveSchema, parseArchive } from '../../../shared/src/index';
 import { archiveFixture, archiveId, dependencyArchiveFixture, emptyArchiveFixture } from '../../../shared/tests/archive-fixtures';
 import { ArchiveService } from '../../src/services/archive-service';
 
@@ -86,7 +86,7 @@ describe('new-only diagram archive HTTP contract', () => {
     expect(await graph.readArchiveSnapshot()).toEqual(fixture().records);
     for (const id of fixture().includedDiagramIds) expect(await diagrams.getConfirmationEpoch(id)).toBe('1');
     const again = await app.inject({ method: 'POST', url: '/diagram-archives/preview', payload: { archiveText } });
-    expect(again.statusCode).toBe(409); expect(again.json().code).toBe('ARCHIVE_CONFIRMATION_REQUIRED');
+    expect(again.statusCode).toBe(200); expect(again.json().requiresOverride).toBe(true);
     expect((await app.inject({ method: 'POST', url: '/diagram-archives/import', payload: confirmation(archiveText, preview) })).statusCode).toBe(409);
   });
   it('binds exact bytes and local tombstones while allowing unrelated saved changes', async () => {
@@ -100,5 +100,79 @@ describe('new-only diagram archive HTTP contract', () => {
     const other = emptyArchiveFixture(); other.records.diagrams[0].id = archiveId(999);
     await graph.applyArchiveRows(parseArchive(JSON.stringify({ ...other, selectedDiagramId: archiveId(999), seedDiagramIds: [archiveId(999)], includedDiagramIds: [archiveId(999)] })).records);
     expect((await app.inject({ method: 'POST', url: '/diagram-archives/import', payload: confirmation(archiveText, fresh) })).statusCode).toBe(200);
+  });
+});
+
+describe('authoritative archive replacement contract', () => {
+  it.each(archiveCollections)('reports exact collisions and differing raw metadata in %s', async collection => {
+    const { app, graph } = installation(), fixture = parseArchive(JSON.stringify(archiveFixture()));
+    await graph.applyArchiveRows(fixture.records);
+    // Timestamp-only differences must not disappear through editor hydration.
+    fixture.records[collection][0].createdAt = '2024-03-02T00:00:00.000001Z';
+    const response = await app.inject({ method: 'POST', url: '/diagram-archives/preview', payload: { archiveText: JSON.stringify(fixture) } });
+    expect(response.statusCode).toBe(200);
+    const review = response.json();
+    expect(review.byCollection[collection].replaced).toBe(1);
+    expect(review.changes.find((change: { collection: string; action: string }) => change.collection === collection && change.action === 'replaced').collision).toBe(true);
+    expect(review.requiresRecovery).toBe(true);
+  });
+
+  it('normalizes only UUID comparison, and requires recovery for additions to an existing snapshot', async () => {
+    const { app, graph } = installation(), fixture = parseArchive(JSON.stringify(emptyArchiveFixture()));
+    await graph.applyArchiveRows(fixture.records);
+    const uppercase = JSON.stringify(fixture).replaceAll('aaaaaaaa', 'AAAAAAAA');
+    const same = (await app.inject({ method: 'POST', url: '/diagram-archives/preview', payload: { archiveText: uppercase } })).json();
+    expect(same.totals.unchanged).toBe(1); expect(same.requiresOverride).toBe(true); expect(same.requiresRecovery).toBe(false);
+    fixture.records.components.push(parseArchive(JSON.stringify(archiveFixture())).records.components[2]);
+    const review = (await app.inject({ method: 'POST', url: '/diagram-archives/preview', payload: { archiveText: JSON.stringify(fixture) } })).json();
+    expect(review.requiresRecovery).toBe(true);
+    expect(parseArchive(review.recovery.archiveText).records.components).toEqual([]);
+  });
+
+  it('reviews every collection, requires exact consent, recovers old values and makes reimport a no-op', async () => {
+    const { app, graph, diagrams } = installation();
+    const original = parseArchive(JSON.stringify(archiveFixture()));
+    await graph.applyArchiveRows(original.records);
+    const incoming = structuredClone(original);
+    incoming.records.components[0].description = 'Replacement';
+    incoming.records.systemGroupMembers = []; incoming.records.systemGroups = [];
+    incoming.records.adrs[0].context = 'Replacement context';
+    const archiveText = JSON.stringify(incoming), before = await graph.readArchiveSnapshot();
+    const response = await app.inject({ method: 'POST', url: '/diagram-archives/preview', payload: { archiveText } });
+    expect(response.statusCode).toBe(200);
+    const review = archiveImportPreviewSchema.parse(response.json());
+    expect(review.requiresOverride).toBe(true); expect(review.requiresRecovery).toBe(true);
+    expect(review.byCollection.systemGroupMembers.removed).toBe(2);
+    for (const collection of Object.keys(original.records)) expect(review.changes.some(c => c.collection === collection)).toBe(true);
+    expect(parseArchive(review.recovery!.archiveText).records).toEqual(before);
+    expect(await graph.readArchiveSnapshot()).toEqual(before);
+    const request = { ...confirmation(archiveText, review), overrideExisting: true, recoverySaved: true, recoveryFileSha256: review.recovery!.fileSha256 };
+    for (const flags of [{ overrideExisting: false }, { recoverySaved: false }, { recoveryFileSha256: '0'.repeat(64) }]) {
+      expect((await app.inject({ method: 'POST', url: '/diagram-archives/import', payload: { ...request, ...flags } })).json().code).toBe('ARCHIVE_CONFIRMATION_REQUIRED');
+      expect(await graph.readArchiveSnapshot()).toEqual(before);
+    }
+    expect((await app.inject({ method: 'POST', url: '/diagram-archives/import', payload: request })).statusCode).toBe(200);
+    expect(await graph.readArchiveSnapshot()).toEqual(incoming.records);
+    const epoch = await diagrams.getConfirmationEpoch(archiveId(1));
+    const same = (await app.inject({ method: 'POST', url: '/diagram-archives/preview', payload: { archiveText } })).json();
+    expect(same.requiresOverride).toBe(true); expect(same.requiresRecovery).toBe(false); expect(same.recovery).toBeNull();
+    const noop = await app.inject({ method: 'POST', url: '/diagram-archives/import', payload: { ...confirmation(archiveText, same), overrideExisting: true } });
+    expect(noop.statusCode).toBe(200); expect(noop.json().affectedDiagramIds).toEqual([]);
+    expect(await diagrams.getConfirmationEpoch(archiveId(1))).toBe(epoch);
+    const recoveryText = review.recovery!.archiveText;
+    const recoveryReview = (await app.inject({ method: 'POST', url: '/diagram-archives/preview', payload: { archiveText: recoveryText } })).json();
+    expect((await app.inject({ method: 'POST', url: '/diagram-archives/import', payload: { ...confirmation(recoveryText, recoveryReview), overrideExisting: true, recoverySaved: true, recoveryFileSha256: recoveryReview.recovery.fileSha256 } })).statusCode).toBe(200);
+    expect(await graph.readArchiveSnapshot()).toEqual(before);
+  });
+
+  it('rejects ownership collisions before issuing a token, including non-diagram identities', async () => {
+    const { app, graph } = installation(), original = parseArchive(JSON.stringify(archiveFixture()));
+    await graph.applyArchiveRows(original.records);
+    const other = parseArchive(JSON.stringify(emptyArchiveFixture()));
+    other.records.diagrams[0].id = archiveId(999); other.selectedDiagramId = archiveId(999); other.seedDiagramIds = [archiveId(999)]; other.includedDiagramIds = [archiveId(999)];
+    other.records.components.push({ ...original.records.components[2], diagramId: archiveId(999) });
+    const response = await app.inject({ method: 'POST', url: '/diagram-archives/preview', payload: { archiveText: JSON.stringify(other) } });
+    expect(response.statusCode).toBe(409); expect(response.json().code).toBe('ARCHIVE_OWNERSHIP'); expect(response.json().previewToken).toBeUndefined();
+    expect(await graph.readArchiveSnapshot()).toEqual(original.records);
   });
 });

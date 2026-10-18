@@ -63,17 +63,19 @@ type State = {
 
 const history = new BoundedHistory<AdrDraft>();
 const retainedAdrs = new Map<string, { draft: AdrDraft; records: AdrSummary[]; history: ReturnType<typeof history.snapshot> }>();
+const archiveGenerations = new Map<string, number>();
+const archiveGeneration = (id: string | null) => archiveGenerations.get(id ?? '') ?? 0;
 /** Only drafts that navigation actually retained are available to export. */
 export function getRetainedExportAdrDrafts(): Record<string, AdrDraft> {
   return structuredClone(Object.fromEntries([...retainedAdrs].map(([id, value]) => [id, value.draft])));
 }
 export function invalidateArchiveAdrs(ids: string[]): void {
-  for (const id of ids) retainedAdrs.delete(id);
+  for (const id of ids) { retainedAdrs.delete(id); archiveGenerations.set(id, archiveGeneration(id) + 1); }
   const state = useAdrStore.getState();
   if (!ids.includes(state.diagramId ?? '')) return;
   listRequest++;
   history.reset(emptyDraft(state.diagramId!));
-  useAdrStore.setState({ draft: null, records: [], recordsStatus: 'idle', status: 'idle', error: null, fieldErrors: {}, canUndo: false, canRedo: false, componentSummaries: [], relationshipSummaries: [] });
+  useAdrStore.setState({ draft: null, records: [], recordsStatus: 'idle', status: 'idle', error: null, fieldErrors: {}, canUndo: false, canRedo: false, componentSummaries: [], componentSummaryComponentId: null, componentSummaryStatus: 'idle', relationshipSummaries: [], relationshipSummaryRelationshipId: null, relationshipSummaryStatus: 'idle' });
   state.invalidateComponentAdrCounts();
 }
 let listRequest = 0;
@@ -102,7 +104,13 @@ export const useAdrStore = create<State>((set, get) => ({
       });
     } catch (error) { if (request === listRequest && get().diagramId === diagramId) set({ recordsStatus: 'failed', recordsError: error instanceof Error ? error.message : 'Could not load ADRs.' }); }
   },
-  select: async id => { set({ status: 'loading', error: null, deleteStatus: 'idle', deleteError: null, deleteBlockers: [], deleteMessage: null }); try { const record = normalizeRecord(await adrClient.get(id)); const draft = history.reset({ ...record }); set({ draft, diagramId: record.diagramId, status: 'saved', error: null, fieldErrors: {}, ...historyState() }); } catch (error) { set({ status: 'failed', error: error instanceof Error ? error.message : 'Could not load ADR.' }); } },
+  select: async id => {
+    const diagramId = get().diagramId, generation = archiveGeneration(diagramId);
+    const current = () => get().diagramId === diagramId && archiveGeneration(diagramId) === generation;
+    set({ status: 'loading', error: null, deleteStatus: 'idle', deleteError: null, deleteBlockers: [], deleteMessage: null });
+    try { const record = normalizeRecord(await adrClient.get(id)); if (!current()) return; const draft = history.reset({ ...record }); set({ draft, diagramId: record.diagramId, status: 'saved', error: null, fieldErrors: {}, ...historyState() }); }
+    catch (error) { if (current()) set({ status: 'failed', error: error instanceof Error ? error.message : 'Could not load ADR.' }); }
+  },
   startNew: diagramId => { const id = diagramId ?? get().diagramId; if (!id) return; listRequest++; const switching = get().diagramId !== id; const draft = history.reset(emptyDraft(id)); get().invalidateComponentAdrCounts(id); set({ ...(switching ? { records: [], componentSummaries: [], componentSummaryComponentId: null, componentSummaryStatus: 'idle' as const, relationshipSummaries: [], relationshipSummaryRelationshipId: null, relationshipSummaryStatus: 'idle' as const } : {}), diagramId: id, draft, status: 'idle', error: null, fieldErrors: {}, deleteStatus: 'idle', deleteError: null, deleteBlockers: [], deleteMessage: null, ...historyState() }); },
   retainCurrent: () => { const current = get(); if (current.diagramId && current.status === 'saved' && current.draft) retainedAdrs.set(current.diagramId, { draft: copy(current.draft), records: structuredClone(current.records), history: history.snapshot() }); },
   switchDiagram: diagramId => {
@@ -174,24 +182,26 @@ export const useAdrStore = create<State>((set, get) => ({
     }
   },
   loadComponentSummary: async (diagramId, componentId) => {
+    const generation = archiveGeneration(diagramId);
     set({ componentSummaries: [], componentSummaryComponentId: componentId, componentSummaryStatus: 'loading', componentSummaryError: null });
     try {
       const summaries = await adrClient.componentSummaries(diagramId, componentId);
-      if (get().componentSummaryComponentId !== componentId) return;
+      if (get().componentSummaryComponentId !== componentId || archiveGeneration(diagramId) !== generation) return;
       set({ componentSummaries: summaries, componentSummaryStatus: 'loaded', componentSummaryError: null });
     } catch (error) {
-      if (get().componentSummaryComponentId !== componentId) return;
+      if (get().componentSummaryComponentId !== componentId || archiveGeneration(diagramId) !== generation) return;
       set({ componentSummaryStatus: 'failed', componentSummaryError: error instanceof Error ? error.message : 'Could not load linked ADRs.' });
     }
   },
   loadRelationshipSummary: async (diagramId, relationshipId) => {
+    const generation = archiveGeneration(diagramId);
     set({ relationshipSummaries: [], relationshipSummaryRelationshipId: relationshipId, relationshipSummaryStatus: 'loading', relationshipSummaryError: null });
     try {
       const summaries = await adrClient.relationshipSummaries(diagramId, relationshipId);
-      if (get().relationshipSummaryRelationshipId !== relationshipId) return;
+      if (get().relationshipSummaryRelationshipId !== relationshipId || archiveGeneration(diagramId) !== generation) return;
       set({ relationshipSummaries: summaries, relationshipSummaryStatus: 'loaded', relationshipSummaryError: null });
     } catch (error) {
-      if (get().relationshipSummaryRelationshipId !== relationshipId) return;
+      if (get().relationshipSummaryRelationshipId !== relationshipId || archiveGeneration(diagramId) !== generation) return;
       set({ relationshipSummaryStatus: 'failed', relationshipSummaryError: error instanceof Error ? error.message : 'Could not load linked ADRs.' });
     }
   },

@@ -36,6 +36,80 @@ async function chooseFile(page: Page, text: string) {
   await (await chooser).setFiles({ name: 'architecture.adr.json', mimeType: 'application/json', buffer: Buffer.from(text) });
 }
 
+async function approveReplacement(page: Page) {
+  const dialog = page.getByRole('dialog', { name: 'Review archive import' });
+  await dialog.getByLabel('Approve override', { exact: false }).check();
+  const recovery = dialog.getByRole('button', { name: 'Download recovery archive', exact: true });
+  let recoveryText: string | null = null;
+  if (await recovery.count()) {
+    await expect(dialog.getByRole('button', { name: 'Import archive', exact: true })).toBeDisabled();
+    const downloaded = page.waitForEvent('download'); await recovery.click();
+    const file = await downloaded; expect(file.suggestedFilename()).toMatch(/^recovery-/);
+    recoveryText = await readFile((await file.path())!, 'utf8');
+    await expect(dialog.getByRole('button', { name: 'Import archive', exact: true })).toBeDisabled();
+    await dialog.getByLabel('I saved the recovery file').check();
+  }
+  await dialog.getByRole('button', { name: 'Import archive', exact: true }).click();
+  return recoveryText;
+}
+
+test('PostgreSQL: mixed override, cancellation, removals, no-op and recovery retain additions exactly', async ({ page }) => {
+  test.skip(!postgresEnabled, 'Requires isolated PostgreSQL schema');
+  const db = await componentTestDatabase(), app = buildApp(db.diagrams, db.adrs);
+  try {
+    const fixture = archiveFixture(); fixture.records.diagrams[2].deletionRevision = '37';
+    await seedArchiveRows(db.pool, fixture);
+    await browserApi(page, app); await page.goto('/');
+    const incoming = structuredClone(fixture); incoming.records.components[0].description = 'Replacement'; incoming.records.systemGroups = []; incoming.records.systemGroupMembers = [];
+    const added = { ...fixture.records.diagrams[0], id: archiveId(999), status: 'trashed', trashedAt: fixture.exportedAt, trashRootDiagramId: archiveId(999), trashBatchId: archiveId(998) };
+    incoming.records.diagrams.push(added); incoming.includedDiagramIds.push(added.id);
+    incoming.records.diagrams[2].trashRootDiagramId = added.id; incoming.records.diagrams[2].trashBatchId = archiveId(998);
+    const before = await snapshotArchiveDatabase(db.pool), text = JSON.stringify(incoming);
+    await chooseFile(page, text); await expect(page.getByRole('dialog')).toContainText('3 removed');
+    await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+    await page.keyboard.press('Escape'); expect(await snapshotArchiveDatabase(db.pool)).toEqual(before);
+    await chooseFile(page, text); const recovery = await approveReplacement(page);
+    await expect(page.getByRole('status').filter({ hasText: 'Import succeeded:' })).toBeVisible();
+    expect(await new GraphTransaction(db.diagrams, db.adrs).readArchiveSnapshot()).toEqual(incoming.records);
+    const replaced = await snapshotArchiveDatabase(db.pool);
+    await chooseFile(page, text); await expect(page.getByRole('dialog')).toContainText('0 replaced');
+    expect(await approveReplacement(page)).toBeNull();
+    await expect(page.getByRole('status').filter({ hasText: 'Import succeeded:' })).toBeVisible();
+    expect(await snapshotArchiveDatabase(db.pool)).toEqual(replaced);
+    await chooseFile(page, recovery!); await approveReplacement(page);
+    await expect(page.getByRole('status').filter({ hasText: 'Import succeeded:' })).toBeVisible();
+    const recovered = await snapshotArchiveDatabase(db.pool);
+    for (const collection of Object.keys(archiveFieldInventory).filter(c => c !== 'diagrams')) expect(recovered[collection]).toEqual(before[collection]);
+    expect((await new GraphTransaction(db.diagrams, db.adrs).readArchiveSnapshot()).diagrams).toEqual([...fixture.records.diagrams, added]);
+  } finally { await app.close(); await db.close(); }
+});
+
+test('replacement: affected draft saves force fresh consent, discard is explicit, and retained children block recovery', async ({ page }) => {
+  const destination = memoryInstallation();
+  try {
+    const original = emptyArchiveFixture(); await destination.graph.applyArchiveRows(parseArchive(JSON.stringify(original)).records);
+    const api = await browserApi(page, destination.app); await page.goto('/'); await row(page, archiveId(1)).click();
+    await page.getByLabel('Diagram name', { exact: true }).fill('Draft title');
+    const incoming = archiveFixture(); incoming.records.diagrams[2].deletionRevision = '37';
+    await chooseFile(page, JSON.stringify(incoming)); await approveReplacement(page);
+    await expect(page.getByRole('alertdialog')).toBeVisible();
+    await page.getByRole('button', { name: 'Save and review again', exact: true }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.getByLabel('Approve override', { exact: false })).not.toBeChecked();
+    const recovery = await approveReplacement(page);
+    await expect(page.getByRole('status').filter({ hasText: 'Import succeeded:' })).toBeVisible();
+    await expect(page.getByLabel('Diagram name', { exact: true })).not.toHaveValue('Draft title');
+    const before = await destination.graph.readArchiveSnapshot();
+    await chooseFile(page, recovery!); await expect(page.getByRole('alert')).toContainText('retained destination references');
+    expect(await destination.graph.readArchiveSnapshot()).toEqual(before);
+    await page.getByLabel('Diagram name', { exact: true }).fill('Discard me');
+    await chooseFile(page, JSON.stringify(incoming)); await approveReplacement(page);
+    await page.getByRole('button', { name: 'Discard and import', exact: true }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Import succeeded:' })).toBeVisible();
+    expect(api.imports).toBe(2);
+  } finally { await destination.app.close(); }
+});
+
 test('PostgreSQL: approved exact child export to empty installation, reload, three levels, ADRs, save and Trash restore', async ({ page }) => {
   test.setTimeout(60_000);
   test.skip(!postgresEnabled, 'Requires RUN_POSTGRES_TESTS=1 and DATABASE_URL; uses two isolated schemas');
