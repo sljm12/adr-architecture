@@ -11,6 +11,8 @@ import { registerAdrRoutes } from './adr-routes';
 import { AdrService } from '../services/adr-service';
 import { registerContainerDiagramRoutes } from './container-diagram-routes';
 import { registerComponentDiagramRoutes } from './component-diagram-routes';
+import { registerArchiveRoutes } from './archive-routes';
+import { ArchiveService } from '../services/archive-service';
 
 export function buildApp(repository: DiagramRepositoryLike = new DiagramRepository(), adrRepository: AdrRepositoryLike = new AdrRepository()) {
   const app = Fastify({ logger: false });
@@ -23,6 +25,7 @@ export function buildApp(repository: DiagramRepositoryLike = new DiagramReposito
   registerComponentDiagramRoutes(app, service);
   registerAdrRoutes(app, adrService);
   registerRecoveryRoutes(app, repository, service);
+  registerArchiveRoutes(app, new ArchiveService(repository, adrRepository));
   registerExportRoutes(app, new ExportService(repository), new HtmlExportSourceService(repository, adrRepository));
   return app;
 }

@@ -14,9 +14,11 @@ export function RecoveryCoordinator({ onLoad, onExitAffected }: { onLoad: (id: s
   const [completed, setCompleted] = useState<Intent | null>(null);
   const [errorNotice, setErrorNotice] = useState(false);
   const request = useRef(0), mutating = useRef(false), callbacks = useRef({ onLoad, onExitAffected });
+  useEffect(() => { useDiagramStore.setState({ recoveryPending: busy || Boolean(intent) }); }, [busy, intent]);
+  useEffect(() => () => { useDiagramStore.setState({ recoveryPending: false }); }, []);
   useEffect(() => { callbacks.current = { onLoad, onExitAffected }; }, [onLoad, onExitAffected]);
   const preview = async (kind: 'trash' | 'restore', id: string, separate = false) => {
-    if (mutating.current || useDiagramStore.getState().savePending || ['loading'].includes(useDiagramStore.getState().navigationStatus) || useAdrStore.getState().status === 'saving') return;
+    if (mutating.current || useDiagramStore.getState().archiveTransferActive || useDiagramStore.getState().savePending || ['loading'].includes(useDiagramStore.getState().navigationStatus) || useAdrStore.getState().status === 'saving') return;
     const token = ++request.current; setIntent(null); setCompleted(null); setErrorNotice(false); setGuard(false); setRetry(null); setBusy(true); setNotice('Checking affected diagrams…');
     try {
       const impact = kind === 'trash' ? await diagramClient.trashImpact(id) : await diagramClient.restoreImpact(id);

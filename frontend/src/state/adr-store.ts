@@ -67,6 +67,15 @@ const retainedAdrs = new Map<string, { draft: AdrDraft; records: AdrSummary[]; h
 export function getRetainedExportAdrDrafts(): Record<string, AdrDraft> {
   return structuredClone(Object.fromEntries([...retainedAdrs].map(([id, value]) => [id, value.draft])));
 }
+export function invalidateArchiveAdrs(ids: string[]): void {
+  for (const id of ids) retainedAdrs.delete(id);
+  const state = useAdrStore.getState();
+  if (!ids.includes(state.diagramId ?? '')) return;
+  listRequest++;
+  history.reset(emptyDraft(state.diagramId!));
+  useAdrStore.setState({ draft: null, records: [], recordsStatus: 'idle', status: 'idle', error: null, fieldErrors: {}, canUndo: false, canRedo: false, componentSummaries: [], relationshipSummaries: [] });
+  state.invalidateComponentAdrCounts();
+}
 let listRequest = 0;
 let pendingSaves = 0;
 const copy = (draft: AdrDraft) => structuredClone(draft);

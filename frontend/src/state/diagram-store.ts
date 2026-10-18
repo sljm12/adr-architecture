@@ -39,6 +39,8 @@ type State = {
   loadError: string | null;
   navigationStatus: 'idle' | 'loading';
   savePending: boolean;
+  archiveTransferActive: boolean;
+  recoveryPending: boolean;
   revision: number;
   sourceContext: SourceContext | null;
   sourceContextStatus: 'idle' | 'loading' | 'loaded' | 'failed';
@@ -100,6 +102,15 @@ const retained = new Map<string, { document: DiagramDocument; history: ReturnTyp
 /** Read-only export capture; never restores or advances editor history. */
 export function getRetainedExportDiagrams(): Record<string, DiagramDocument> {
   return structuredClone(Object.fromEntries([...retained].map(([id, value]) => [id, value.document])));
+}
+export function invalidateArchiveDiagrams(ids: string[]): void {
+  for (const id of ids) retained.delete(id);
+  if (savedMetadata && ids.includes(savedMetadata.id)) savedMetadata = null;
+  if (ids.includes(useDiagramStore.getState().document?.id ?? '')) {
+    session++; loadRequest++;
+    history.reset(useDiagramStore.getState().document!);
+    useDiagramStore.setState({ document: null, status: 'idle', revision: 0, navigationStatus: 'idle', sourceContext: null, sourceContextStatus: 'idle', sourceContextError: null, error: null, groupError: null, canUndo: false, canRedo: false });
+  }
 }
 const authoredContent = (document: DiagramDocument) => JSON.stringify({
   name: isScoped(document) ? undefined : document.name, boundary: document.boundary, groups: document.groups,
@@ -256,7 +267,7 @@ export const useDiagramStore = create<State>((set, get) => ({
   savedDocumentsDeleteStatus: 'idle', savedDocumentsDeleteError: null, savedDocumentsDeleteMessage: null,
   deletedSavedDocumentIds: [],
   loadError: null,
-  navigationStatus: 'idle', savePending: false, revision: 0,
+  navigationStatus: 'idle', savePending: false, archiveTransferActive: false, recoveryPending: false, revision: 0,
   sourceContext: null, sourceContextStatus: 'idle', sourceContextError: null,
   containerOpenStatus: 'idle',
   containerOpenError: null,

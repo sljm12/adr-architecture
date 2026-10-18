@@ -8,6 +8,7 @@ import { WorkspaceInspector, type CanvasSelection } from './WorkspaceInspector';
 import { useAdrStore } from '../state/adr-store';
 import { RecoveryCoordinator } from './RecoveryCoordinator';
 import { canEnterComponentDiagram } from './ComponentDiagramEntry';
+import { DiagramArchiveTransfer } from './DiagramArchiveTransfer';
 
 const sameSelection = (left: CanvasSelection, right: CanvasSelection) => {
   if (left === right) return true;
@@ -49,9 +50,10 @@ export function DiagramWorkspace() {
   const [interactionDraft, setInteractionDraft] = useState<{source:string;target:string}|null>(null);
   const [selectedComponentIds, setSelectedComponentIds] = useState<string[]>([]);
   const [canvasEpoch, setCanvasEpoch] = useState(0);
-  const navigationBusy = savePending || status === 'saving' || adrStatus === 'saving' || navigationStatus === 'loading' || containerOpenStatus === 'loading' || componentOpenStatus === 'loading';
+  const [archiveActive, setArchiveActive] = useState(false);
+  const navigationBusy = archiveActive || savePending || status === 'saving' || adrStatus === 'saving' || navigationStatus === 'loading' || containerOpenStatus === 'loading' || componentOpenStatus === 'loading';
   const isDirty = () => ['unsaved', 'failed'].includes(useDiagramStore.getState().status) || ['unsaved', 'failed'].includes(useAdrStore.getState().status);
-  const canNavigate = () => { const state = useDiagramStore.getState(); return !state.savePending && state.status !== 'saving' && state.navigationStatus !== 'loading' && state.containerOpenStatus !== 'loading' && state.componentOpenStatus !== 'loading' && !['saving', 'loading'].includes(useAdrStore.getState().status); };
+  const canNavigate = () => { const state = useDiagramStore.getState(); return !state.archiveTransferActive && !state.savePending && state.status !== 'saving' && state.navigationStatus !== 'loading' && state.containerOpenStatus !== 'loading' && state.componentOpenStatus !== 'loading' && !['saving', 'loading'].includes(useAdrStore.getState().status); };
   const updateSelectedComponentIds = useCallback((nextIds: string[]) => setSelectedComponentIds(current => current.length === nextIds.length && current.every((id, index) => id === nextIds[index]) ? current : nextIds), []);
   const clearCanvasSelection = useCallback(() => { clearGroupError(); setSelection(null); setSelectedComponentIds([]); }, [clearGroupError]);
   const startFreshDiagram = useCallback(() => { clearCanvasSelection(); setInteractionDraft(null); setClosedInspectorMode(null); setInspectorMode(null); setInspectorOpen(true); useAdrStore.getState().clear(); startNew(); }, [clearCanvasSelection, startNew]);
@@ -176,7 +178,7 @@ export function DiagramWorkspace() {
   const openInspector = useCallback((mode: Exclude<InspectorMode, null>) => { clearGroupError(); setSelection(null); if (mode !== 'group') setSelectedComponentIds([]); setClosedInspectorMode(null); setInspectorMode(mode); setInspectorOpen(true); }, [clearGroupError]);
   const closeInspector = useCallback(() => { if (inspectorMode === 'group' || selection?.kind === 'group-member-candidate') clearCanvasSelection(); else clearGroupError(); setClosedInspectorMode(inspectorMode); setInspectorMode(null); setInspectorOpen(false); }, [clearCanvasSelection, clearGroupError, inspectorMode, selection?.kind]);
   const toggleInspector = useCallback(() => { setInspectorOpen(open => { if (!open && inspectorMode === null && closedInspectorMode !== null) { setInspectorMode(closedInspectorMode); setClosedInspectorMode(null); } return !open; }); }, [closedInspectorMode, inspectorMode]);
-  return <div className={`app-shell ${libraryOpen ? 'library-open' : 'library-closed'}`}>
+  return <><div inert={archiveActive} className={`app-shell ${libraryOpen ? 'library-open' : 'library-closed'}`}>
     <a className="skip-link" href="#diagram-workspace">Skip to diagram workspace</a>
     <nav className="global-nav" aria-label="Global navigation"><a className="brand" href="/" aria-label="ADR Diagram home"><span className="brand-mark" aria-hidden="true">◇</span> ADR Diagram</a><div className="global-links"><a href="#diagrams">Diagrams</a><a href="#decisions" onClick={event => { event.preventDefault(); if (document) openInspector('adr'); }}>Decisions</a><a href="#help">Help</a></div><button className="nav-utility" type="button">Workspace</button></nav>
     <div className="sub-nav"><div><span className="eyebrow">Architecture workspace</span><h1>Make structure visible.</h1></div><div className="sub-nav-actions"><span className="quiet-note">Single-user workspace</span><button className="primary-pill" type="button" onClick={requestNewDiagram} disabled={!document || navigationBusy}>New diagram</button></div></div>
@@ -187,5 +189,5 @@ export function DiagramWorkspace() {
     {navigationStatus === 'loading' && <p className="container-navigation-feedback" role="status">Loading diagram… Your current work remains available.</p>}
     {confirmNew && <DiagramSwitchDialog title="Save changes before creating a new diagram?" message="Your diagram or decision has unsaved changes. Save both, discard both, or cancel to keep editing." saveLabel="Save and create" discardLabel="Discard and create" busy={navigationBusy} onSaveAndLoad={() => void saveAndNew()} onDiscardAndLoad={() => { startFreshDiagram(); setConfirmNew(false); }} onCancel={() => setConfirmNew(false)} />}
     {(pendingDiagramId || pendingContainerIntent) && <DiagramSwitchDialog busy={navigationBusy} title={pendingContainerIntent ? `Save changes before opening the ${pendingContainerIntent.kind} diagram?` : undefined} message={pendingContainerIntent ? 'Your diagram or decision has unsaved changes. Save both before opening, discard both to continue, or cancel.' : undefined} saveLabel={pendingContainerIntent ? 'Save and open' : undefined} discardLabel={pendingContainerIntent ? 'Discard and open' : undefined} onSaveAndLoad={() => pendingContainerIntent ? void resolveContainerIntent('save') : void saveAndLoad()} onDiscardAndLoad={() => pendingContainerIntent ? void resolveContainerIntent('discard') : discardAndLoad()} onCancel={() => { setPendingDiagramId(null); setPendingHighlightId(undefined); setPendingContainerIntent(null); }} />}
-  </div>;
+  </div><DiagramArchiveTransfer onActiveChange={setArchiveActive} onImported={() => { clearCanvasSelection(); setInteractionDraft(null); setCanvasEpoch(value => value + 1); }} /></>;
 }
