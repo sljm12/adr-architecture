@@ -52,6 +52,7 @@ test('keyboard-only create/open/edit/save/return/ADR linking and exact recovery 
   const button = (name: string | RegExp) => page.getByRole('button', { name, exact: true });
   try {
     await page.goto('/');
+    await activate(page, page.locator(`button[aria-controls="diagram-children-${ids.context}"]`));
     await activate(page, page.locator(`.saved-diagram-button[data-diagram-id="${ids.parent}"]`));
     await activate(page, page.locator(`.react-flow__node[data-id="${ids.application}"] .component-node`));
     await activate(page, button('Create component diagram'));
@@ -97,16 +98,16 @@ test('keyboard-only create/open/edit/save/return/ADR linking and exact recovery 
     await activate(page, returnButton); await expect(page.locator('#container-diagram-heading')).toBeFocused();
     await expect(page.getByLabel('Component name', { exact: true })).toHaveValue('Payment API');
     await activate(page, button('Open component diagram')); await expect(page.locator('#component-diagram-heading')).toBeFocused();
-    const remove = page.locator(`.saved-diagram-row:has([data-diagram-id="${child.id}"]) .saved-diagram-delete`);
-    await activate(page, remove); await expect(page.getByRole('alertdialog')).toContainText('Component diagram, owner Payment API');
+    const remove = page.locator(`.saved-diagram-row:has([data-diagram-id="${child.id}"]) .saved-diagram-actions`);
+    await activate(page, remove); await page.keyboard.press('End'); await page.keyboard.press('Enter'); await expect(page.getByRole('alertdialog')).toContainText('Component diagram, owner Payment API');
     await page.keyboard.press('Escape'); await expect(remove).toBeFocused(); expect(diagrams.get(child.id)?.status).toBe('active');
-    await activate(page, remove);
+    await activate(page, remove); await page.keyboard.press('End'); await page.keyboard.press('Enter');
     const confirm = button('Move to trash');
     const rect = await confirm.boundingBox(); expect(rect!.height).toBeGreaterThanOrEqual(44); expect(rect!.width).toBeGreaterThanOrEqual(44);
     const recoveryContrast = await assertContrast(confirm);
     await activate(page, confirm); await expect.poll(() => diagrams.get(child.id)?.status).toBe('trashed');
     await activate(page, button('Open recovery'));
-    await activate(page, page.locator(`.saved-diagram-trash-row[data-diagram-id="${child.id}"]`).getByRole('button', { name: 'Restore', exact: true }));
+    await activate(page, page.locator(`.saved-diagram-trash-row[data-diagram-id="${child.id}"] .saved-diagram-actions`)); await page.keyboard.press('End'); await page.keyboard.press('Enter');
     await activate(page, button('Restore diagrams')); await expect(page.locator('#component-diagram-heading')).toBeFocused();
     expect(diagrams.get(child.id)!.components[0].id).toBe(internal.id);
     await page.screenshot({ path: 'test-results/phase8-keyboard-component.png', fullPage: true });

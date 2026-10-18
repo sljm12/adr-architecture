@@ -21,7 +21,7 @@ describe('workspace usability contract', () => {
     const styles = source('../src/components/saved-diagram-list.css');
     expect(list).toContain('Filters and sort');
     expect(list).toContain('Open recovery');
-    expect(list).toContain('adr:recover-diagram');
+    expect(source('../src/components/DiagramLibraryActions.tsx')).toContain('adr:recover-diagram');
     expect(source('../src/components/RecoveryCoordinator.tsx')).toContain('refreshRecoveryLists');
     expect(styles).toContain('.saved-diagrams-filter-disclosure');
     expect(styles).toContain('.saved-diagram-row.is-current');

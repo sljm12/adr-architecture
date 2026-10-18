@@ -52,7 +52,7 @@ html,body,#root{overflow:hidden}
 .app-shell{height:100%;display:flex;flex-direction:column;overflow:hidden}
 .sub-nav{height:64px;flex:0 0 64px;padding-block:8px}
 .sub-nav h1{font-size:19px}
-.workspace{min-height:0;flex:1;grid-template-columns:280px minmax(0,1fr);overflow:hidden}
+.workspace{min-height:0;flex:1;grid-template-columns:320px minmax(0,1fr);overflow:hidden}
 .workspace-sidebar{min-height:0;overflow:auto;padding:20px 18px}
 .library-closed .workspace{grid-template-columns:0 minmax(0,1fr)}
 .library-closed .workspace-sidebar{padding:0}

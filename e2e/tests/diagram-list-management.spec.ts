@@ -1,3 +1,4 @@
+import { libraryAction } from './library-controls';
 import { type Page, type Route } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 import type { DiagramDocument, DiagramSummary, TrashImpact, RestoreImpact } from '../../shared/src/index';
@@ -73,6 +74,7 @@ test.describe('find diagrams by name or creation date', () => {
     await expect(page.getByRole('button', { name: /Inventory, last saved/ })).toHaveCount(0);
 
     await page.getByLabel('Filter diagrams by name').fill('');
+    await page.getByText('Filters and sort', { exact: true }).click();
     await page.getByLabel('Created from').fill('2026-01-10');
     await page.getByLabel('Created to').fill('2026-01-12');
     await expect(page.getByRole('button', { name: /Payments API, last saved/ })).toHaveCount(1);
@@ -112,6 +114,7 @@ test.describe('sort diagrams for review', () => {
     await page.route(`**/api/diagrams/${selected.id}`, route => route.request().method() === 'GET' ? fulfillJson(route, selectedDocument) : route.fallback());
     await page.goto('/');
 
+    await page.getByText('Filters and sort', { exact: true }).click();
     const names = () => page.locator('.saved-diagram-button strong').allTextContents();
     await page.getByLabel('Sort diagrams by').selectOption('name');
     await page.getByLabel('Sort direction').selectOption('ascending');
@@ -133,7 +136,7 @@ test.describe('sort diagrams for review', () => {
     await expect.poll(names).toEqual(['Payments', 'Payments', 'Payments API']);
     await expect(page.locator(`.saved-diagram-button[data-diagram-id="${selected.id}"]`)).toHaveCount(1);
     await page.locator(`.saved-diagram-button[data-diagram-id="${selected.id}"]`).click();
-    await expect(page.locator('.current-diagram strong')).toHaveText(selected.name);
+    await expect(page.locator('.command-bar-title strong')).toHaveText(selected.name);
   });
 });
 
@@ -145,13 +148,13 @@ test.describe('delete diagrams safely', () => {
     await page.goto('/');
 
     const row = page.locator(`.saved-diagram-row:has(.saved-diagram-button[data-diagram-id="${target.id}"])`);
-    await row.getByRole('button', { name: `Delete ${target.name}` }).click();
+    await libraryAction(page, target.id, 'Move to trash…');
     await expect(page.getByRole('alertdialog')).toContainText(`Delete "${target.name}"?`);
     await expect(page.getByRole('alertdialog')).toContainText('recoverable trash');
     await page.getByRole('button', { name: 'Cancel' }).click();
     await expect(row).toBeVisible();
 
-    await row.getByRole('button', { name: `Delete ${target.name}` }).click();
+    await libraryAction(page, target.id, 'Move to trash…');
     await page.getByRole('button', { name: 'Move to trash' }).click();
     await expect(page.locator(`.saved-diagram-button[data-diagram-id="${target.id}"]`)).toHaveCount(0);
     await expect(page.locator('.saved-diagrams-success')).toContainText('recoverable trash');
@@ -164,7 +167,7 @@ test.describe('delete diagrams safely', () => {
     await mockFailedDiagramDeletion(page, target.id, 'Diagram is unavailable.');
     await page.goto('/');
     const row = page.locator(`.saved-diagram-row:has(.saved-diagram-button[data-diagram-id="${target.id}"])`);
-    await row.getByRole('button', { name: `Delete ${target.name}` }).click();
+    await libraryAction(page, target.id, 'Move to trash…');
     await page.getByRole('button', { name: 'Move to trash' }).click();
     await expect(row).toBeVisible();
     await expect(page.getByRole('alert')).toContainText('Diagram is unavailable.');
@@ -176,7 +179,7 @@ test.describe('delete diagrams safely', () => {
     await mockActiveDiagramSummaries(page, [target]);
     await mockSuccessfulDiagramDeletion(page, target.id);
     await page.goto('/');
-    await page.getByRole('button', { name: `Delete ${target.name}` }).click();
+    await libraryAction(page, target.id, 'Move to trash…');
     await page.getByRole('button', { name: 'Move to trash' }).click();
     await expect(page.getByText('No saved diagrams yet.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Create your first diagram' })).toBeVisible();
@@ -202,11 +205,11 @@ test.describe('delete diagrams safely', () => {
     await page.getByRole('button', { name: 'Add component' }).click();
     await page.getByLabel('Component name').fill('Draft service');
     await page.getByRole('button', { name: 'Add component' }).last().click();
-    await page.getByRole('button', { name: `Delete ${current.name}` }).click();
+    await libraryAction(page, current.id, 'Move to trash…');
     await page.getByRole('button', { name: 'Move to trash' }).click();
     await expect(page.getByRole('alertdialog')).toContainText('Resolve unsaved changes before deletion');
     await page.getByRole('button', { name: 'Cancel' }).click();
-    await expect(page.locator('.current-diagram strong')).toHaveText('Current draft');
+    await expect(page.locator('.command-bar-title strong')).toHaveText('Current draft');
     await expect(page.locator(`[data-diagram-id="${current.id}"]`)).toHaveCount(1);
   });
 

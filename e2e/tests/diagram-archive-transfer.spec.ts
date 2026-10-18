@@ -1,3 +1,4 @@
+import { libraryAction, openLibraryDiagram } from './library-controls';
 import { readFile } from 'node:fs/promises';
 import { test, expect, type Page } from '@playwright/test';
 import type { InjectOptions } from 'light-my-request';
@@ -88,7 +89,7 @@ test('replacement: affected draft saves force fresh consent, discard is explicit
   const destination = memoryInstallation();
   try {
     const original = emptyArchiveFixture(); await destination.graph.applyArchiveRows(parseArchive(JSON.stringify(original)).records);
-    const api = await browserApi(page, destination.app); await page.goto('/'); await row(page, archiveId(1)).click();
+    const api = await browserApi(page, destination.app); await page.goto('/'); await openLibraryDiagram(page, archiveId(1));
     await page.getByLabel('Diagram name', { exact: true }).fill('Draft title');
     const incoming = archiveFixture(); incoming.records.diagrams[2].deletionRevision = '37';
     await chooseFile(page, JSON.stringify(incoming)); await approveReplacement(page);
@@ -119,7 +120,7 @@ test('PostgreSQL: approved exact child export to empty installation, reload, thr
     const fixture = archiveFixture(); fixture.records.diagrams[2].deletionRevision = '37';
     await seedArchiveRows(source.pool, fixture);
     const api = await browserApi(page, sourceApp);
-    await page.goto('/'); await row(page, archiveId(2)).click();
+    await page.goto('/'); await openLibraryDiagram(page, archiveId(2));
     await page.getByRole('button', { name: 'Export diagram archive', exact: true }).click();
     const review = page.getByRole('dialog', { name: 'Review archive export' });
     for (const id of fixture.includedDiagramIds) await expect(review).toContainText(id);
@@ -131,7 +132,7 @@ test('PostgreSQL: approved exact child export to empty installation, reload, thr
     expect(download.suggestedFilename()).toBe(`diagram-${archiveId(2)}.adr.json`);
     await page.getByRole('button', { name: 'Dismiss archive message' }).click();
     await page.getByRole('button', { name: 'Open recovery', exact: true }).click();
-    await page.locator(`.saved-diagram-trash-row[data-diagram-id="${archiveId(4)}"]`).getByRole('button', { name: /^Export archive/ }).click();
+    await libraryAction(page, archiveId(4), 'Export archive…', true);
     await expect(page.getByRole('dialog')).toContainText('trashed'); await page.keyboard.press('Escape');
     api.app = destinationApp; await page.reload();
     await expect(page.getByText('No saved diagrams yet.')).toBeVisible();
@@ -142,15 +143,15 @@ test('PostgreSQL: approved exact child export to empty installation, reload, thr
     const before = await snapshotArchiveDatabase(source.pool), after = await snapshotArchiveDatabase(destination.pool);
     for (const collection of Object.keys(archiveFieldInventory)) expect(after[collection]).toEqual(before[collection]);
     expect(after.signedZero).toEqual(before.signedZero);
-    await page.reload(); await row(page, archiveId(1)).click();
+    await page.reload(); await openLibraryDiagram(page, archiveId(1));
     await expect(page.locator('#diagram-heading')).toContainText('Architecture');
     await page.getByRole('button', { name: 'Decision', exact: true }).click();
     await expect(page.getByRole('button', { name: /Decision 0/ }).first()).toBeVisible();
     await page.getByRole('button', { name: /Decision 0/ }).first().click();
     await expect(page.getByRole('textbox', { name: /^Context/ })).toHaveValue('Context 世界');
-    await row(page, archiveId(2)).click(); await expect(page.locator('#container-diagram-heading')).toContainText('Element 11');
+    await openLibraryDiagram(page, archiveId(2)); await expect(page.locator('#container-diagram-heading')).toContainText('Element 11');
     await page.getByRole('button', { name: 'Open recovery', exact: true }).click();
-    await page.locator(`.saved-diagram-trash-row[data-diagram-id="${archiveId(3)}"]`).getByRole('button', { name: 'Restore', exact: true }).click();
+    await libraryAction(page, archiveId(3), 'Restore', true);
     await page.getByRole('alertdialog').getByRole('button', { name: 'Restore diagrams', exact: true }).click();
     await expect(page.locator('#component-diagram-heading')).toContainText('Element 21');
     await page.getByRole('button', { name: 'Add component', exact: true }).first().click();
@@ -160,14 +161,14 @@ test('PostgreSQL: approved exact child export to empty installation, reload, thr
     await page.getByRole('button', { name: 'Add component', exact: true }).last().click();
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.locator('.save-status')).toContainText('Saved'); await page.reload();
-    await row(page, archiveId(3)).click(); await expect(page.locator('.react-flow__node').filter({ hasText: 'Imported worker' })).toBeVisible();
+    await openLibraryDiagram(page, archiveId(3)); await expect(page.locator('.react-flow__node').filter({ hasText: 'Imported worker' })).toBeVisible();
   } finally { await sourceApp.close(); await destinationApp.close(); await source.close(); await destination.close(); }
 });
 
 test('coordinator: cancel is safe, drafts offer save/retry/saved-only, and keyboard focus returns', async ({ page }) => {
   const source = memoryInstallation(); await source.graph.applyArchiveRows(parseArchive(JSON.stringify(emptyArchiveFixture())).records);
   try {
-    const api = await browserApi(page, source.app); await page.goto('/'); await row(page, archiveId(1)).click();
+    const api = await browserApi(page, source.app); await page.goto('/'); await openLibraryDiagram(page, archiveId(1));
     await page.getByLabel('Diagram name', { exact: true }).fill('Draft title');
     const trigger = page.getByRole('button', { name: 'Export diagram archive', exact: true }); await trigger.click();
     await expect(page.getByRole('alertdialog')).toContainText('unsaved changes');
@@ -195,7 +196,7 @@ test('coordinator: empty-list import cancels safely, announces busy, preserves u
     await expect(page.getByRole('alert')).toContainText('Import succeeded; refresh failed'); expect(api.imports).toBe(1);
     await page.getByRole('button', { name: 'Retry import refresh' }).click();
     await expect(row(page, archiveId(1))).toBeVisible(); expect(api.imports).toBe(1);
-    await row(page, archiveId(1)).click(); await page.getByLabel('Diagram name', { exact: true }).fill('Unrelated draft');
+    await openLibraryDiagram(page, archiveId(1)); await page.getByLabel('Diagram name', { exact: true }).fill('Unrelated draft');
     const other = emptyArchiveFixture(); other.records.diagrams[0].id = archiveId(999); other.selectedDiagramId = archiveId(999); other.seedDiagramIds = [archiveId(999)]; other.includedDiagramIds = [archiveId(999)];
     await chooseFile(page, JSON.stringify(other)); await page.getByRole('button', { name: 'Import archive', exact: true }).click();
     await expect(page.getByRole('status').filter({ hasText: 'Import succeeded:' })).toBeVisible();
@@ -258,7 +259,7 @@ test('coordinator: canceled preview cannot replace a later review and failed sav
     await chooseFile(page, JSON.stringify(other)); await expect(page.getByRole('dialog')).toContainText('Latest selected file');
     release(); await expect(page.getByRole('dialog')).toContainText('Latest selected file');
     await page.getByRole('button', { name: 'Import archive', exact: true }).click();
-    await expect(row(page, archiveId(1))).toBeVisible(); await row(page, archiveId(1)).click();
+    await expect(row(page, archiveId(1))).toBeVisible(); await openLibraryDiagram(page, archiveId(1));
     await page.getByLabel('Diagram name', { exact: true }).fill('Keep failed draft');
     await chooseFile(page, text); await approveReplacement(page); api.failSave = true;
     const before = await destination.graph.readArchiveSnapshot(), imports = api.imports;
@@ -328,7 +329,7 @@ test('coordinator: late Trash list responses cannot revive pre-import cache cont
 test('coordinator: decision drafts require a saved-only choice or a save with fresh review', async ({ page }) => {
   const source = memoryInstallation(); await source.graph.applyArchiveRows(parseArchive(JSON.stringify(archiveFixture())).records);
   try {
-    const api = await browserApi(page, source.app); await page.goto('/'); await row(page, archiveId(1)).click();
+    const api = await browserApi(page, source.app); await page.goto('/'); await openLibraryDiagram(page, archiveId(1));
     await page.getByRole('button', { name: 'Decision', exact: true }).click();
     await page.getByRole('button', { name: /Decision 0/ }).first().click();
     await page.getByRole('textbox', { name: /^Context/ }).fill('Unsaved decision context');

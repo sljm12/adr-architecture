@@ -1,3 +1,4 @@
+import { openLibraryDiagram } from './library-controls';
 import { test, expect } from '@playwright/test';
 import { buildApp } from '../../backend/src/api/app';
 import { componentTestDatabase, postgresEnabled } from '../../backend/tests/persistence/component-test-database';
@@ -14,7 +15,7 @@ test('real HTTP/PostgreSQL: permanent deletion blocks an open stale save and ret
     await page.route(/\/api\/(?:diagrams|adrs)(?:\/|$|\?)/, async route => {
       const url = new URL(route.request().url()); const response = await route.fetch({ url: `${address}${url.pathname.replace(/^\/api/, '')}${url.search}` }); await route.fulfill({ response });
     });
-    await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${ids.child}"]`).click();
+    await page.goto('/'); await openLibraryDiagram(page, ids.child);
     await page.getByRole('button', { name: 'Add component', exact: true }).first().click();
     await page.getByLabel('Component name', { exact: true }).fill('Retained PostgreSQL draft');
     await page.getByLabel('Responsibilities', { exact: true }).fill('Unsaved responsibilities');
@@ -45,9 +46,8 @@ test('real HTTP/PostgreSQL: authors and reopens local ADR content, blocks immedi
       const response = await route.fetch({ url: `${address}${url.pathname.replace(/^\/api/, '')}${url.search}` });
       await route.fulfill({ response });
     });
-    const row = (id: string) => page.locator(`.saved-diagram-button[data-diagram-id="${id}"]`);
     const recover = async (kind: 'trash' | 'restore', id: string) => page.evaluate(({ kind, id }) => window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind, id } })), { kind, id });
-    await page.goto('/'); await row(ids.child).click();
+    await page.goto('/'); await openLibraryDiagram(page, ids.child);
     await page.getByRole('button', { name: 'Add component', exact: true }).first().click();
     await page.getByLabel('Component name', { exact: true }).fill('Request handler');
     await page.getByLabel('Responsibilities', { exact: true }).fill('Validates requests');
@@ -72,7 +72,7 @@ test('real HTTP/PostgreSQL: authors and reopens local ADR content, blocks immedi
     await page.getByRole('button', { name: 'Save decision', exact: true }).click(); await expect(page.getByRole('button', { name: 'Delete decision', exact: true })).toBeVisible();
     const adr = (await database.adrs.listFull(ids.child))[0];
     expect([...adr.componentIds].sort()).toEqual([internal.id, occurrence.id].sort()); expect(adr.relationshipIds).toHaveLength(1);
-    await page.reload(); await row(ids.child).click(); await expect(page.locator('#component-diagram-heading')).toBeVisible();
+    await page.reload(); await openLibraryDiagram(page, ids.child); await expect(page.locator('#component-diagram-heading')).toBeVisible();
     expect((await database.diagrams.get(ids.child))!.components.map(c => c.id)).toEqual(child.components.map(c => c.id));
     await page.getByRole('button', { name: /^Return to Payments, owner Payment API/ }).click();
     await page.locator(`.react-flow__node[data-id="${ids.personOccurrence}"] .component-node`).click();

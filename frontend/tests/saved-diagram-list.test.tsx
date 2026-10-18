@@ -45,7 +45,7 @@ describe('nested saved container library markup', () => {
     const html = render();
     expect(html).toMatch(/<ul[^>]*saved-diagrams-list[^>]*>.*<li.*<ul[^>]*saved-diagram-children/s);
     expect(html).toContain('Payments, Container diagram, owner Payments, parent Payments architecture');
-    expect(html).toContain('Delete Payments, Container diagram, owner Payments, parent Payments architecture');
+    expect(html).toContain('Actions for Payments; diagram');
     expect(html).toContain('aria-current="true"'); expect(html).toContain('2 saved diagrams.');
   });
   it('retains unavailable parent context instead of showing a child as a top-level diagram', () => {

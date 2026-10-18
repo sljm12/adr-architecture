@@ -1,3 +1,4 @@
+import { libraryAction, openLibraryDiagram } from './library-controls';
 import { test, expect } from '@playwright/test';
 import { buildApp } from '../../backend/src/api/app';
 import { componentRecoveryFixture } from '../../backend/tests/component-recovery-fixture';
@@ -17,9 +18,9 @@ for (const entry of ['library','inspector'] as const) test(`forwards current rec
   });
   try {
     await page.goto('/');
-    if (entry === 'library') await page.locator('.saved-diagram-row').filter({ has: page.locator(`.saved-diagram-button[data-diagram-id="${ids.child}"]`) }).getByRole('button', { name: /^Delete / }).click();
+    if (entry === 'library') await libraryAction(page, ids.child, 'Move to trash…');
     else {
-      await page.locator(`.saved-diagram-button[data-diagram-id="${ids.child}"]`).click();
+      await openLibraryDiagram(page, ids.child);
       await page.getByRole('button', { name: 'Show Details panel', exact: true }).click();
       await page.getByText('Diagram management', { exact: true }).click();
       await page.getByRole('button', { name: 'Move diagram to trash', exact: true }).click();
@@ -27,7 +28,7 @@ for (const entry of ['library','inspector'] as const) test(`forwards current rec
     await page.getByRole('button', { name: 'Move to trash', exact: true }).click();
     await expect.poll(() => repository.get(ids.child)?.status).toBe('trashed');
     await page.getByRole('button', { name: 'Open recovery', exact: true }).click();
-    await page.locator(`.saved-diagram-trash-row[data-diagram-id="${ids.child}"]`).getByRole('button', { name: 'Restore', exact: true }).click();
+    await libraryAction(page, ids.child, 'Restore', true);
     await page.getByRole('button', { name: 'Restore diagrams', exact: true }).click();
     await expect.poll(() => repository.get(ids.child)?.status).toBe('active');
     expect(confirmations).toHaveLength(2);
@@ -43,7 +44,7 @@ for (const mode of ['trash', 'permanent'] as const) test(`keeps the local draft 
     await route.fulfill({ status: response.statusCode, contentType: 'application/json', body: response.body });
   });
   try {
-    await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${ids.child}"]`).click();
+    await page.goto('/'); await openLibraryDiagram(page, ids.child);
     await page.getByRole('button', { name: 'Add component', exact: true }).first().click();
     await page.getByLabel('Component name', { exact: true }).fill('Retained unsaved handler');
     await page.getByLabel('Responsibilities', { exact: true }).fill('Retained local responsibilities');
@@ -75,7 +76,7 @@ test('confirms exact three-level batches, cancels with focus, guards drafts and 
   });
   const recovery = async (kind: 'trash' | 'restore', id: string) => page.evaluate(({ kind, id }) => window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind, id } })), { kind, id });
   try {
-    await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${ids.child}"]`).click();
+    await page.goto('/'); await openLibraryDiagram(page, ids.child);
     await page.getByRole('button', { name: 'Decision', exact: true }).click();
     await page.getByLabel('Title required').fill('Retained local decision');
     const trigger = page.getByRole('button', { name: 'Decision', exact: true }); await trigger.focus();

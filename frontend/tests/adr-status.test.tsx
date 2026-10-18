@@ -28,7 +28,7 @@ describe('ADR lifecycle status contract', () => {
     expect(editor).toContain('Dependency blocker');
     expect(editor).toContain('repair');
     expect(editor).toContain('Delete decision');
-    expect(dialog).toContain('role="alertdialog"');
+    expect(dialog).toContain("role = 'alertdialog'");
     expect(editor).toContain('role="alert"');
     expect(editor).toContain('role="status"');
   });

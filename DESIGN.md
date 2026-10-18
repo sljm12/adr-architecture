@@ -563,6 +563,8 @@ The structural breakpoints that matter for agents: 1440px (content lock), 1068px
 
 ## ADR Diagram Workspace Extensions
 
+The diagram library uses a 320px desktop sidebar with compact name/type rows and 12px hierarchy indentation. Branches start collapsed; current-diagram ancestors and filtered matches are revealed automatically. Search stays visible while date filters and sorting start collapsed. A blue edge, pale blue surface, and Current label identify the open diagram. Each row provides a 44px disclosure target and a 44px ellipsis actions target; leaf rows keep the same alignment. Details and timestamps live in a read-only dialog. Archive export and recoverable trash actions live in the labelled actions menu, which supports keyboard navigation and is positioned outside the scrolling sidebar. Recovery rows use the same compact presentation.
+
 The editor shell uses the same quiet Apple-inspired chrome while giving the architecture canvas priority. The global navigation remains 44px; the workspace header is compact; the library and Details surfaces are independently collapsible and scroll internally. Panel state is transient UI state and never enters an architecture artifact or undo history.
 
 Unselected diagram components use a neutral hairline border. Action Blue is reserved for selected/focused outlines, connection handles, relationship emphasis, and ADR count badges. Handles are visually quiet until a node is selected, focused, or used for connection. Relationship labels use the canvas surface as a backing treatment so text remains readable over curves.

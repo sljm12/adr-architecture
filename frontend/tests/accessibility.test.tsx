@@ -53,7 +53,7 @@ describe('core workflow accessibility contract', () => {
     expect(switchDialog).toContain('aria-modal="true"');
     expect(switchDialog).toContain("event.key === 'Escape'");
     expect(switchDialog).toContain('previouslyFocused?.focus()');
-    expect(savedList).toContain('aria-label={`Delete ${scopeLabel(document)}`}');
+    expect(savedList).toContain('<DiagramLibraryActions');
     expect(savedList).toContain('aria-busy={deleteStatus === \'deleting\'}');
     expect(deletionDialog).toContain('Save and delete');
     expect(deletionDialog).toContain('Discard and delete');

@@ -1,3 +1,4 @@
+import { openLibraryDiagram } from './library-controls';
 import { test, expect, type Page } from '@playwright/test';
 import { buildApp } from '../../backend/src/api/app';
 import { DiagramRepository } from '../../backend/src/persistence/diagram-repository';
@@ -12,7 +13,7 @@ async function harness(page: Page) {
     const response = await app.inject({ method: request.method() as import('light-my-request').InjectOptions['method'], url: path, ...(request.postData() ? { payload: JSON.parse(request.postData()!) } : {}) });
     await route.fulfill({ status: response.statusCode, contentType: 'application/json', body: response.body });
   });
-  await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parent}"]`).click();
+  await page.goto('/'); await openLibraryDiagram(page, ids.parent);
   await page.locator(`.react-flow__node[data-id="${ids.application}"] .component-node`).click();
   await page.getByRole('button', { name: 'Open component diagram', exact: true }).click();
   await expect(page.locator('#component-diagram-heading')).toBeVisible();

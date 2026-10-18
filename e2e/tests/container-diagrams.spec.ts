@@ -1,3 +1,4 @@
+import { libraryAction, openLibraryDiagram, revealDiagram } from './library-controls';
 import type * as Domain from '../../shared/src/index';
 import { expect, test, type Locator, type Page, type Route } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
@@ -49,21 +50,21 @@ test('protects dirty child and ADR work before named parent trash and restores s
   const adrs = new AdrRepository(), decision = adrs.create(ids.populatedChild, completeAdrPayload); adrs.replaceLinks(decision.id, [ids.container, ids.externalOccurrence]); adrs.replaceRelationshipLinks(decision.id, [ids.childRelationship]);
   const { app } = await recoveryHarness(page, repository, adrs);
   try {
-    await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click();
+    await page.goto('/'); await openLibraryDiagram(page, ids.populatedChild);
     await editChildContainer(page, 'Dirty runtime');
     await page.getByRole('button', { name: 'Decision', exact: true }).click();
     await page.locator('.adr-list-item').filter({ hasText: decision.title }).click();
     await page.getByLabel('Title required', { exact: true }).fill('Dirty local decision');
-    const parentDelete = page.locator('.saved-diagram-row').filter({ has: page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`) }).getByRole('button', { name: /^Delete/ });
-    await parentDelete.click(); await expect(page.getByRole('alertdialog')).toContainText('Payments'); await page.getByRole('button', { name: 'Move to trash', exact: true }).click();
+    const parentDelete = () => libraryAction(page, ids.parentDiagram, 'Move to trash…');
+    await parentDelete(); await expect(page.getByRole('alertdialog')).toContainText('Payments'); await page.getByRole('button', { name: 'Move to trash', exact: true }).click();
     await expect(page.getByRole('alertdialog')).toContainText('Resolve unsaved'); await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     await expect(page.locator(`.react-flow__node[data-id="${ids.container}"]`)).toContainText('Dirty runtime'); await expect(page.getByLabel('Title required', { exact: true })).toHaveValue('Dirty local decision'); expect(repository.get(ids.parentDiagram)?.status).toBe('active');
-    await parentDelete.click(); await page.getByRole('button', { name: 'Move to trash', exact: true }).click(); await page.getByRole('button', { name: 'Save and delete', exact: true }).click();
+    await parentDelete(); await page.getByRole('button', { name: 'Move to trash', exact: true }).click(); await page.getByRole('button', { name: 'Save and delete', exact: true }).click();
     await expect(page.getByRole('alertdialog')).toContainText('Affected diagrams');
     expect(repository.get(ids.parentDiagram)?.status).toBe('active');
     await page.getByRole('button', { name: 'Move to trash', exact: true }).click();
     await expect.poll(() => repository.get(ids.parentDiagram)?.status).toBe('trashed'); expect(repository.get(ids.populatedChild)?.components[0].name).toBe('Dirty runtime'); expect(adrs.get(decision.id)?.title).toBe('Dirty local decision'); expect(adrs.get(decision.id)?.componentIds).toEqual([ids.container, ids.externalOccurrence]);
-    await page.getByRole('button', { name: 'Open recovery' }).click(); await page.locator(`.saved-diagram-trash-row[data-diagram-id="${ids.populatedChild}"]`).getByRole('button', { name: 'Restore' }).click(); await page.getByRole('button', { name: 'Restore diagrams' }).click();
+    await page.getByRole('button', { name: 'Open recovery' }).click(); await libraryAction(page, ids.populatedChild, 'Restore', true); await page.getByRole('button', { name: 'Restore diagrams' }).click();
     await expect(page.locator(`.react-flow__node[data-id="${ids.container}"]`)).toContainText('Dirty runtime'); expect(adrs.get(decision.id)?.relationshipIds).toEqual([ids.childRelationship]);
   } finally { await app.close(); }
 });
@@ -73,7 +74,7 @@ test('links and supersedes local child decisions while protecting referenced art
   const adrs = new AdrRepository(), replacement = adrs.create(ids.populatedChild, { ...completeAdrPayload, title: 'Replacement decision', status: 'accepted' });
   const { app, behavior } = await recoveryHarness(page, repository, adrs);
   try {
-    await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click(); await page.getByRole('button', { name: 'Decision', exact: true }).click();
+    await page.goto('/'); await openLibraryDiagram(page, ids.populatedChild); await page.getByRole('button', { name: 'Decision', exact: true }).click();
     await page.getByRole('button', { name: 'New decision', exact: true }).click();
     for (const [label, value] of [['Title required', 'Local runtime choice'], ['Context required', 'Runtime responsibility'], ['Decision required', 'Use a local application'], ['Consequences required', 'Keep stable links']]) await page.getByLabel(label, { exact: true }).fill(value);
     await page.locator('#adr-status').selectOption('accepted');
@@ -89,7 +90,7 @@ test('links and supersedes local child decisions while protecting referenced art
     await page.locator('.react-flow__edge').first().click({ force: true }); await page.getByRole('button', { name: 'Delete relationship', exact: true }).click(); await expect(page.locator('.recovery-notice')).toContainText('Cannot remove relationship');
     expect(repository.get(ids.populatedChild)?.relationships[0].id).toBe(ids.childRelationship);
     expect(adrs.get(decision.id)).toMatchObject({ componentIds: [ids.container, ids.externalOccurrence], relationshipIds: [ids.childRelationship], replacementAdrId: replacement.id }); expect(adrs.listFull(ids.parentDiagram)).toEqual([]);
-    await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click(); behavior.unsupportedSourceSave = true;
+    await openLibraryDiagram(page, ids.parentDiagram); behavior.unsupportedSourceSave = true;
     await page.getByLabel('Diagram name', { exact: true }).fill('Rejected active source draft'); await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByRole('alert').filter({ hasText: ids.externalOccurrence }).first()).toContainText('active'); expect(repository.get(ids.parentDiagram)?.name).toBe('Payments architecture'); expect(adrs.get(decision.id)?.componentIds).toEqual([ids.container, ids.externalOccurrence]);
   } finally { await app.close(); }
@@ -101,7 +102,7 @@ test('reconfirms a later trash batch and retries a failed post-recovery load wit
   const { app, behavior } = await recoveryHarness(page, repository);
   try {
     await page.goto('/'); await page.getByRole('button', { name: 'Open recovery' }).click();
-    await page.locator(`.saved-diagram-trash-row[data-diagram-id="${ids.populatedChild}"]`).getByRole('button', { name: 'Restore' }).click();
+    await libraryAction(page, ids.populatedChild, 'Restore', true);
     behavior.staleRestore = true; await page.getByRole('button', { name: 'Restore diagrams' }).click();
     await expect(page.getByRole('alertdialog')).toContainText('Payments architecture'); await expect(page.getByText('The recovery impact changed.', { exact: false })).toBeVisible(); expect(repository.get(ids.parentDiagram)?.status).toBe('trashed');
     behavior.failChildLoad = true; behavior.failRecoveryRefresh = true; await page.getByRole('button', { name: 'Restore diagrams' }).click();
@@ -116,7 +117,7 @@ test('restores the canonical child by keyboard through its owner and retains act
   const repository = new DiagramRepository(); repository.create(makeParent()); repository.create(populatedChildFixture() ); await new DiagramService(repository).trash(ids.populatedChild);
   const { app, behavior } = await recoveryHarness(page, repository);
   try {
-    await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click();
+    await page.goto('/'); await openLibraryDiagram(page, ids.parentDiagram);
     await page.getByRole('group', { name: 'Component Payments, Software System', exact: true }).first().click({ force: true });
     const restore = page.getByRole('button', { name: 'Restore container diagram for Payments', exact: true }); await restore.focus(); await page.keyboard.press('Enter');
     await expect(page.getByRole('alertdialog')).toContainText('Payments'); await page.keyboard.press('Escape'); expect(behavior.restores).toBe(0); await expect(restore).toBeFocused();
@@ -205,11 +206,10 @@ test('confirms a child-requested exact parent batch, cancels safely and separate
   });
   try {
     await page.goto('/'); await page.getByRole('button', { name: 'Open recovery' }).click();
-    const row = page.locator(`.saved-diagram-trash-row[data-diagram-id="${ids.emptyChild}"]`);
-    await row.first().getByRole('button', { name: 'Restore' }).click();
+    await libraryAction(page, ids.emptyChild, 'Restore', true);
     await expect(page.getByRole('alertdialog')).toContainText('Payments architecture');
     await page.getByRole('button', { name: 'Cancel', exact: true }).click(); expect(restores).toBe(0);
-    await row.first().getByRole('button', { name: 'Restore' }).click(); await page.getByRole('alertdialog').getByRole('button', { name: /Restore/ }).click();
+    await libraryAction(page, ids.emptyChild, 'Restore', true); await page.getByRole('alertdialog').getByRole('button', { name: /Restore/ }).click();
     await expect(page.locator('.saved-diagram-button[data-diagram-id="' + ids.parentDiagram + '"]')).toBeVisible();
     await expect.poll(() => repository.get(ids.populatedChild)?.status).toBe('active');
     expect(repository.get(ids.emptyChild)?.status).toBe('trashed');
@@ -233,7 +233,7 @@ test('exports a saved child with subtype, protocol, scope and its offline local 
     await route.fulfill({ status: response.statusCode, contentType: response.headers['content-type'] as string, body: response.body });
   });
   try {
-    await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click();
+    await page.goto('/'); await openLibraryDiagram(page, ids.populatedChild);
     const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export HTML package' }).click();
     const artifact = await download, artifactPath = (await artifact.path())!;
     const zip = await JSZip.loadAsync(await readFile(artifactPath));
@@ -415,7 +415,7 @@ async function mockContainerApi(page: Page, options: { failFirstChildLoad?: bool
 test('synchronizes the sidebar immediately on owner rename, undo/redo, save/reload and discard', async ({ page }) => {
   const mock = await mockContainerApi(page, { duplicateParent: true });
   const child = mock.children.get(ids.owner), otherChild = [...mock.children.values()].find(c => c.id !== child!.id);
-  await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click();
+  await page.goto('/'); await openLibraryDiagram(page, ids.parentDiagram);
   const childRow = page.locator(`.saved-diagram-button[data-diagram-id="${child!.id}"]`);
   await page.locator(`.react-flow__node[data-id="${ids.owner}"] .component-node`).click();
   await page.getByLabel('Component name', { exact: true }).fill('aa'); await page.getByRole('button', { name: 'Save component', exact: true }).click();
@@ -424,7 +424,7 @@ test('synchronizes the sidebar immediately on owner rename, undo/redo, save/relo
   await page.getByRole('button', { name: 'Undo', exact: true }).click(); await expect(childRow.locator('strong')).toHaveText('Payments');
   await page.getByRole('button', { name: 'Redo', exact: true }).click(); await expect(childRow.locator('strong')).toHaveText('aa');
   await page.getByRole('button', { name: 'Save', exact: true }).click(); await expect(page.getByText('Saved', { exact: true }).first()).toBeVisible();
-  await page.reload(); await expect(childRow.locator('strong')).toHaveText('aa'); await childRow.click();
+  await page.reload(); await expect(childRow.locator('strong')).toHaveText('aa'); await (await revealDiagram(page, child!.id)).click();
   await expect(page.getByLabel('Diagram name', { exact: true })).toHaveValue('aa'); await expect(page.getByLabel('Diagram name', { exact: true })).toHaveAttribute('readonly', '');
   await page.screenshot({ path: 'test-results/container-name-sync.png' });
   await page.getByRole('button', { name: /Return to .*Payments architecture/ }).click();
@@ -439,7 +439,7 @@ test('keeps a child under its parent across repeated content saves, guarded retu
   const mock = await mockContainerApi(page, { sourceOccurrence: true });
   const beforeParent = structuredClone(mock.parent);
   const child = mock.children.get(ids.sourceSystem);
-  await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${child!.id}"]`).click();
+  await page.goto('/'); await openLibraryDiagram(page, child!.id);
   await editChildContainer(page, 'Ledger runtime');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.locator(`.saved-diagram-children .saved-diagram-button[data-diagram-id="${child!.id}"]`)).toContainText('Ledger');
@@ -453,7 +453,7 @@ test('keeps a child under its parent across repeated content saves, guarded retu
   await expect(page.locator('#diagram-heading')).toBeFocused();
   await expect(page.locator(`.react-flow__node[data-id="${ids.sourceSystem}"] .component-node`)).toHaveClass(/is-selected/);
   expect(mock.parent).toEqual(beforeParent); expect(mock.savedPaths).toEqual([child!.id, child!.id, child!.id]);
-  await page.reload(); await page.locator(`.saved-diagram-button[data-diagram-id="${child!.id}"]`).click();
+  await page.reload(); await openLibraryDiagram(page, child!.id);
   await expect(page.locator(`.react-flow__node[data-id="${ids.container}"]`)).toContainText('Ledger runtime two');
   expect((mock.children.get(ids.sourceSystem)!.scope!).parentDiagramId).toBe(ids.parentDiagram);
   await editChildContainer(page, 'Canceled draft');
@@ -474,13 +474,14 @@ test('groups identically named children by parent UUID and counts own-field filt
   await page.getByLabel('Filter diagrams by name').fill('Payments');
   await expect(page.locator('#saved-diagrams-filter-status')).toHaveText('4 of 4 diagrams match the filters.');
   await expect(page.locator('.saved-diagram-parent-row')).toHaveCount(2);
+  await page.locator('.saved-diagrams-filter-disclosure summary').click();
   await page.getByLabel('Sort diagrams by').selectOption('name'); await page.getByLabel('Sort direction').selectOption('ascending');
   const first = page.locator(`.saved-diagram-button[data-diagram-id="${children[0].id}"]`); await first.focus(); await page.keyboard.press('Enter');
   await expect(first).toHaveAttribute('aria-current', 'true');
   await expect(page.getByLabel('Diagram name', { exact: true })).toHaveAttribute('readonly', ''); await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.locator(`.saved-diagram-button[data-diagram-id="${children[0].id}"]`)).toHaveCount(1);
-  const deleteAction = page.locator('.saved-diagram-row').filter({ has: page.locator(`.saved-diagram-button[data-diagram-id="${children[0].id}"]`) }).getByRole('button', { name: /^Delete Payments,/ });
-  await deleteAction.focus(); await page.keyboard.press('Enter'); await expect(page.getByRole('alertdialog')).toContainText('Delete "Payments"?');
+  const deleteAction = page.locator(`.saved-diagram-row:has([data-diagram-id="${children[0].id}"]) .saved-diagram-actions`);
+  await deleteAction.focus(); await page.keyboard.press('Enter'); await page.getByRole('menuitem', { name: 'Move to trash…', exact: true }).click(); await expect(page.getByRole('alertdialog')).toContainText('Delete "Payments"?');
   await page.keyboard.press('Escape'); await expect(deleteAction).toBeFocused(); expect(mock.children.size).toBe(2);
   await page.getByLabel('Filter diagrams by name').fill('payments architecture');
   await expect(page.locator('#saved-diagrams-filter-status')).toHaveText('2 of 4 diagrams match the filters.'); await expect(page.locator('.saved-diagram-children')).toHaveCount(0);
@@ -491,7 +492,7 @@ test('groups identically named children by parent UUID and counts own-field filt
 
 test('refreshes source names independently of local edits and guards a dirty ADR before library and new navigation', async ({ page }) => {
   const mock = await mockContainerApi(page, { sourceOccurrence: true }); await page.goto('/');
-  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click();
+  await openLibraryDiagram(page, ids.populatedChild);
   await editChildContainer(page, 'Own container name');
   mock.parent.name = 'Renamed overview'; (mock.parent.components.find((c: Domain.Component) => c.id === ids.sourceSystem)!).name = 'Renamed owner'; (mock.parent.components.find((c: Domain.Component) => c.id === ids.owner)!).name = 'Renamed source';
   const regroupedIds: string[] = [ids.owner, ids.duplicateOwner];
@@ -504,25 +505,25 @@ test('refreshes source names independently of local edits and guards a dirty ADR
   await page.getByRole('button', { name: /Return to Renamed overview/ }).click();
   await expect(page.locator('#diagram-heading')).toHaveText('Renamed overview');
   await expect(page.locator(`.react-flow__node[data-id="${ids.group}"]`)).toContainText('Regrouped systems');
-  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click();
+  await openLibraryDiagram(page, ids.populatedChild);
   await expect(page.locator('#container-diagram-heading')).toHaveText('Renamed owner');
   expect(mock.children.get(ids.sourceSystem)).toEqual(savedChild);
   await page.getByRole('button', { name: 'Decision', exact: true }).click(); await page.getByLabel('Title required').fill('Unsaved decision');
-  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click(); await expect(page.getByRole('alertdialog')).toBeVisible(); await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await openLibraryDiagram(page, ids.parentDiagram); await expect(page.getByRole('alertdialog')).toBeVisible(); await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.getByLabel('Title required')).toHaveValue('Unsaved decision');
   await page.getByRole('button', { name: 'New diagram', exact: true }).click(); await expect(page.getByRole('alertdialog')).toContainText('decision'); await page.getByRole('button', { name: 'Cancel', exact: true }).click(); await expect(page.getByLabel('Title required')).toHaveValue('Unsaved decision');
 });
 
 test('saves both child and decision before navigation and discards both only after a successful load', async ({ page }) => {
   const mock = await mockContainerApi(page, { sourceOccurrence: true });
-  await page.goto('/'); await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click();
+  await page.goto('/'); await openLibraryDiagram(page, ids.populatedChild);
   await editChildContainer(page, 'Child and decision');
   await page.getByRole('button', { name: 'Decision', exact: true }).click();
   for (const [label, value] of [['Title required', 'Keep the decision'], ['Context required', 'Scope context'], ['Decision required', 'Use a boundary'], ['Consequences required', 'Stable scope']]) await page.getByLabel(label, { exact: true }).fill(value);
-  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click(); await page.getByRole('button', { name: 'Save and load', exact: true }).click();
+  await openLibraryDiagram(page, ids.parentDiagram); await page.getByRole('button', { name: 'Save and load', exact: true }).click();
   await expect(page.locator('#diagram-heading')).toHaveText('Payments architecture');
   expect((mock.children.get(ids.sourceSystem)!).components[0].name).toBe('Child and decision'); expect([...mock.adrs.values()]).toEqual([expect.objectContaining({ diagramId: ids.populatedChild, title: 'Keep the decision' })]);
-  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click();
+  await openLibraryDiagram(page, ids.populatedChild);
   await editChildContainer(page, 'Discarded diagram'); await page.getByRole('button', { name: 'Decision', exact: true }).click(); await page.getByLabel('Title required', { exact: true }).fill('Discarded ADR');
   await page.getByRole('button', { name: /Return to .*Payments architecture/ }).click(); await page.getByRole('button', { name: 'Discard and load', exact: true }).click();
   await expect(page.locator('#diagram-heading')).toHaveText('Payments architecture');
@@ -532,7 +533,7 @@ test('saves both child and decision before navigation and discards both only aft
 
 test('re-guards a decision edited during a slow parent load and retains the current child', async ({ page }) => {
   await mockContainerApi(page, { sourceOccurrence: true }); await page.goto('/');
-  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click();
+  await openLibraryDiagram(page, ids.populatedChild);
   await page.getByRole('button', { name: 'Decision', exact: true }).click();
   await expect(page.getByText('No decisions yet. Create one to capture the reasoning behind this diagram.')).toBeVisible();
   let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
@@ -547,7 +548,7 @@ test('re-guards a decision edited during a slow parent load and retains the curr
 test('creates distinct empty children from grouped duplicate-name systems, keeps ordinary selection, and opens by keyboard action', async ({ page }) => {
   const mock = await mockContainerApi(page);
   await page.goto('/');
-  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click();
+  await openLibraryDiagram(page, ids.parentDiagram);
 
   const systems = page.getByRole('group', { name: 'Component Payments, Software System' });
   await systems.nth(0).click();
@@ -560,8 +561,8 @@ test('creates distinct empty children from grouped duplicate-name systems, keeps
   await expect(page.locator('.container-boundary-node')).toHaveAttribute('aria-label', 'Software System boundary for Payments');
   const firstChildId = mock.children.get(ids.owner)?.id;
 
-  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click();
-  await expect(page.locator('.current-diagram')).toContainText('4 components');
+  await openLibraryDiagram(page, ids.parentDiagram);
+  await expect(page.locator('#diagram-heading')).toHaveText('Payments architecture'); await expect(page.locator('.react-flow__node-component')).toHaveCount(4);
   await systems.nth(0).click();
   await expect(page.locator('.container-entry-panel .primary-pill')).toHaveText('Open container diagram');
   await page.getByRole('button', { name: 'Create or open container diagram for Payments' }).click();
@@ -569,15 +570,15 @@ test('creates distinct empty children from grouped duplicate-name systems, keeps
   expect(mock.children.get(ids.owner)?.id).toBe(firstChildId);
   expect(mock.children.size).toBe(1);
 
-  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click();
-  await expect(page.locator('.current-diagram')).toContainText('4 components');
+  await openLibraryDiagram(page, ids.parentDiagram);
+  await expect(page.locator('#diagram-heading')).toHaveText('Payments architecture'); await expect(page.locator('.react-flow__node-component')).toHaveCount(4);
   await systems.nth(1).dblclick();
   await expect(page.locator('#container-diagram-heading')).toHaveText('Payments');
   expect(mock.children.get(ids.duplicateOwner)?.id).not.toBe(firstChildId);
   expect(mock.children.size).toBe(2);
 
-  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click();
-  await expect(page.locator('.current-diagram')).toContainText('4 components');
+  await openLibraryDiagram(page, ids.parentDiagram);
+  await expect(page.locator('#diagram-heading')).toHaveText('Payments architecture'); await expect(page.locator('.react-flow__node-component')).toHaveCount(4);
   await page.getByRole('group', { name: 'Component Customer, Person' }).click();
   await expect(page.getByLabel('Container diagram action')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Select at least two Software System components' })).toBeDisabled();
@@ -587,10 +588,10 @@ test('authors two container subtypes and external interactions with atomic histo
   test.setTimeout(60_000);
   const mock=await mockContainerApi(page);
   const originalParent=structuredClone(mock.parent);
-  await page.goto('/');await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click();
+  await page.goto('/');await openLibraryDiagram(page, ids.parentDiagram);
   await page.getByRole('button',{name:'Add component',exact:true}).click();
   await page.getByRole('radio',{name:/^Person /}).check();
-  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click();
+  await openLibraryDiagram(page, ids.parentDiagram);
   await page.getByRole('group',{name:'Component Payments, Software System'}).nth(0).dblclick();
   await expect(page.locator('#container-diagram-heading')).toHaveText('Payments');
   for(const [name,subtype,technology] of [['Web app','Application','React'],['Service','Application','TypeScript'],['Ledger DB','Datastore','PostgreSQL']]){
@@ -606,13 +607,13 @@ test('authors two container subtypes and external interactions with atomic histo
   await expect(page.getByText('Saved',{exact:true}).first()).toBeVisible();
   const saved=mock.children.get(ids.owner);expect(saved!.components.map((c: Domain.Component)=>c.containerType)).toEqual(['application','application','datastore',null,null]);expect(saved!.relationships[0].protocol).toBe('SQL');expect(mock.parent).toEqual(originalParent);
   await page.getByRole('group',{name:'Component Ledger DB, Datastore'}).click();await page.getByLabel('Application',{exact:true}).check();await inspector.getByRole('button',{name:'Save component',exact:true}).click();await expect(page.getByRole('group',{name:'Component Ledger DB, Application'})).toBeVisible();await page.getByRole('button',{name:'Undo',exact:true}).click();await expect(page.getByRole('group',{name:'Component Ledger DB, Datastore'})).toBeVisible();await page.getByRole('button',{name:'Redo',exact:true}).click();await expect(page.getByRole('group',{name:'Component Ledger DB, Application'})).toBeVisible();
-  await page.getByRole('button',{name:'Save',exact:true}).click();await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click();await page.locator(`.saved-diagram-button[data-diagram-id="${saved!.id}"]`).click();await page.getByRole('group',{name:'Component Ledger DB, Application'}).click();await expect(page.getByLabel('Application',{exact:true})).toBeChecked();expect((mock.children.get(ids.owner)!).id).toBe(saved!.id);expect(mock.parent).toEqual(originalParent);
+  await page.getByRole('button',{name:'Save',exact:true}).click();await openLibraryDiagram(page, ids.parentDiagram);await openLibraryDiagram(page, saved!.id);await page.getByRole('group',{name:'Component Ledger DB, Application'}).click();await expect(page.getByLabel('Application',{exact:true})).toBeChecked();expect((mock.children.get(ids.owner)!).id).toBe(saved!.id);expect(mock.parent).toEqual(originalParent);
 });
 
 test('persists keyboard and pointer geometry, rejects external overlap, and undoes boundary displacement in one step',async({page})=>{
   test.setTimeout(60_000);
   await page.setViewportSize({width:1600,height:1000});
-  const mock=await mockContainerApi(page,{sourceOccurrence:true});await page.goto('/');await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click();
+  const mock=await mockContainerApi(page,{sourceOccurrence:true});await page.goto('/');await openLibraryDiagram(page, ids.populatedChild);
   const before=structuredClone(mock.children.get(ids.sourceSystem));
   const internal=page.locator(`.react-flow__node[data-id="${ids.container}"]`);
   await internal.focus();await page.keyboard.press('Enter');await page.keyboard.press('ArrowRight');await page.keyboard.press('ArrowRight');await page.getByRole('button',{name:'Save',exact:true}).click();
@@ -631,7 +632,7 @@ test('persists keyboard and pointer geometry, rejects external overlap, and undo
 
 test('resizes containers atomically and keeps complete long metadata inside the card',async({page})=>{
   test.setTimeout(60_000);await page.setViewportSize({width:1600,height:1000});
-  const mock=await mockContainerApi(page,{sourceOccurrence:true});await page.goto('/');await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click();
+  const mock=await mockContainerApi(page,{sourceOccurrence:true});await page.goto('/');await openLibraryDiagram(page, ids.populatedChild);
   await page.getByRole('group',{name:'Component Payment API, Application'}).click();const inspector=page.getByLabel('Diagram inspector');
   const responsibilities='Handles requests, validates payment details and records the result. '.repeat(6);const technology='TypeScript and PostgreSQL with transactional request processing and stable identifiers';
   await inspector.getByLabel('Responsibilities',{exact:true}).fill(responsibilities);await inspector.getByLabel('Technology',{exact:true}).fill(technology);await inspector.getByRole('button',{name:'Save component',exact:true}).click();
@@ -651,7 +652,7 @@ test('resizes containers atomically and keeps complete long metadata inside the 
 test('keeps the parent visible when child loading fails and retry opens the already-created child', async ({ page }) => {
   const mock = await mockContainerApi(page, { failFirstChildLoad: true });
   await page.goto('/');
-  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click();
+  await openLibraryDiagram(page, ids.parentDiagram);
   await page.getByRole('group', { name: 'Component Payments, Software System' }).nth(0).dblclick();
   await expect(page.locator('.container-entry-feedback').filter({ hasText: 'Temporary child load failure.' })).toBeVisible();
   await expect(page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`)).toHaveAttribute('aria-current', 'true');
@@ -664,7 +665,7 @@ test('keeps the parent visible when child loading fails and retry opens the alre
 test('reports an availability failure without creating a child and retries the read', async ({ page }) => {
   const mock = await mockContainerApi(page, { failFirstAvailability: true });
   await page.goto('/');
-  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click();
+  await openLibraryDiagram(page, ids.parentDiagram);
   await page.getByRole('group', { name: 'Component Payments, Software System' }).nth(0).click();
   const panel = page.getByLabel('Container diagram action');
   await expect(panel).toContainText('Container availability could not be checked.');
@@ -680,7 +681,7 @@ test('reports an availability failure without creating a child and retries the r
 test('guards an unsaved owner with Save, Discard, and Cancel and rejects an owner removed by discard', async ({ page }) => {
   const mock = await mockContainerApi(page);
   await page.goto('/');
-  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click();
+  await openLibraryDiagram(page, ids.parentDiagram);
   await page.getByRole('button', { name: 'Add component' }).click();
   let inspector = page.getByLabel('Diagram inspector');
   await inspector.getByLabel('Component name').fill('Draft system');
@@ -696,7 +697,7 @@ test('guards an unsaved owner with Save, Discard, and Cancel and rejects an owne
   await expect(page.locator('#container-diagram-heading')).toHaveText('Draft system');
   expect(mock.children.size).toBe(1);
 
-  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click();
+  await openLibraryDiagram(page, ids.parentDiagram);
   await page.getByRole('button', { name: 'Add component' }).click();
   inspector = page.getByLabel('Diagram inspector');
   await inspector.getByLabel('Component name').fill('Discarded system');
@@ -711,7 +712,7 @@ test('guards an unsaved owner with Save, Discard, and Cancel and rejects an owne
 test('opens an external Software System occurrence through its canonical source owner', async ({ page }) => {
   const mock = await mockContainerApi(page, { sourceOccurrence: true });
   await page.goto('/');
-  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.populatedChild}"]`).click();
+  await openLibraryDiagram(page, ids.populatedChild);
   await page.getByRole('group', { name: 'Component Payments, Software System' }).click();
   const openAction = page.getByRole('button', { name: 'Create or open container diagram for Payments' });
   await expect(openAction).toBeEnabled();
@@ -724,7 +725,7 @@ test('opens an external Software System occurrence through its canonical source 
 test('keeps a dirty ADR in the current diagram until the container-navigation guard is resolved', async ({ page }) => {
   const mock = await mockContainerApi(page);
   await page.goto('/');
-  await page.locator(`.saved-diagram-button[data-diagram-id="${ids.parentDiagram}"]`).click();
+  await openLibraryDiagram(page, ids.parentDiagram);
   await page.getByRole('button', { name: 'Decision', exact: true }).click();
   await page.getByLabel('Title required').fill('Keep the decision draft');
   await page.getByLabel('Context required').fill('This ADR is not saved yet.');
@@ -736,7 +737,7 @@ test('keeps a dirty ADR in the current diagram until the container-navigation gu
   await action.click();
   await expect(page.getByRole('alertdialog')).toContainText('Save both before opening');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(page.locator('.current-diagram')).toContainText('Payments architecture');
+  await expect(page.locator('#diagram-heading')).toContainText('Payments architecture');
   expect(mock.children.size).toBe(0);
   await page.getByRole('button', { name: 'Decision', exact: true }).click();
   await expect(page.getByLabel('Title required')).toHaveValue('Keep the decision draft');
