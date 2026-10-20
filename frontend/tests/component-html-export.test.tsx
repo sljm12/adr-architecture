@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import JSZip from 'jszip';
-import { captureHtmlPackage } from '../src/components/ExportButton';
+import { captureHtmlPackage } from '../src/components/DiagramExportCoordinator';
 import { exportClient } from '../src/api/export-client';
 import { useDiagramStore } from '../src/state/diagram-store';
 import { useAdrStore } from '../src/state/adr-store';

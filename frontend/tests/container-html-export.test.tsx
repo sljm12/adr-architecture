@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { captureHtmlExportInput, captureHtmlPackage, runHtmlPackageExport } from '../src/components/ExportButton';
+import { captureHtmlExportInput, captureHtmlPackage, runHtmlPackageExport } from '../src/components/DiagramExportCoordinator';
 import { exportClient, resolveContainerExportInput } from '../src/api/export-client';
 import { diagramClient } from '../src/api/diagram-client';
 import { populatedChildFixture, containerFixtureIds as ids } from '../../shared/tests/container-fixtures';

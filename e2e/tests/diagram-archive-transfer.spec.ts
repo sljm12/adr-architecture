@@ -1,4 +1,4 @@
-import { libraryAction, openLibraryDiagram } from './library-controls';
+import { currentDiagramActions, exportFromMenu, libraryAction, openLibraryDiagram } from './library-controls';
 import { readFile } from 'node:fs/promises';
 import { test, expect, type Page } from '@playwright/test';
 import type { InjectOptions } from 'light-my-request';
@@ -90,6 +90,7 @@ test('replacement: affected draft saves force fresh consent, discard is explicit
   try {
     const original = emptyArchiveFixture(); await destination.graph.applyArchiveRows(parseArchive(JSON.stringify(original)).records);
     const api = await browserApi(page, destination.app); await page.goto('/'); await openLibraryDiagram(page, archiveId(1));
+    await expect(page.getByLabel('Diagram name', { exact: true })).toHaveValue(original.records.diagrams[0].name.trim());
     await page.getByLabel('Diagram name', { exact: true }).fill('Draft title');
     const incoming = archiveFixture(); incoming.records.diagrams[2].deletionRevision = '37';
     await chooseFile(page, JSON.stringify(incoming)); await approveReplacement(page);
@@ -121,7 +122,7 @@ test('PostgreSQL: approved exact child export to empty installation, reload, thr
     await seedArchiveRows(source.pool, fixture);
     const api = await browserApi(page, sourceApp);
     await page.goto('/'); await openLibraryDiagram(page, archiveId(2));
-    await page.getByRole('button', { name: 'Export diagram archive', exact: true }).click();
+    await exportFromMenu(page, 'Export archive…');
     const review = page.getByRole('dialog', { name: 'Review archive export' });
     for (const id of fixture.includedDiagramIds) await expect(review).toContainText(id);
     await expect(review.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
@@ -170,16 +171,16 @@ test('coordinator: cancel is safe, drafts offer save/retry/saved-only, and keybo
   try {
     const api = await browserApi(page, source.app); await page.goto('/'); await openLibraryDiagram(page, archiveId(1));
     await page.getByLabel('Diagram name', { exact: true }).fill('Draft title');
-    const trigger = page.getByRole('button', { name: 'Export diagram archive', exact: true }); await trigger.click();
+    const trigger = currentDiagramActions(page); await exportFromMenu(page, 'Export archive…');
     await expect(page.getByRole('alertdialog')).toContainText('unsaved changes');
     await page.keyboard.press('Escape'); await expect(page.getByLabel('Diagram name', { exact: true })).toHaveValue('Draft title');
-    await trigger.click(); api.failSave = true;
+    await exportFromMenu(page, 'Export archive…'); api.failSave = true;
     await page.getByRole('button', { name: 'Save and review again', exact: true }).click();
     await expect(page.locator('.archive-transfer-notice')).toContainText('Save temporarily unavailable');
     await page.getByRole('button', { name: 'Continue with saved data', exact: true }).click();
     await expect(page.getByRole('dialog')).toContainText('Architecture'); await expect(page.getByRole('dialog')).not.toContainText('Draft title');
     await page.keyboard.press('Escape'); await expect(trigger).toBeFocused();
-    await trigger.click(); await page.getByRole('button', { name: 'Save and review again', exact: true }).click();
+    await exportFromMenu(page, 'Export archive…'); await page.getByRole('button', { name: 'Save and review again', exact: true }).click();
     await expect(page.getByRole('dialog')).toContainText('Draft title'); await page.keyboard.press('Escape');
     expect((await source.graph.readArchiveSnapshot()).diagrams[0].name).toBe('Draft title');
   } finally { await source.app.close(); }
@@ -301,7 +302,7 @@ test('keyboard: safe cancellation, trapped review, conflict acknowledgement, exp
     await page.getByRole('button', { name: 'Import archive', exact: true }).focus(); await page.keyboard.press('Enter');
     await expect(row(page, archiveId(1))).not.toContainText('Keyboard replacement');
     await row(page, archiveId(1)).focus(); await page.keyboard.press('Enter');
-    await page.getByRole('button', { name: 'Export diagram archive', exact: true }).focus(); await page.keyboard.press('Enter');
+    await currentDiagramActions(page).focus(); await page.keyboard.press('Enter'); await page.getByRole('menuitem', { name: 'Export archive…', exact: true }).focus(); await page.keyboard.press('Enter');
     await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
     await page.keyboard.press('Tab'); const exported = page.waitForEvent('download'); await page.keyboard.press('Enter'); await exported;
   } finally { await destination.app.close(); }
@@ -333,12 +334,12 @@ test('coordinator: decision drafts require a saved-only choice or a save with fr
     await page.getByRole('button', { name: 'Decision', exact: true }).click();
     await page.getByRole('button', { name: /Decision 0/ }).first().click();
     await page.getByRole('textbox', { name: /^Context/ }).fill('Unsaved decision context');
-    await page.getByRole('button', { name: 'Export diagram archive', exact: true }).click();
+    await exportFromMenu(page, 'Export archive…');
     await expect(page.getByRole('alertdialog')).toBeVisible();
     await page.getByRole('button', { name: 'Continue with saved data', exact: true }).click();
     await expect(page.getByRole('dialog')).toBeVisible(); expect(JSON.parse(api.preparedText).records.adrs[0].context).toBe('Context 世界');
     await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: 'Export diagram archive', exact: true }).click();
+    await exportFromMenu(page, 'Export archive…');
     await page.getByRole('button', { name: 'Save and review again', exact: true }).click();
     await expect(page.getByRole('dialog')).toBeVisible(); expect(JSON.parse(api.preparedText).records.adrs[0].context).toBe('Unsaved decision context');
     await page.keyboard.press('Escape');

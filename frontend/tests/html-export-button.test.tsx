@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
-import { captureHtmlExportInput, captureHtmlPackage, getHtmlExportBlockReason, getHtmlExportDraft, runHtmlPackageExport } from '../src/components/ExportButton';
+import { captureHtmlExportInput, captureHtmlPackage, getHtmlExportBlockReason, getHtmlExportDraft, runHtmlPackageExport } from '../src/components/DiagramExportCoordinator';
 import { exportAdrFixture, exportDiagramFixture } from '../../shared/tests/html-export-fixtures';
 import { useAdrStore } from '../src/state/adr-store';
 import { adrClient } from '../src/api/adr-client';
@@ -61,7 +61,7 @@ describe('interactive HTML package export control', () => {
   });
 
   it('keeps this action separate from Mermaid and does not initiate a diagram or ADR save', () => {
-    const source = readFileSync(new URL('../src/components/ExportButton.tsx', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../src/components/DiagramExportCoordinator.tsx', import.meta.url), 'utf8');
     expect(source).toContain('exportClient.downloadHtmlPackage');
     expect(source).toContain('exportClient.downloadMermaid');
     expect(source).not.toMatch(/(?:diagram|adr)?Store\.(?:getState\(\)\.)?save\s*\(/i);

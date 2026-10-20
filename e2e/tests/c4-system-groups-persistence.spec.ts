@@ -1,3 +1,4 @@
+import { exportFromMenu } from './library-controls';
 import { expect, test, type Page } from '@playwright/test';
 
 const diagram = {
@@ -68,7 +69,7 @@ test('preserves group and relationship identity across save, reopen, edits, conf
   await expect(page.locator('.recovery-notice')).toContainText(/belongs to system group|system group/i);
 
   const download = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Export Mermaid' }).click();
+  await exportFromMenu(page, 'Export Mermaid');
   expect((await download).suggestedFilename()).toBe('system-context.mmd');
   await expect(page.locator('#export-status')).toContainText('Exported Mermaid');
 });

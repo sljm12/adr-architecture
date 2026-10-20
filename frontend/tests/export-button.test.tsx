@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DiagramApiError } from '../src/api/diagram-client';
-import { formatExportError, getExportBlockReason } from '../src/components/ExportButton';
+import { formatExportError, getExportBlockReason } from '../src/components/DiagramExportCoordinator';
 
 describe('Mermaid export save guard', () => {
   it.each([

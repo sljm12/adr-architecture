@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getComponentScope, type DiagramSummary } from '../../../shared/src/index';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -7,7 +7,7 @@ export const diagramTypeLabel = (diagram: DiagramSummary) => diagram.kind === 'c
 
 type Props = { diagram: DiagramSummary; busy: boolean; onDelete: (id: string) => void; onRemovedFocus: () => void };
 
-const menuPosition = (rect: DOMRect) => ({ top: Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - 152)), left: Math.max(8, Math.min(rect.right - 220, window.innerWidth - 228)) });
+const menuPosition = (rect: DOMRect, height = 0) => ({ top: Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - height - 8)), left: Math.max(8, Math.min(rect.right - 220, window.innerWidth - 228)) });
 
 export function DiagramLibraryActions({ diagram, busy, onDelete, onRemovedFocus }: Props) {
   const trigger = useRef<HTMLButtonElement>(null), menu = useRef<HTMLDivElement>(null);
@@ -18,13 +18,17 @@ export function DiagramLibraryActions({ diagram, busy, onDelete, onRemovedFocus 
   const trashed = diagram.status === 'trashed';
   const close = () => { trigger.current?.focus(); setPosition(null); };
 
+  useLayoutEffect(() => {
+    if (menuOpen && trigger.current && menu.current) setPosition(menuPosition(trigger.current.getBoundingClientRect(), menu.current.getBoundingClientRect().height));
+  }, [menuOpen]);
+
   useEffect(() => {
     if (!menuOpen) return;
     menu.current?.querySelector<HTMLButtonElement>('button')?.focus();
     const dismiss = (event: Event) => {
       if (!menu.current?.contains(event.target as Node) && !trigger.current?.contains(event.target as Node)) setPosition(null);
     };
-    const reposition = () => { if (trigger.current) setPosition(menuPosition(trigger.current.getBoundingClientRect())); };
+    const reposition = () => { if (trigger.current) setPosition(menuPosition(trigger.current.getBoundingClientRect(), menu.current?.getBoundingClientRect().height)); };
     const onScroll = (event: Event) => { if (!menu.current?.contains(event.target as Node)) reposition(); };
     document.addEventListener('pointerdown', dismiss);
     document.addEventListener('focusin', dismiss);
@@ -63,7 +67,11 @@ export function DiagramLibraryActions({ diagram, busy, onDelete, onRemovedFocus 
       }
     }}>
       <button type="button" role="menuitem" onClick={() => action(() => setDetailsOpen(true))}>Details…</button>
-      <button type="button" role="menuitem" onClick={() => action(() => window.dispatchEvent(new CustomEvent('adr:archive-transfer', { detail: { id: diagram.id } })))}>Export archive…</button>
+      {!trashed && <>
+        <button type="button" role="menuitem" onClick={() => action(() => window.dispatchEvent(new CustomEvent('adr:export-diagram', { detail: { id: diagram.id, name: diagram.name, format: 'html' } })))}>Export HTML package</button>
+        <button type="button" role="menuitem" onClick={() => action(() => window.dispatchEvent(new CustomEvent('adr:export-diagram', { detail: { id: diagram.id, name: diagram.name, format: 'mermaid' } })))}>Export Mermaid</button>
+      </>}
+      <button type="button" role="menuitem" onClick={() => action(() => window.dispatchEvent(new CustomEvent('adr:archive-transfer', { detail: { id: diagram.id, name: diagram.name } })))}>Export archive…</button>
       <button type="button" role="menuitem" className={trashed ? undefined : 'saved-diagram-delete'} disabled={busy} onClick={() => action(() => trashed ? window.dispatchEvent(new CustomEvent('adr:recover-diagram', { detail: { kind: 'restore', id: diagram.id } })) : onDelete(diagram.id))}>{trashed ? 'Restore' : 'Move to trash…'}</button>
     </div>, document.body)}
     {detailsOpen && createPortal(<ConfirmDialog role="dialog" title="Diagram details" cancelLabel="Close" onCancel={() => setDetailsOpen(false)} message={<span className="saved-diagram-details">

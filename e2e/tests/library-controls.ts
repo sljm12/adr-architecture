@@ -24,3 +24,12 @@ export async function libraryAction(page: Page, id: string, action: string, tras
   await row.getByRole('button', { name: /^Actions for/ }).click();
   await page.getByRole('menuitem', { name: action, exact: true }).click();
 }
+
+export function currentDiagramActions(page: Page) {
+  return page.locator('.saved-diagram-row').filter({ has: page.locator('.saved-diagram-button[aria-current="true"]') }).getByRole('button', { name: /^Actions for / });
+}
+
+export async function exportFromMenu(page: Page, name: string) {
+  await currentDiagramActions(page).click();
+  await page.getByRole('menuitem', { name, exact: true }).click();
+}

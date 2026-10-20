@@ -3,7 +3,7 @@ import JSZip from 'jszip';
 import { exportDiagramCommand } from '../src/export-command';
 import { populatedChildFixture, emptyChildFixture } from '../../shared/tests/container-fixtures';
 import { buildHtmlPackage, type DiagramDocument } from '../../shared/src/index';
-import { captureHtmlExportInput } from '../../frontend/src/components/ExportButton';
+import { captureHtmlExportInput } from '../../frontend/src/components/DiagramExportCoordinator';
 
 describe('saved container CLI package', () => {
   it.each(['application', 'datastore', 'empty'] as const)('packages %s without parent requests', async subtype => {

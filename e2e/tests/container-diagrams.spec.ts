@@ -1,4 +1,4 @@
-import { libraryAction, openLibraryDiagram, revealDiagram } from './library-controls';
+import { exportFromMenu, libraryAction, openLibraryDiagram, revealDiagram } from './library-controls';
 import type * as Domain from '../../shared/src/index';
 import { expect, test, type Locator, type Page, type Route } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
@@ -234,11 +234,11 @@ test('exports a saved child with subtype, protocol, scope and its offline local 
   });
   try {
     await page.goto('/'); await openLibraryDiagram(page, ids.populatedChild);
-    const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export HTML package' }).click();
+    const download = page.waitForEvent('download'); await exportFromMenu(page, 'Export HTML package');
     const artifact = await download, artifactPath = (await artifact.path())!;
     const zip = await JSZip.loadAsync(await readFile(artifactPath));
     const html = await zip.file('index.html')!.async('string'); expect(html).toContain('Application'); expect(html).toContain('Datastore'); expect(html).toContain('HTTPS'); expect(html).toContain(ids.sourceSystem); expect(html).toContain(`adrs.html#adr-${decision.id}`);
-    const mermaid = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export Mermaid', exact: true }).click(); expect((await mermaid).suggestedFilename()).toMatch(/\.mmd$/);
+    const mermaid = page.waitForEvent('download'); await exportFromMenu(page, 'Export Mermaid'); expect((await mermaid).suggestedFilename()).toMatch(/\.mmd$/);
     const directory = resolve('test-results/container-offline-package'); await mkdir(directory, { recursive: true });
     for (const file of ['index.html', 'adrs.html', 'styles.css', 'diagram.svg']) await writeFile(resolve(directory, file), await zip.file(file)!.async('string'));
     await page.goto(pathToFileURL(resolve(directory, 'index.html')).href);

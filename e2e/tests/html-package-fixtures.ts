@@ -1,3 +1,4 @@
+import { exportFromMenu } from './library-controls';
 import JSZip from 'jszip';
 import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
@@ -173,7 +174,7 @@ export async function extractHtmlPackageArchive(archive: Buffer, directory: stri
 export async function downloadAndExtractOfflinePackage(page: Page, directory: string) {
   const [download] = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('button', { name: 'Export HTML package', exact: true }).click(),
+    exportFromMenu(page, 'Export HTML package'),
   ]);
   const failure = await download.failure();
   if (failure) throw new Error(`HTML package download failed: ${failure}`);

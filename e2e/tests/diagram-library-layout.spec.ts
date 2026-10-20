@@ -79,6 +79,7 @@ test('supports menu keys, details focus trapping, single open menus, and outside
   try {
     const trigger = actions(page, ids.context);
     await trigger.focus(); await page.keyboard.press('Enter');
+    await expect(page.getByRole('menuitem')).toHaveText(['Details…', 'Export HTML package', 'Export Mermaid', 'Export archive…', 'Move to trash…']);
     await expect(page.getByRole('menuitem', { name: 'Details…' })).toBeFocused();
     await page.keyboard.press('End');
     await expect(page.getByRole('menuitem', { name: 'Move to trash…' })).toBeFocused();
@@ -103,6 +104,40 @@ test('supports menu keys, details focus trapping, single open menus, and outside
   } finally { await app.close(); }
 });
 
+test('exports each diagram kind by row UUID while retaining open edits, selection and undo history', async ({ page }) => {
+  const { app } = await setup(page);
+  try {
+    await openLibraryDiagram(page, ids.context);
+    await expect(page.locator('.command-bar').getByRole('button', { name: /Export/ })).toHaveCount(0);
+    for (const id of [ids.context, ids.parent, ids.child]) {
+      if (id === ids.parent) {
+        await page.getByLabel('Diagram name', { exact: true }).fill('Open unsaved canvas');
+        await page.locator(`.react-flow__node[data-id="${ids.system}"]`).click();
+      }
+      for (const format of ['HTML package', 'Mermaid']) {
+        const endpoint = format === 'Mermaid' ? 'mermaid' : 'html-source';
+        const request = page.waitForRequest(r => new URL(r.url()).pathname === `/api/diagrams/${id}/export/${endpoint}`);
+        const download = page.waitForEvent('download');
+        await libraryAction(page, id, `Export ${format}`);
+        await request; await download;
+        await expect(page.getByRole('menu')).toHaveCount(0);
+        await expect(actions(page, id)).toBeFocused();
+        await expect(diagram(page, ids.context)).toHaveAttribute('aria-current', 'true');
+        if (id !== ids.context) {
+          await expect(page.getByLabel('Diagram name', { exact: true })).toHaveValue('Open unsaved canvas');
+          await expect(page.locator(`.react-flow__node[data-id="${ids.system}"] .component-node`)).toHaveAttribute('aria-selected', 'true');
+          await expect(page.getByRole('button', { name: 'Undo', exact: true })).toBeEnabled();
+        }
+      }
+    }
+    await page.getByRole('button', { name: 'Hide diagrams panel' }).click();
+    await expect(page.locator('#export-status')).toBeVisible();
+    await expect(page.locator('#html-export-status')).toBeVisible();
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect(page.getByLabel('Diagram name', { exact: true })).not.toHaveValue('Open unsaved canvas');
+  } finally { await app.close(); }
+});
+
 test('keeps export, trash cancellation, and recovery actions tied to their UUID', async ({ page }) => {
   const { repository, app } = await setup(page);
   try {
@@ -119,6 +154,9 @@ test('keeps export, trash cancellation, and recovery actions tied to their UUID'
     await expect(diagram(page, ids.child)).toHaveCount(0);
     await expect(page.getByLabel('Filter diagrams by name')).toBeFocused();
     await page.getByRole('button', { name: 'Open recovery' }).click();
+    await page.locator(`.saved-diagram-trash-row[data-diagram-id="${ids.child}"] .saved-diagram-actions`).click();
+    await expect(page.getByRole('menuitem')).toHaveText(['Details…', 'Export archive…', 'Restore']);
+    await page.keyboard.press('Escape');
     await libraryAction(page, ids.child, 'Restore', true);
     await page.getByRole('button', { name: 'Restore diagrams', exact: true }).click();
     await expect(diagram(page, ids.child)).toHaveAttribute('aria-current', 'true');
@@ -133,7 +171,7 @@ test('fits long names, three levels, and menus at desktop and mobile sizes', asy
     await page.getByLabel('Diagram name', { exact: true }).fill(longName);
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await openLibraryDiagram(page, ids.child);
-    for (const viewport of [{ width: 1440, height: 900 }, { width: 1024, height: 768 }, { width: 390, height: 844 }]) {
+    for (const viewport of [{ width: 1440, height: 900 }, { width: 1024, height: 500 }, { width: 390, height: 600 }]) {
       await page.setViewportSize(viewport);
       const sidebar = page.getByRole('complementary', { name: 'Diagram overview' });
       await expect(sidebar).toBeVisible();

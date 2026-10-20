@@ -1,3 +1,4 @@
+import { exportFromMenu, openLibraryDiagram } from './library-controls';
 import { expect, test, type Page } from '@playwright/test';
 import { buildApp } from '../../backend/src/api/app';
 import { DiagramRepository } from '../../backend/src/persistence/diagram-repository';
@@ -54,7 +55,7 @@ test('loads, saves, and exports a five-component/five-relationship diagram withi
 
   const exportStarted = await page.evaluate(() => performance.now());
   const download = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Export Mermaid' }).click();
+  await exportFromMenu(page, 'Export Mermaid');
   expect((await download).suggestedFilename()).toMatch(/\.mmd$/);
   const exportElapsed = await page.evaluate(start => performance.now() - start, exportStarted);
   expect(exportElapsed).toBeLessThan(3_000);
@@ -79,7 +80,7 @@ for (const kind of ['general', 'container'] as const) {
     try {
       await page.goto('/');
       const loadStarted = await page.evaluate(() => performance.now());
-      await page.locator(`.saved-diagram-button[data-diagram-id="${document.id}"]`).click();
+      await openLibraryDiagram(page, document.id);
       await expect(page.getByLabel('Diagram name', { exact: true })).toHaveValue(kind === 'container' ? child.scope!.softwareSystemName : document.name);
       await expect(page.locator('.react-flow__node-component')).toHaveCount(200);
       await expect(page.locator('.react-flow__edge')).toHaveCount(300);
@@ -100,14 +101,14 @@ for (const kind of ['general', 'container'] as const) {
       const saveMs = await page.evaluate(start => performance.now() - start, saveStarted);
       const exportStarted = await page.evaluate(() => performance.now());
       const download = page.waitForEvent('download');
-      await page.getByRole('button', { name: 'Export Mermaid' }).click();
+      await exportFromMenu(page, 'Export Mermaid');
       expect((await download).suggestedFilename()).toMatch(/\.mmd$/);
       const mermaidMs = await page.evaluate(start => performance.now() - start, exportStarted);
       expect(saveMs).toBeLessThan(3_000); expect(mermaidMs).toBeLessThan(3_000);
       const exportContextBefore = contextRequests;
       const htmlStarted = await page.evaluate(() => performance.now());
       const html = page.waitForEvent('download');
-      await page.getByRole('button', { name: 'Export HTML package' }).click();
+      await exportFromMenu(page, 'Export HTML package');
       expect((await html).suggestedFilename()).toMatch(/\.zip$/);
       const htmlMs = await page.evaluate(start => performance.now() - start, htmlStarted);
       // The source DTO carries all scoped contexts in one hierarchy request.
@@ -141,7 +142,7 @@ test('measures warmed Container/Component scale loads, edits, saves, opens and b
       timings[`${d.kind}.loadEditSaveZip`] = await sampledMedian(async () => {
         let started = performance.now();
         await page.goto('/');
-        await page.locator(`.saved-diagram-button[data-diagram-id="${d.id}"]`).click();
+        await openLibraryDiagram(page, d.id);
         await expect(page.locator('.react-flow__node-component')).toHaveCount(200);
         await expect(page.locator('.react-flow__edge')).toHaveCount(300);
         steps.load.push(performance.now() - started); started = performance.now();
@@ -154,7 +155,7 @@ test('measures warmed Container/Component scale loads, edits, saves, opens and b
         await expect(page.locator('.save-status')).toHaveText('Saved');
         steps.save.push(performance.now() - started); started = performance.now();
         const download = page.waitForEvent('download');
-        await page.getByRole('button', { name: 'Export HTML package', exact: true }).click();
+        await exportFromMenu(page, 'Export HTML package');
         expect((await download).suggestedFilename()).toMatch(/\.zip$/);
         steps.zip.push(performance.now() - started);
       });

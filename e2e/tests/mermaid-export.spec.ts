@@ -1,3 +1,4 @@
+import { exportFromMenu } from './library-controls';
 import { test, expect } from '@playwright/test';
 
 const diagram = { id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301', name: 'System', status: 'active', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', trashedAt: null, components: [], relationships: [] };
@@ -5,7 +6,7 @@ const diagram = { id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301', name: 'System', st
 async function mockDiagramApi(page: import('@playwright/test').Page) {
   let latest = diagram;
   let putCount = 0;
-  await page.route('**/api/diagrams', route => route.fulfill({ status: route.request().method() === 'POST' ? 201 : 200, contentType: 'application/json', body: JSON.stringify(route.request().method() === 'POST' ? diagram : []) }));
+  await page.route('**/api/diagrams', route => route.fulfill({ status: route.request().method() === 'POST' ? 201 : 200, contentType: 'application/json', body: JSON.stringify(route.request().method() === 'POST' ? diagram : [latest]) }));
   await page.route('**/api/diagrams/**', async route => {
     if (route.request().method() === 'PUT') { putCount += 1; latest = route.request().postDataJSON(); return route.fulfill({ contentType: 'application/json', body: JSON.stringify(latest) }); }
     if (route.request().url().endsWith('/export/mermaid') && latest.components.length === 0) return route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ message: 'Add at least one component before exporting.', fields: { components: 'At least one component is required.' } }) });
@@ -24,13 +25,13 @@ test('requires an explicit save before exporting an edited draft', async ({ page
   const inspector = page.getByLabel('Diagram inspector');
   await inspector.getByLabel('Component name').fill('API');
   await inspector.getByRole('button', { name: 'Add component' }).click();
-  await page.getByRole('button', { name: 'Export Mermaid' }).click();
+  await exportFromMenu(page, 'Export Mermaid');
   await expect(page.locator('#export-status')).toContainText('Save changes before exporting');
   expect(api.putCount()).toBe(0);
 
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   const download = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Export Mermaid' }).click();
+  await exportFromMenu(page, 'Export Mermaid');
   expect((await download).suggestedFilename()).toMatch(/\.mmd$/);
   await expect(page.locator('#export-status')).toContainText('Exported');
   expect(api.putCount()).toBe(1);
@@ -41,6 +42,6 @@ test('shows actionable feedback instead of downloading an invalid export', async
   await page.goto('/');
   await page.getByLabel('Diagram name').fill('System');
   await page.getByRole('button', { name: 'Create diagram' }).click();
-  await page.getByRole('button', { name: 'Export Mermaid' }).click();
+  await exportFromMenu(page, 'Export Mermaid');
   await expect(page.locator('#export-status')).toContainText(/Add at least one component/i);
 });

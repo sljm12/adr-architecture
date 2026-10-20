@@ -1,3 +1,4 @@
+import { currentDiagramActions, exportFromMenu, openLibraryDiagram } from './library-controls';
 import { containerOwnerAvailability } from '../../shared/tests/html-package-input';
 import { test, expect } from '@playwright/test';
 import JSZip from 'jszip';
@@ -61,7 +62,7 @@ test('exports the persisted parent and two children with exact offline ADR and n
   await page.goto('/');
   await page.locator(`.saved-diagram-button[data-diagram-id="${fixture.parent.id}"]`).click();
   await expect(page.locator('.package-nav')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Export HTML package', exact: true })).toBeEnabled();
+  await expect(currentDiagramActions(page)).toBeEnabled();
   const requests: string[] = [], writes: string[] = [];
   page.on('request', r => { if (r.url().includes('/api/')) { requests.push(r.url()); if (r.method() !== 'GET') writes.push(r.method()); } });
   const directory = await mkdtemp(join(tmpdir(), 'adr-parent-child-'));
@@ -128,7 +129,7 @@ for (const empty of [false, true]) test(`direct ${empty ? 'empty' : 'populated'}
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify(value) });
   });
   await page.goto('/');
-  await page.locator(`.saved-diagram-button[data-diagram-id="${child.id}"]`).click();
+  await openLibraryDiagram(page, child.id);
   const directory = await mkdtemp(join(tmpdir(), 'adr-direct-child-'));
   try {
     const { files } = await downloadAndExtractOfflinePackage(page, directory);
@@ -157,7 +158,7 @@ test('a corrupt required child fails atomically without download or save', async
   page.on('download', download => downloads.push(download.suggestedFilename()));
   await page.goto('/');
   await page.locator(`.saved-diagram-button[data-diagram-id="${fixture.parent.id}"]`).click();
-  await page.getByRole('button', { name: 'Export HTML package', exact: true }).click();
+  await exportFromMenu(page, 'Export HTML package');
   await expect(page.locator('#html-export-status')).toContainText('Diagram');
   await expect(page.locator('#html-export-status')).toContainText('retry');
   expect(downloads).toEqual([]); expect(writes).toEqual([]);
@@ -184,9 +185,10 @@ test('captures an unsaved owner rename before a delayed source read and preserve
   await page.locator('#component-edit-name').fill('Captured owner');
   await page.getByRole('button', { name: 'Save component', exact: true }).click();
   const downloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Export HTML package', exact: true }).click();
-  await expect(page.locator('#html-export-status')).toHaveText('Gathering saved diagrams and ADRs…');
-  await expect(page.getByRole('button', { name: 'Export HTML package', exact: true })).toBeDisabled();
+  await exportFromMenu(page, 'Export HTML package');
+  await expect(page.locator('#html-export-status')).toContainText('Gathering saved diagrams and ADRs…');
+  await exportFromMenu(page, 'Export HTML package');
+  await expect(page.locator('#html-export-status')).toContainText('already in progress');
   await page.locator('#component-edit-name').fill('Later owner');
   await page.getByRole('button', { name: 'Save component', exact: true }).click();
   release();
@@ -197,7 +199,7 @@ test('captures an unsaved owner rename before a delayed source read and preserve
   await expect(page.locator('#component-edit-name')).toHaveValue('Later owner');
   await expect(page.getByRole('button', { name: 'Undo', exact: true })).toBeEnabled();
   expect(writes).toEqual([]);
-  await expect(page.locator('#html-export-status')).toHaveText('HTML package downloaded.');
+  await expect(page.locator('#html-export-status')).toContainText('HTML package downloaded.');
 });
 
 test('downloads a package that supports direct component and relationship navigation from file://', async ({ page }) => {
@@ -210,7 +212,7 @@ test('downloads a package that supports direct component and relationship naviga
   const directory = await mkdtemp(join(tmpdir(), 'adr-diagram-html-export-'));
   try {
     const { files, filename } = await downloadAndExtractOfflinePackage(page, directory);
-    await expect(page.locator('#html-export-status')).toHaveText('HTML package downloaded.');
+    await expect(page.locator('#html-export-status')).toContainText('HTML package downloaded.');
     expect(filename).toMatch(/payments.*\.zip$/i);
     expect(Object.keys(files)).toHaveLength(6);
     const index = await readFile(join(directory, 'index.html'), 'utf8');
