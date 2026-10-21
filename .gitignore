@@ -5,10 +5,14 @@ coverage/
 *.log
 .env*
 !.env.example
+!docker/.env.bundled.example
+!docker/.env.external.example
 .vite/
 playwright-report/
 test-results/
 *.db
+*.dump
+backups/
 *.tsbuildinfo
 .DS_Store
 Thumbs.db

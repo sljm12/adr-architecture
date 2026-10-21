@@ -1,0 +1,28 @@
+name: adr-diagram
+
+services:
+  frontend:
+    image: adr-diagram-frontend:local
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "${HOST_BIND:-127.0.0.1}:${WEB_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api:
+    image: adr-diagram-api:local
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: "${DATABASE_URL:?Set DATABASE_URL in .env.docker.external}"
+    # Docker Desktop provides this name; the mapping also supports Linux Engine.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    init: true
+    stop_grace_period: 30s
+    restart: unless-stopped

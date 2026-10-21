@@ -31,7 +31,92 @@ through the REST API, and validated diagrams can be downloaded as Mermaid files.
 - Escape supported Mermaid-reserved characters and report actionable export validation errors.
 - Provide keyboard-accessible controls, readable labels, and accessible status feedback.
 
-## Setup
+## Docker setup
+
+Use Linux containers and Docker Compose v2.20 or later with Docker Engine/Desktop or a compatible
+engine such as Podman. Commands below use `docker-compose`; a host Node.js installation is not
+required. Run commands from the repository root and choose one setup per installation.
+Database migrations are manual in both modes.
+
+### Run everything with bundled PostgreSQL
+
+1. For a new installation, copy the example configuration:
+
+   ```text
+   cp docker/.env.bundled.example .env.docker
+   ```
+
+   Edit `.env.docker` and replace `POSTGRES_PASSWORD` with a long random password containing
+   only letters, digits, hyphens, or underscores. Keep this file private. Optionally change
+   `WEB_PORT` (default `8080`).
+
+2. Validate the configuration and start PostgreSQL:
+
+   ```text
+   docker-compose --env-file .env.docker config --quiet
+   docker-compose --env-file .env.docker up -d --wait db
+   ```
+
+3. **On a new, empty database only**, explicitly apply all supplied migrations in order:
+
+   ```sh
+   docker-compose --env-file .env.docker exec -T db sh -ec 'for file in /migrations/*.sql; do psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$file"; done'
+   ```
+
+   Do not repeat this loop on an initialized database or after a partially failed attempt.
+   Record successful migrations and apply only pending files for an upgrade. Startup never
+   applies migrations automatically.
+
+4. Build and start the application:
+
+   ```text
+   docker-compose --env-file .env.docker up -d --build --wait
+   docker-compose --env-file .env.docker ps
+   ```
+
+### Connect to an existing PostgreSQL database
+
+1. Back up the database and apply only pending migrations from `backend/drizzle/` in order,
+   through `0009_diagram_archive.sql`, using `psql -v ON_ERROR_STOP=1` or your migration tooling.
+   Preserve previously applied migrations; do not replay them.
+2. Copy the external configuration:
+
+   ```text
+   cp docker/.env.external.example .env.docker.external
+   ```
+
+   Set `DATABASE_URL` in `.env.docker.external` to the existing database's connection URL,
+   including provider-required TLS settings. Percent-encode reserved characters in credentials.
+   For a database on the Docker Desktop host, use `host.docker.internal` rather than `localhost`.
+   Keep this file private.
+
+3. Validate, build, and start the frontend and API:
+
+   ```text
+   docker-compose --env-file .env.docker.external -f compose.external-db.yaml config --quiet
+   docker-compose --env-file .env.docker.external -f compose.external-db.yaml up -d --build --wait
+   docker-compose --env-file .env.docker.external -f compose.external-db.yaml ps
+   ```
+
+   This mode starts no database service. The two Compose files are standalone alternatives;
+   do not combine them.
+
+### Verify and stop
+
+Open <http://127.0.0.1:8080> (or your configured port). Check
+<http://127.0.0.1:8080/api/diagrams> returns a JSON array, then create, save, and reopen a diagram.
+`/api/health` checks the API process only; it does not prove database/schema readiness.
+
+Stop bundled mode with `docker-compose --env-file .env.docker down`. For external mode, use
+`docker-compose --env-file .env.docker.external -f compose.external-db.yaml down`. Ordinary
+shutdown retains the bundled database volume. **Adding `--volumes` deletes its saved data.**
+Only the frontend port is published, bound to `127.0.0.1` by default.
+
+See the [Docker operations guide](docs/docker.md) for logs, backups, restore, upgrades, and
+network/TLS configuration. [Validation results](specs/014-docker-deployment/validation.md)
+record successful standalone `docker-compose` builds and live tests of both modes.
+
+## Local development setup
 
 Prerequisites: Node.js (current LTS), npm, and PostgreSQL when using the database deployment.
 
