@@ -38,6 +38,23 @@ engine such as Podman. Commands below use `docker-compose`; a host Node.js insta
 required. Run commands from the repository root and choose one setup per installation.
 Database migrations are manual in both modes.
 
+When starting containers with the `.env` files below, do not set `DATABASE_URL` in your
+shell or system environment. Unset any existing value before running the commands; a shell
+value takes precedence over `--env-file` values in external database mode. Bundled mode
+constructs the URL automatically; external mode reads it from `.env.docker.external`.
+
+To clear it in the current shell:
+
+```powershell
+# PowerShell
+Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
+```
+
+```sh
+# Bash / Zsh
+unset DATABASE_URL
+```
+
 ### Run everything with bundled PostgreSQL
 
 1. For a new installation, copy the example configuration:
@@ -107,9 +124,22 @@ Open <http://127.0.0.1:8080> (or your configured port). Check
 <http://127.0.0.1:8080/api/diagrams> returns a JSON array, then create, save, and reopen a diagram.
 `/api/health` checks the API process only; it does not prove database/schema readiness.
 
-Stop bundled mode with `docker-compose --env-file .env.docker down`. For external mode, use
-`docker-compose --env-file .env.docker.external -f compose.external-db.yaml down`. Ordinary
-shutdown retains the bundled database volume. **Adding `--volumes` deletes its saved data.**
+To stop and remove the containers, run the command matching your setup from the repository root.
+
+Bundled PostgreSQL:
+
+```text
+docker-compose --env-file .env.docker down
+```
+
+External PostgreSQL:
+
+```text
+docker-compose --env-file .env.docker.external -f compose.external-db.yaml down
+```
+
+Ordinary shutdown retains the bundled database volume, and external mode leaves your external
+database running. **Adding `--volumes` deletes the bundled database's saved data.**
 Only the frontend port is published, bound to `127.0.0.1` by default.
 
 See the [Docker operations guide](docs/docker.md) for logs, backups, restore, upgrades, and
